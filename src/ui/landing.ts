@@ -13,6 +13,7 @@
 // The chrome it shares with the signed-in home lives in ui/page.ts.
 
 import { appNav } from '../game/nav';
+import { loadLanding } from '../net/landing';
 import { type AuthedAccount, buildAuthForm } from './auth';
 import type { DiscordResult } from './discord_entry';
 import { startBackdrop } from './home_backdrop';
@@ -521,6 +522,10 @@ export function showLanding(
   intent: LandingIntent | null = null,
 ): Promise<LandingResult> {
   ensureCss();
+  // The landing's one request (src/net/landing.ts), asked once as the page
+  // opens: it hands the visitor its Guest and answers the ladder, the own
+  // panel and the week, and each part reads the same answer.
+  const pagePromise = loadLanding();
   return new Promise((resolve) => {
     const { root, inner, bar, hero } = buildPage('land', true);
     const stopBackdrop = startBackdrop(root);
@@ -773,7 +778,9 @@ export function showLanding(
     const ladder = el('section', 'pg-ladder');
     ways.append(online, playCard, ladder);
     inner.appendChild(ways);
-    mountLandingLadder(ladder, () => finish({ kind: PLAY_NOW.kind, play: PLAY_NOW.play }));
+    mountLandingLadder(ladder, pagePromise, () =>
+      finish({ kind: PLAY_NOW.kind, play: PLAY_NOW.play }),
+    );
 
     // --- and the thing the genre does not offer ---
     const give = el('section', 'pg-give');

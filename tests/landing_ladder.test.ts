@@ -1,9 +1,17 @@
 // The ladder on the landing (src/ui/landing_ladder.ts): the ladder of every
-// human (ADR 0027), the words a visitor reads over the rows, and a
-// returning Guest's own line.
+// human (ADR 0027), the words a visitor reads over the rows, and the button
+// under them. The reader's own place is the own panel's (ui/own_panel.ts).
 
 import { describe, expect, it } from 'vitest';
-import { ladderLead, meLine, pointsText, rowPoints } from '../src/ui/landing_ladder';
+import * as ladderModule from '../src/ui/landing_ladder';
+import {
+  CLIMB_CALL,
+  JOIN_CALL,
+  joinCall,
+  ladderLead,
+  pointsText,
+  rowPoints,
+} from '../src/ui/landing_ladder';
 
 describe('the ladder on the landing', () => {
   it('writes points as a number people read, the word once over the rows', () => {
@@ -28,13 +36,19 @@ describe('the ladder on the landing', () => {
     expect(ladderLead({ total: 37 })).not.toMatch(/account|guest/i);
   });
 
-  it('tells a returning Guest where they stand, once they are on it', () => {
-    expect(meLine(null)).toBeNull();
+  it('leaves the reader its place to the own panel', () => {
+    expect('meLine' in ladderModule).toBe(false);
+  });
+
+  it('asks a line not on it yet to take its place, and one on it to climb', () => {
+    expect(JOIN_CALL).toBe('Take your place');
+    expect(CLIMB_CALL).toBe('Play to climb');
+    expect(joinCall(null)).toBe(JOIN_CALL);
     expect(
-      meLine({ rank: null, points: 0, name: 'Wanderer 0042', guest: true, named: false }),
-    ).toBeNull();
-    expect(meLine({ rank: 12, points: 340, name: 'Starling', guest: true, named: true })).toBe(
-      'You are #12 with 340 points. Play to climb.',
+      joinCall({ rank: null, points: 0, name: 'Wanderer 0042', guest: true, named: false }),
+    ).toBe(JOIN_CALL);
+    expect(joinCall({ rank: 12, points: 340, name: 'Starling', guest: true, named: true })).toBe(
+      CLIMB_CALL,
     );
   });
 });

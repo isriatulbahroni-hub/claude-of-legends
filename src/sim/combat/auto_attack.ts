@@ -31,7 +31,10 @@ import { towerShotAd, towerShotHpPct } from './tower_shot';
 // only for attackers below this range (ranged autos flash at bolt impact).
 export const RANGED_THRESHOLD = 2;
 const BOLT_SPEED = 30;
-const REPATH_DISTANCE = 2;
+// A chase searches its path again once the unit it chases stands this far
+// from where the path ends; exported for the client's prediction, which
+// follows the same rule (src/net/self_predict.ts).
+export const REPATH_DISTANCE = 2;
 
 // The windup is a fixed fraction of the attack period, capped so fast
 // attackers stay snappy. Champions carry the full beat (the orb-walk

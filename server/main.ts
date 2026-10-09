@@ -1059,6 +1059,11 @@ const royale = new RoyaleService({
     royaleVeterans.noteBanked(owner);
     return bankPoints(owner, delta);
   },
+  // The Respawn best on the line behind the seat (ADR 0033).
+  raiseBest: (owner, tally) =>
+    isGuestId(owner)
+      ? guests.raiseBest(owner, tally, Date.now())
+      : registry.raiseBest(owner, tally),
   newcomer: (owner) => isRoyaleNewcomer(royaleVeterans, owner),
   appendSeat: (rec) => appendJsonl(SEATS_FILE, rec),
   saveReplay: (id, record) => {

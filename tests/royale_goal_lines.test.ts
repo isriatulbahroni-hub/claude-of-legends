@@ -1,10 +1,11 @@
 // The goal across battle royales said before the end card
 // (src/ui/royale_goal_lines.ts): the one line of the wash of a Respawn
-// death and the note under the points' pop in play.
+// death, the note under the points' pop in play, and the note under Play
+// the next match.
 
 import { describe, expect, it } from 'vitest';
-import { GOAL_HEAD_START, GOAL_MAX_POINTS } from '../src/ui/royale_goal';
-import { goalLine, goalPopNote, pointsText } from '../src/ui/royale_goal_lines';
+import { GOAL_HEAD_START, GOAL_MAX_POINTS, goalModel } from '../src/ui/royale_goal';
+import { goalLine, goalPopNote, nextMatchNote, pointsText } from '../src/ui/royale_goal_lines';
 
 describe('the line', () => {
   it('says the level and the points to the next, the bar as full as the card would draw it', () => {
@@ -53,9 +54,21 @@ describe('the note under the pop in play', () => {
   });
 });
 
+describe('the note under Play the next match', () => {
+  it("says the points the card's next level still wants", () => {
+    expect(nextMatchNote(goalModel(30, 34))).toBe('61 points to Level 3');
+    expect(nextMatchNote(goalModel(40, 100))).toBe('85 points to Level 4');
+    expect(nextMatchNote(null)).toBeNull();
+  });
+});
+
 describe('the words', () => {
   it('names no ladder entry and no other player anywhere', () => {
-    const words = [goalLine(300).text, goalPopNote(290, 300)].join(' ');
+    const words = [
+      goalLine(300).text,
+      goalPopNote(290, 300),
+      nextMatchNote(goalModel(290, 10)),
+    ].join(' ');
     expect(words).not.toMatch(/ladder|rank|place/i);
   });
 });

@@ -9,6 +9,7 @@
 
 import type { RoyaleResult } from '../net/royale_wire';
 import type { GoalModel } from './royale_goal';
+import { nextMatchNote } from './royale_goal_lines';
 import { graftNames } from './royale_grafts';
 import { otherVariant, royaleMode } from './royale_modes';
 import { assistsText, clockText, ordinal, placeText, takedownsText } from './royale_text';
@@ -45,6 +46,9 @@ export interface RoyaleEndModel {
   // points.
   goal: GoalModel | null;
   again: string;
+  // Under Respawn's Play the next match, the points the goal's next level
+  // still wants ("30 points to Level 4"); null without a goal.
+  againNote: string | null;
   other: string;
   home: string;
 }
@@ -120,6 +124,7 @@ export function royaleEnd(
   const oneLife = r.v === 'one_life';
   const won = r.place === 1;
   const w = windowOf(r);
+  const goal = oneLife ? null : (mine.goal ?? null);
   const title = won
     ? oneLife
       ? 'Last one standing'
@@ -151,8 +156,9 @@ export function royaleEnd(
     heading: oneLife ? 'The top five' : 'The final ranking',
     rows,
     grafts: r.grafts && r.grafts.length > 0 ? `Grafts: ${graftNames(r.grafts).join(', ')}` : null,
-    goal: oneLife ? null : (mine.goal ?? null),
+    goal,
     again: oneLife ? 'Play again' : 'Play the next match',
+    againNote: nextMatchNote(goal),
     other: `Try ${royaleMode(otherVariant(r.v)).title}`,
     home: 'Back home',
   };

@@ -1,10 +1,11 @@
 // The goal across battle royales (ui/royale_goal.ts) said before the end
 // card, so the levels are in sight while they are earned: the one line on
-// the wash of a Respawn death and the note under the points' pop in play.
-// Pure, read off the total this browser keeps (game/settings.ts
-// royaleGoal); ui/royale_goal_line.ts draws the line with its small bar.
+// the wash of a Respawn death, the note under the points' pop in play, and
+// the note on the end card's Play the next match. Pure, read off the total
+// this browser keeps (game/settings.ts royaleGoal); ui/royale_goal_line.ts
+// draws the line with its small bar.
 
-import { GOAL_MAX_POINTS, goalShare, goalStep } from './royale_goal';
+import { GOAL_MAX_POINTS, type GoalModel, goalShare, goalStep } from './royale_goal';
 
 // Where a total stands: the level, the next one, the points still wanted
 // for it, how full the level's bar is (0 to 1, the first from its head
@@ -47,4 +48,10 @@ export function goalPopNote(before: number, after: number): string {
   const now = goalStep(whole(after));
   if (now.level > was.level) return `Level ${now.level} reached`;
   return `${now.to - whole(after)} to Level ${now.level + 1}`;
+}
+
+// Under the end card's Play the next match: the points the next level
+// still wants. Null when the card shows no goal.
+export function nextMatchNote(goal: GoalModel | null): string | null {
+  return goal ? `${pointsText(goal.left)} to Level ${goal.next}` : null;
 }

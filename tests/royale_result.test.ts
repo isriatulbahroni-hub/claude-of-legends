@@ -239,6 +239,24 @@ describe('the goal across matches on the end card', () => {
     expect(royaleEnd(result(), { assists: 0, best: 0, goal }).goal).toBeNull();
   });
 
+  it('puts the points the next level still wants under Play the next match', () => {
+    // 30 + 34 is 64: Level 2, whose span runs to 125.
+    const end = royaleEnd(result({ v: 'respawn' }), { assists: 0, best: 0, goal });
+    expect(end.again).toBe('Play the next match');
+    expect(end.againNote).toBe('61 points to Level 3');
+    const one = royaleEnd(result({ v: 'respawn' }), {
+      assists: 0,
+      best: 0,
+      goal: goalModel(0, 49),
+    });
+    expect(one.againNote).toBe('1 point to Level 2');
+  });
+
+  it('leaves the button bare without a goal, and in One life', () => {
+    expect(royaleEnd(result({ v: 'respawn' }), { assists: 0, best: 0 }).againNote).toBeNull();
+    expect(royaleEnd(result(), { assists: 0, best: 0, goal }).againNote).toBeNull();
+  });
+
   it('names no ladder entry and no other player', () => {
     const words = `${goal.title} ${goal.line}`;
     expect(words).not.toMatch(/ladder|rank|place|Kestrel/i);

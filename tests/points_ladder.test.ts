@@ -3,7 +3,7 @@
 // the reader's own place.
 
 import { describe, expect, it } from 'vitest';
-import { buildPointsLadder, type PointsEntry } from '../server/points_ladder';
+import { buildPointsLadder, type PointsEntry, placedLines } from '../server/points_ladder';
 
 const line = (key: number, points: number, since = 0, name = `p${key}`): PointsEntry => ({
   key,
@@ -34,6 +34,16 @@ describe('the ladder of every human', () => {
   it('ranks equal points by the older line', () => {
     const ladder = buildPointsLadder([line(1, 50, 20), line(2, 50, 10)], null);
     expect(ladder.rows.map((r) => r.name)).toEqual(['p2', 'p1']);
+  });
+
+  it('places the lines in the order the rows have, and only those with points', () => {
+    const entries = [line(1, 50, 20), line(-4, 0), line(2, 50, 10), line(-3, 90), line(5, 7)];
+    const placed = placedLines(entries);
+    expect(placed.map((e) => e.key)).toEqual([-3, 2, 1, 5]);
+    const rows = buildPointsLadder(entries, null).rows;
+    expect(rows.map((r) => r.name)).toEqual(placed.map((e) => e.name));
+    // The input is left as it was.
+    expect(entries.map((e) => e.key)).toEqual([1, -4, 2, -3, 5]);
   });
 
   it('caps the rows and still counts everyone on it', () => {

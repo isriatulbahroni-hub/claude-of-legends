@@ -123,7 +123,7 @@ import {
 import { buildHomePage } from './home_page';
 import { buildBotLadder, buildLadder } from './ladder';
 import { type BotSummary, buildLadderPage, type LadderSeed, placeOf } from './ladder_page';
-import { buildLandingPage } from './landing_page';
+import { buildLandingPage, type LandingOwnInput } from './landing_page';
 import {
   backfillLaurels,
   CHAMPION_PRICES,
@@ -1525,10 +1525,10 @@ const server = http.createServer(async (req, res) => {
     }
 
     // The landing's one request (server/landing_page.ts, ADR 0033): it
-    // hands a visitor with no account its Guest, the cookie set again,
-    // and answers the ladder of every human (ADR 0027), names and numbers,
-    // with the reader's own place. No ids. A POST, since it may issue a
-    // Guest; a signed-in account reads its own and is handed no Guest.
+    // hands a visitor with no account its Guest, the cookie set again, and
+    // answers the ladder of every human (ADR 0027), names and numbers, the
+    // own panel and the week. No ids. A POST, since it may issue a Guest;
+    // a signed-in account reads its own and is handed no Guest.
     if (url === '/api/public/landing') {
       if (req.method !== 'POST') {
         sendJson(res, 405, { error: 'use POST' });
@@ -1536,14 +1536,28 @@ const server = http.createServer(async (req, res) => {
       }
       const now = Date.now();
       const account = accountForRequest(req, now);
-      let reader: PointsReader;
+      let own: LandingOwnInput;
       if (account) {
-        reader = { key: account.id, name: account.name, guest: false, named: true };
+        own = {
+          key: account.id,
+          name: account.name,
+          named: true,
+          account: true,
+          best: account.royaleBest ?? 0,
+          since: account.createdAt,
+        };
       } else {
         const guest = handGuest(req, res, now);
-        reader = { key: guest.id, name: guest.name, guest: true, named: guest.named };
+        own = {
+          key: guest.id,
+          name: guest.name,
+          named: guest.named,
+          account: false,
+          best: guest.best,
+          since: guest.createdAt,
+        };
       }
-      sendJson(res, 200, buildLandingPage({ entries: pointsEntries(), reader }));
+      sendJson(res, 200, buildLandingPage({ entries: pointsEntries(), own, now }));
       return;
     }
 

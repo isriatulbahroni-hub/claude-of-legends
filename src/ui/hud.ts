@@ -141,7 +141,7 @@ import {
   STEPS_TOP_PX,
 } from './royale_layout';
 import { RoyaleLife, SeenChampions } from './royale_life';
-import { respawnTally, royaleSting } from './royale_result';
+import { cardBest, respawnTally, royaleSting } from './royale_result';
 import {
   RETURN_GLOBE_HALF_VH,
   RETURN_WASH_GAP_VH,
@@ -1398,8 +1398,8 @@ export class Hud {
   private readonly deathBurr: HTMLElement;
   // The Respawn wait's globe line (ui/royale_return.ts returnHint).
   private readonly deathHint: HTMLElement;
-  // The best Respawn tally this browser kept before this match's card,
-  // read once (game/settings.ts royaleBest).
+  // The best Respawn tally the line kept before this match's card, read
+  // once (ui/royale_result.ts cardBest).
   private royaleBestBefore: number | null = null;
   // The points on this browser's line of the ladder before this match and
   // since, anchored to the total each points message carries, for the end
@@ -2247,19 +2247,24 @@ export class Hud {
       extras.push(this.endOffer);
     }
     extras.push(this.endFeedback.root);
-    // Respawn's best (game/settings.ts royaleBest): the one kept before
-    // this match goes on the card, and this seat's tally is kept after it
-    // when higher. Read once, so a card drawn again says the same.
+    // Respawn's best (ui/royale_result.ts cardBest): the one the line kept
+    // before this match goes on the card, as the server sends it, else the
+    // browser's cache (game/settings.ts royaleBest), which keeps the higher
+    // of it and this seat's tally after it for a server that sent none.
+    // Read once, so a card drawn again says the same.
     const respawn = result.v === 'respawn';
-    if (this.royaleBestBefore === null) this.royaleBestBefore = getSettings().royaleBest;
+    if (this.royaleBestBefore === null) {
+      this.royaleBestBefore = cardBest(result, getSettings().royaleBest);
+    }
     const best = this.royaleBestBefore;
     this.royale.showResult(result, extras, {
       assists: own?.assists ?? 0,
       best: respawn ? best : 0,
       goal: this.scores() ? (this.royaleGoal?.model() ?? null) : null,
     });
-    if (respawn && respawnTally(result) > getSettings().royaleBest) {
-      updateSettings({ royaleBest: respawnTally(result) });
+    if (respawn) {
+      const kept = Math.max(best, respawnTally(result));
+      if (kept !== getSettings().royaleBest) updateSettings({ royaleBest: kept });
     }
     this.deathOverlay.classList.remove('open');
     // Heard once, when it came: Respawn's middle of the field hears

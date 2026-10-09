@@ -4,7 +4,7 @@
 // the takedowns, who won, the top of the ranking with a bot mark on every
 // bot, and the three ways on: the same rule set again, the other one, and
 // home. Respawn counts a drop-in from their landing, says how close the
-// seat above was and the best this browser kept; and what the end plays
+// seat above was and the best the line kept; and what the end plays
 // (royaleSting). Pure; ui/royale_hud.ts draws it.
 
 import type { RoyaleResult } from '../net/royale_wire';
@@ -50,10 +50,10 @@ export interface RoyaleEndModel {
 }
 
 // What the card reads off this screen rather than the result: the own
-// scoreboard row's assists, the best Respawn tally this browser kept
-// before this match (game/settings.ts royaleBest; 0 before the first), and
-// the goal the browser climbs with the points the seat banked (absent when
-// it banks none).
+// scoreboard row's assists, the best Respawn tally the line kept before
+// this match (cardBest; 0 before the first), and the goal: the line's
+// points climbed as levels, this match's in them (absent when the seat
+// banks none).
 export interface RoyaleEndMine {
   assists: number;
   best: number;
@@ -79,8 +79,17 @@ export function respawnTally(r: RoyaleResult): number {
   return windowOf(r)?.score ?? r.score;
 }
 
+// Respawn's best the card stands on (ADR 0033): the one the line kept
+// before this match, as the server sends it, else the browser's cache of
+// it (game/settings.ts royaleBest) for a server that sent none. Whole.
+export function cardBest(r: RoyaleResult, cached: number): number {
+  const sent = r.bestBefore;
+  if (typeof sent === 'number' && Number.isFinite(sent) && sent >= 0) return Math.round(sent);
+  return whole(cached) ?? 0;
+}
+
 // Respawn's lines, in order: what the seat did and in how long, the near
-// miss, the best this browser kept, who won, and for a drop-in the whole
+// miss, the best the line kept, who won, and for a drop-in the whole
 // match's place.
 function respawnLines(r: RoyaleResult, mine: RoyaleEndMine, won: boolean): string[] {
   const w = windowOf(r);

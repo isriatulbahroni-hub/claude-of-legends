@@ -51,9 +51,11 @@ export interface GameSettings {
   // the first. Which champions exist is the pick's to check
   // (ui/royale_pick_rules.ts), not the storage's.
   royalePick: RoyalePickMemory | null;
-  // The most Respawn takedowns this browser scored in one seat, counted
-  // since landing for a drop-in: the end card's best (ui/royale_result.ts).
-  // 0 before the first. Not a choice, so the settings panel never shows it.
+  // The line's Respawn best as last known: the most takedowns one seat
+  // scored, counted since landing for a drop-in. The server's bestBefore
+  // wins on the card (ui/royale_result.ts cardBest); this is the cache for
+  // a server that sent none. 0 before the first. Not a choice, so the
+  // settings panel never shows it.
   royaleBest: number;
   // The points on this browser's line of the ladder as last read (the
   // landing's own panel, every points message): the level reads it before

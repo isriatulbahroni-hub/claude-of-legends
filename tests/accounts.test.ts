@@ -428,13 +428,17 @@ describe('points and the names Guests hold', () => {
     const r = reg();
     r.holdNamesElsewhere((fold) => fold === 'starling');
     const a = unwrap(
-      r.register('Starling', 'a good password', anEmail(), 0, { fold: 'starling', points: 340 }),
+      r.register('Starling', 'a good password', anEmail(), 0, {
+        fold: 'starling',
+        points: 340,
+        best: 0,
+      }),
     );
     expect(a.name).toBe('Starling');
     expect(a.points).toBe(340);
     // A Guest with no chosen name still brings its points, under any name.
     const b = unwrap(
-      r.register('Nightjar', 'a good password', anEmail(), 0, { fold: null, points: 9 }),
+      r.register('Nightjar', 'a good password', anEmail(), 0, { fold: null, points: 9, best: 0 }),
     );
     expect(b.points).toBe(9);
   });
@@ -443,14 +447,65 @@ describe('points and the names Guests hold', () => {
     const r = reg();
     r.holdNamesElsewhere((fold) => fold === 'caym');
     const created = unwrap(
-      r.registerWithDiscord({ id: '42', username: 'Caym' }, 0, { fold: null, points: 12 }),
+      r.registerWithDiscord({ id: '42', username: 'Caym' }, 0, { fold: null, points: 12, best: 0 }),
     );
     expect(created.name).toBe('Caym2');
     expect(created.points).toBe(12);
     const claimed = unwrap(
-      r.registerWithDiscord({ id: '43', username: 'Caym' }, 0, { fold: 'caym', points: 0 }),
+      r.registerWithDiscord({ id: '43', username: 'Caym' }, 0, {
+        fold: 'caym',
+        points: 0,
+        best: 0,
+      }),
     );
     expect(claimed.name).toBe('Caym');
     expect(claimed.points).toBeUndefined();
+  });
+});
+
+// The Respawn best (ADR 0033): kept on the account, taken from the Guest
+// the account was made from, raised at a Respawn end, and the owner's own.
+describe('the Respawn best', () => {
+  it("takes a Guest's best through either door, and none from a Guest without one", () => {
+    const r = reg();
+    const a = unwrap(
+      r.register('Starling', 'a good password', anEmail(), 0, { fold: null, points: 40, best: 9 }),
+    );
+    expect(a.royaleBest).toBe(9);
+    const b = unwrap(
+      r.register('Nightjar', 'a good password', anEmail(), 0, { fold: null, points: 40, best: 0 }),
+    );
+    expect(b.royaleBest).toBeUndefined();
+    const c = unwrap(
+      r.registerWithDiscord({ id: '42', username: 'Caym' }, 0, { fold: null, points: 5, best: 9 }),
+    );
+    expect(c.royaleBest).toBe(9);
+    const d = unwrap(
+      r.registerWithDiscord({ id: '43', username: 'Wren' }, 0, { fold: null, points: 5, best: 0 }),
+    );
+    expect(d.royaleBest).toBeUndefined();
+  });
+
+  it('answers the best before, only raises it, and writes it on the flush', () => {
+    const file = tmpFile();
+    const r = reg(file);
+    const bob = unwrap(r.register('bob', 'a good password', anEmail(), 0));
+    const written = readFileSync(file, 'utf8');
+    expect(r.raiseBest(bob.id, 4)).toBe(0);
+    expect(r.raiseBest(bob.id, 2)).toBe(4);
+    expect(r.raiseBest(bob.id, 7)).toBe(4);
+    expect(r.findById(bob.id)?.royaleBest).toBe(7);
+    expect(r.raiseBest(999, 5)).toBeNull();
+    expect(readFileSync(file, 'utf8')).toBe(written);
+    r.flush();
+    expect(reg(file).findById(bob.id)?.royaleBest).toBe(7);
+  });
+
+  it('never leaves the server on the public shape', () => {
+    const r = reg();
+    const bob = unwrap(r.register('bob', 'a good password', anEmail(), 0));
+    r.raiseBest(bob.id, 6);
+    expect(publicAccount(bob)).not.toHaveProperty('royaleBest');
+    expect(JSON.stringify(publicAccount(bob))).not.toContain('royaleBest');
   });
 });

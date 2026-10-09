@@ -3,7 +3,7 @@
 // it is unrated, and what is kept of one that scores or names itself: its
 // line, under a hashed token and an id that survives a restart.
 
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -12,6 +12,7 @@ import {
   GUEST_KEPT_TTL_MS,
   GUEST_TTL_MS,
   GuestStore,
+  guestClaim,
   guestName,
   guestNameMessage,
   guestNameRefusal,
@@ -222,6 +223,74 @@ describe('a kept Guest', () => {
     const again = new GuestStore({ file });
     expect(again.resolve('t0', 6)).toMatchObject({ name: 'Starling', named: true, points: 0 });
     expect(again.holderOf('starling')).toBe(guest.id);
+  });
+});
+
+describe('the Respawn best on a Guest line (ADR 0033)', () => {
+  it('answers the best before, only raises it, and is null for a Guest gone', () => {
+    const store = new GuestStore({ tokenGen: seqTokens() });
+    const { guest } = store.issue(0);
+    expect(guest.best).toBe(0);
+    expect(store.raiseBest(guest.id, 3, 10)).toBe(0);
+    expect(store.raiseBest(guest.id, 2, 20)).toBe(3);
+    expect(store.findById(guest.id)?.best).toBe(3);
+    expect(store.raiseBest(guest.id, 5, 30)).toBe(3);
+    expect(store.findById(guest.id)?.best).toBe(5);
+    expect(store.raiseBest(-999, 5, 30)).toBeNull();
+  });
+
+  it('is written with a kept Guest on the flush, and read back', () => {
+    const file = tmpFile();
+    const store = new GuestStore({ file, tokenGen: seqTokens() });
+    const { guest } = store.issue(0);
+    store.addPoints(guest.id, 30, 1);
+    store.flush();
+    const before = readFileSync(file, 'utf8');
+    store.raiseBest(guest.id, 4, 2);
+    expect(readFileSync(file, 'utf8')).toBe(before);
+    store.flush();
+    expect(new GuestStore({ file }).resolve('t0', 3)).toMatchObject({ points: 30, best: 4 });
+    // A tally that does not raise it leaves nothing to write.
+    store.raiseBest(guest.id, 1, 4);
+    const after = readFileSync(file, 'utf8');
+    store.flush();
+    expect(readFileSync(file, 'utf8')).toBe(after);
+  });
+
+  it('reads junk on disk as none and a huge one as the ceiling', () => {
+    const file = tmpFile();
+    const line = (id: number, best: unknown) => ({
+      id,
+      digest: tokenDigest(`k${-id}`),
+      name: `Wanderer 000${-id}`,
+      named: false,
+      points: 10,
+      best,
+      createdAt: 0,
+      seenAt: 0,
+    });
+    writeFileSync(
+      file,
+      JSON.stringify({
+        nextId: -6,
+        guests: [line(-1, 'nine'), line(-2, -4), line(-3, 1e9), line(-4, 7.6), line(-5, null)],
+      }),
+    );
+    const store = new GuestStore({ file });
+    expect([-1, -2, -3, -4, -5].map((id) => store.findById(id)?.best)).toEqual([0, 0, 1000, 7, 0]);
+  });
+
+  it('goes to the account made in its browser, with the points and the name', () => {
+    const store = new GuestStore({ tokenGen: seqTokens() });
+    const { guest } = store.issue(0);
+    store.addPoints(guest.id, 85, 1);
+    store.raiseBest(guest.id, 9, 2);
+    store.setName(guest.id, 'Thornwick', 3, noAccount);
+    expect(guestClaim(store.findById(guest.id))).toEqual({
+      fold: 'thornwick',
+      points: 85,
+      best: 9,
+    });
   });
 });
 

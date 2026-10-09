@@ -36,6 +36,7 @@ import { claimHolds } from './email_claim';
 import { championPrice, dayIndex, matchLaurels, STARTER_COLLECTION } from './laurels';
 import { hashPassword, type PasswordHash, validatePassword, verifyPassword } from './password';
 import { BASE_RATING } from './rating';
+import { wholeBest } from './royale_ranking';
 import { loadJson, saveJsonAtomic } from './store';
 
 export interface AccountEmail {
@@ -99,14 +100,20 @@ export interface Account {
   // Banked on the ladder of every human (ADR 0027, server/points.ts),
   // never spent. Absent reads as none.
   points?: number;
+  // The most Respawn takedowns one seat scored, counted since landing for
+  // a drop-in (ADR 0033). Absent reads as none. The owner's own number:
+  // never on the public shape.
+  royaleBest?: number;
 }
 
-// What an account created from a Guest takes with it (ADR 0027): the
-// Guest's points, and the Guest's chosen name when it chose one, which
-// the new account may then wear although a Guest holds it.
+// What an account created from a Guest takes with it (ADR 0027, ADR
+// 0033): the Guest's points, its Respawn best, and its chosen name when it
+// chose one, which the new account may then wear although a Guest holds
+// it.
 export interface GuestClaim {
   fold: string | null;
   points: number;
+  best: number;
 }
 
 // Everything about an account that may leave the server TO ANOTHER
@@ -211,8 +218,9 @@ export class AccountRegistry {
   // 0027, server/guests.ts). Taken for every account but the one created
   // from that Guest.
   private heldElsewhere: (fold: string) => boolean = () => false;
-  // Set when points moved in memory that disk does not know about: they
-  // come a minion at a time, and this file is rewritten whole.
+  // Set when points or a Respawn best moved in memory that disk does not
+  // know about: they come a minion at a time, and this file is rewritten
+  // whole.
   private dirty = false;
 
   constructor(private readonly file: string) {
@@ -330,6 +338,7 @@ export class AccountRegistry {
       ratedGames: 0,
     };
     if (claim && claim.points > 0) account.points = claim.points;
+    if (claim && claim.best > 0) account.royaleBest = wholeBest(claim.best);
     if (eFold !== null) {
       account.email = { address: email.trim(), fold: eFold, claimedAt: now, confirmed: false };
       this.emailOwner.set(eFold, account.id);
@@ -370,6 +379,7 @@ export class AccountRegistry {
       ratedGames: 0,
     };
     if (claim && claim.points > 0) account.points = claim.points;
+    if (claim && claim.best > 0) account.royaleBest = wholeBest(claim.best);
     this.byId.set(account.id, account);
     this.nameOwner.set(fold, account.id);
     this.discordOwner.set(identity.id, account.id);
@@ -561,7 +571,23 @@ export class AccountRegistry {
     return a.points;
   }
 
-  // Writes the points that addPoints() only moved in memory.
+  // A Respawn end's tally for this account's seat (ADR 0033): answers the
+  // best held before it, and raises the best when the tally beats it.
+  // Memory only, like addPoints; the flush writes it. Null for an id
+  // nobody holds.
+  raiseBest(id: number, tally: number): number | null {
+    const a = this.byId.get(id);
+    if (!a) return null;
+    const before = wholeBest(a.royaleBest);
+    const t = wholeBest(tally);
+    if (t > before) {
+      a.royaleBest = t;
+      this.dirty = true;
+    }
+    return before;
+  }
+
+  // Writes what addPoints() and raiseBest() only moved in memory.
   flush(): void {
     if (this.dirty) this.persist();
   }

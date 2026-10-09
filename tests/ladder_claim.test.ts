@@ -76,6 +76,20 @@ describe('registering in a Guest browser', () => {
     ).toBe(340);
   });
 
+  it("takes the Guest's Respawn best with its points (ADR 0033)", () => {
+    const { registry, guests, dir } = linked();
+    const { guest } = guests.issue(0);
+    guests.addPoints(guest.id, 120, 1);
+    guests.raiseBest(guest.id, 9, 2);
+    const made = registry.register('Thornwick', 'a good password', '', 3, guestClaim(guest));
+    if (!made.ok) throw new Error(`expected the claim to register, got ${made.error}`);
+    guests.retire(guest.id);
+    expect(made.value.royaleBest).toBe(9);
+    expect(
+      new AccountRegistry(path.join(dir, 'accounts.json')).findById(made.value.id),
+    ).toMatchObject({ points: 120, royaleBest: 9 });
+  });
+
   it("moves an unnamed Guest's points under whatever name the account takes", () => {
     const { registry, guests } = linked();
     const { guest } = guests.issue(0);

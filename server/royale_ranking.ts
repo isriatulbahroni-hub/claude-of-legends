@@ -133,6 +133,17 @@ export function windowStanding(
   };
 }
 
+// A line's Respawn best (ADR 0033): the most takedowns one seat scored in
+// a match, a whole number. Past this it is junk, not a match.
+export const RESPAWN_BEST_MAX = 1000;
+
+// A best as it is read from disk or a tally: a whole number from 0 to
+// RESPAWN_BEST_MAX, and 0 for anything that is not a number.
+export function wholeBest(v: unknown): number {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return 0;
+  return Math.max(0, Math.min(RESPAWN_BEST_MAX, Math.floor(v)));
+}
+
 // How close the near miss of the end card is: the seat just above, when
 // it was no more than this many takedowns ahead.
 export const NEAR_MISS_BY = 2;

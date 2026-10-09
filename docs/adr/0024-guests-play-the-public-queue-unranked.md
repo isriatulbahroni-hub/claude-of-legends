@@ -2,6 +2,8 @@
 
 > Amended by ADR 0027: a Guest scores points on the ladder of every human, and is kept on disk,
 > under a hashed token, once it scores or names itself. Its matches are still rated for nobody.
+>
+> Amended by ADR 0033: the Guest is handed out when the landing opens, not when Play is pressed.
 
 ADR 0006 made an account the price of reaching the server, and named the middle it rejected:
 "Guests keep playing, unranked". Its cost was stated as real and paid by the invited player.

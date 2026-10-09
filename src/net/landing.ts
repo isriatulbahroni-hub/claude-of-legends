@@ -200,3 +200,20 @@ export async function loadLanding(
     return null;
   }
 }
+
+// The longest Play waits for the landing's answer before it asks for its
+// Guest (POST /api/guest), so the two read the cookie the answer set.
+export const LANDING_WAIT_MS = 2000;
+
+// Settles when the landing's request has answered, or after `ms`, whichever
+// comes first; never rejects.
+export function untilLanded(page: Promise<unknown>, ms = LANDING_WAIT_MS): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    const done = (): void => {
+      clearTimeout(timer);
+      resolve();
+    };
+    page.then(done, done);
+  });
+}

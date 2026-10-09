@@ -13,13 +13,14 @@
 // The chrome it shares with the signed-in home lives in ui/page.ts.
 
 import { appNav } from '../game/nav';
-import { loadLanding } from '../net/landing';
+import { updateSettings } from '../game/settings';
+import { loadLanding, untilLanded } from '../net/landing';
 import { type AuthedAccount, buildAuthForm } from './auth';
 import type { DiscordResult } from './discord_entry';
 import { startBackdrop } from './home_backdrop';
 import { CONTRIBUTE_LEAD, CONTRIBUTE_TITLE, CONTRIBUTE_WAYS } from './landing_contribute';
 import { mountEmbers } from './landing_embers';
-import { mountLandingLadder } from './landing_ladder';
+import { markOwnRow, mountLandingLadder } from './landing_ladder';
 import {
   ACCOUNT_LINE,
   CLASSIC_ART,
@@ -42,6 +43,8 @@ import { el, ensureMenuCss } from './menu';
 import { allNews, countdownText, dayText, isPinned, newestOf } from './news';
 import { newsImageUrl } from './news_images';
 import { openNews } from './news_section';
+import { kept } from './own_panel';
+import { mountOwnPanel } from './own_panel_view';
 import { buildPage, ensurePageCss, mountLiveStats, navLink } from './page';
 import { planetEmblem } from './planet_emblem';
 import { buildRepoLink } from './repo_link';
@@ -199,6 +202,14 @@ const CSS = `
    it again: without this an empty green box stood over the button whenever
    nobody was on. */
 .pg.land .pg-presence[hidden] { display: none; }
+/* The own panel (ui/own_panel_view.ts) heads the Play now card: who the
+   visitor is in the game, from the first page. It holds its height from
+   the first frame, unseen until the landing's answer comes, so nothing
+   under it moves. The New banner speaks to a first visit: a line the server
+   already keeps reads its own name, place and level there instead. */
+.pg.land .pg-card.plain > .own { min-height: 182px; }
+.pg.land .pg-card.plain > .own.own-wait { visibility: hidden; }
+.pg.land.own-back .pg-new { display: none; }
 /* The hero's second line: the game is ranked from the first match, in the
    browser, with no account (ADR 0027). Gold, since it is the news. The gaps
    around it give back the room it takes, so the two cards, and the gold
@@ -238,6 +249,10 @@ const CSS = `
   .pg-way > .pg-way-art { width: 40px; height: 40px; --planet: 40px; }
   .pg-way-words b { font-size: 13.5px; }
   .pg-way-words span { font-size: 11.5px; line-height: 1.3; }
+  /* The panel in its compact dress, and the banner left to the hero's
+     line once the panel stands: the gold button keeps the first screen. */
+  .pg.land .pg-card.plain > .own { min-height: 110px; }
+  .pg.land.own-on .pg-new { display: none; }
 }
 /* Sideways on a phone the stacked hero, crest over words, took the whole
    first screen and the gold button sat under it: the crest stands beside
@@ -317,6 +332,7 @@ const CSS = `
      one thing to press at the foot of a card that had already used the
      screen. Heading, line, button, then the picture as what it is,
      decoration under the offer. */
+  .pg.land .pg-card.plain > .own { order: 0; min-height: 192px; }
   .pg.land .pg-card.plain > .pg-new { order: 1; }
   .pg.land .pg-card.plain > .pg-presence { order: 3; margin-top: 2px; }
   .pg.land .pg-card.plain > .menu-btn { order: 3; margin-top: 2px; }
@@ -541,12 +557,22 @@ export function showLanding(
       });
     }
 
+    let leaving = false;
     const finish = (result: LandingResult): void => {
-      stopReveal();
-      stopEmbers();
-      stopBackdrop();
-      root.remove();
-      resolve(result);
+      if (leaving) return;
+      leaving = true;
+      const leave = (): void => {
+        stopReveal();
+        stopEmbers();
+        stopBackdrop();
+        root.remove();
+        resolve(result);
+      };
+      // A Guest's match asks for its Guest (POST /api/guest) with the
+      // cookie the landing's request set, so the match and the own panel
+      // are the same Guest: Play waits for that answer, a moment at most.
+      if (result.kind === 'guest') void untilLanded(pagePromise).then(leave);
+      else leave();
     };
     // The card's way in, built from its door (ui/landing_modes.ts), so the
     // button's words and what it does cannot drift apart.
@@ -722,6 +748,13 @@ export function showLanding(
     bannerWords.append(el('div', 'pg-new-kicker', ROYALE_LABEL), newTitle, el('p', '', NEW_LINE));
     banner.append(planetEmblem('respawn'), bannerWords);
     playCard.append(banner, presence, playBtn, wayList);
+    // The own panel heads the card (ui/own_panel_view.ts): who the visitor
+    // is in the game from the first page, over the banner and the gold
+    // button. It holds its height from the first frame and shows when the
+    // landing's answer comes, so nothing under it moves; with no answer it
+    // goes, and the card stands as it did.
+    const ownHost = el('div', 'own own-wait');
+    playCard.prepend(ownHost);
     // The newest news in one line (CONTEXT.md: News): a site whose last
     // word is from yesterday reads inhabited before anything is clicked.
     // It opens the section over the landing, with the nav told, so Back
@@ -781,6 +814,25 @@ export function showLanding(
     mountLandingLadder(ladder, pagePromise, () =>
       finish({ kind: PLAY_NOW.kind, play: PLAY_NOW.play }),
     );
+    void pagePromise.then((page) => {
+      const own = page?.own ?? null;
+      if (!own || !ownHost.isConnected) {
+        ownHost.remove();
+        return;
+      }
+      // The browser's copy of the line's total, which the end card's level
+      // climbs from (ui/royale_goal.ts).
+      updateSettings({ royaleGoal: own.points });
+      mountOwnPanel(ownHost, own, {
+        onKeep: () => online.scrollIntoView({ block: 'start', behavior: 'smooth' }),
+        onRenamed: (name) => markOwnRow(ladder, name),
+        // The session is there: the boot finds it and opens the home.
+        onHome: () => window.location.reload(),
+      });
+      ownHost.classList.remove('own-wait');
+      root.classList.add('own-on');
+      if (own.account || kept(own)) root.classList.add('own-back');
+    });
 
     // --- and the thing the genre does not offer ---
     const give = el('section', 'pg-give');

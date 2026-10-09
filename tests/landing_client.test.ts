@@ -3,8 +3,14 @@
 // null whenever there is no answer to trust, so the landing stands as it
 // did without the ladder and the own panel.
 
-import { describe, expect, it } from 'vitest';
-import { asLandingPage, LANDING_ROUTE, loadLanding } from '../src/net/landing';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  asLandingPage,
+  LANDING_ROUTE,
+  LANDING_WAIT_MS,
+  loadLanding,
+  untilLanded,
+} from '../src/net/landing';
 
 const LADDER = {
   total: 2,
@@ -141,5 +147,47 @@ describe('reading the answer', () => {
       ...WEEK,
       rotation: [],
     });
+  });
+});
+
+describe('Play after the landing', () => {
+  // Play asks for its Guest with the cookie the landing's answer set, so it
+  // waits for that answer, a moment at most.
+  it('goes on once the answer is in, or after the wait at most', async () => {
+    vi.useFakeTimers();
+    try {
+      let answered = (_: unknown): void => {};
+      const slow = new Promise((resolve) => {
+        answered = resolve;
+      });
+      let gone = false;
+      void untilLanded(slow).then(() => {
+        gone = true;
+      });
+      await vi.advanceTimersByTimeAsync(LANDING_WAIT_MS - 1);
+      expect(gone).toBe(false);
+      answered(null);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(gone).toBe(true);
+
+      let late = false;
+      void untilLanded(new Promise(() => {})).then(() => {
+        late = true;
+      });
+      await vi.advanceTimersByTimeAsync(LANDING_WAIT_MS - 1);
+      expect(late).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(late).toBe(true);
+      expect(LANDING_WAIT_MS).toBe(2000);
+
+      let failed = false;
+      void untilLanded(Promise.reject(new Error('gone'))).then(() => {
+        failed = true;
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(failed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

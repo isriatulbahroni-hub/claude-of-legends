@@ -1,0 +1,145 @@
+// The landing's one request on the client (src/net/landing.ts, ADR 0033):
+// a POST with the cookie riding it and no body, read field by field, and
+// null whenever there is no answer to trust, so the landing stands as it
+// did without the ladder and the own panel.
+
+import { describe, expect, it } from 'vitest';
+import { asLandingPage, LANDING_ROUTE, loadLanding } from '../src/net/landing';
+
+const LADDER = {
+  total: 2,
+  rows: [
+    { rank: 1, name: 'Quillon', points: 352, guest: false },
+    { rank: 2, name: 'Thornwick', points: 340, guest: true },
+  ],
+  me: { rank: 2, points: 340, name: 'Thornwick', guest: true, named: true },
+};
+
+const OWN = {
+  name: 'Thornwick',
+  named: true,
+  account: false,
+  rank: 2,
+  points: 340,
+  level: { level: 4, from: 225, to: 350 },
+  best: 9,
+  above: { rank: 1, name: 'Quillon', points: 352, gap: 13 },
+  since: 1_759_700_000_000,
+};
+
+const WEEK = {
+  rotation: ['korrath', 'vesk', 'maera'],
+  starters: ['torv', 'fenn', 'ashvyn', 'sylra'],
+  turnsAt: 1_760_572_800_000,
+};
+
+const GOOD = { ladder: LADDER, own: OWN, week: WEEK };
+
+function answer(status: number, body: unknown): typeof fetch {
+  return (async () =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    })) as typeof fetch;
+}
+
+describe("the landing's one request", () => {
+  it('posts to the route with the cookie riding it and no body', async () => {
+    let asked = '';
+    let init: RequestInit | undefined;
+    const post = (async (input: RequestInfo | URL, given?: RequestInit) => {
+      asked = String(input);
+      init = given;
+      return new Response(JSON.stringify(GOOD), { status: 200 });
+    }) as typeof fetch;
+    const page = await loadLanding(post);
+    expect(asked).toBe(LANDING_ROUTE);
+    expect(LANDING_ROUTE).toBe('/api/public/landing');
+    expect(init?.method).toBe('POST');
+    expect(init?.credentials).toBe('same-origin');
+    expect(init?.body).toBeUndefined();
+    expect(page).toEqual(GOOD);
+  });
+
+  it('answers null on a refusal, a throw or junk', async () => {
+    expect(await loadLanding(answer(500, GOOD))).toBeNull();
+    expect(await loadLanding(answer(405, { error: 'use POST' }))).toBeNull();
+    expect(await loadLanding(answer(200, { nope: 1 }))).toBeNull();
+    const gone = (async () => {
+      throw new Error('offline');
+    }) as typeof fetch;
+    expect(await loadLanding(gone)).toBeNull();
+    const notJson = (async () => new Response('<html>', { status: 200 })) as typeof fetch;
+    expect(await loadLanding(notJson)).toBeNull();
+  });
+});
+
+describe('reading the answer', () => {
+  it('reads a good page as it is', () => {
+    expect(asLandingPage(GOOD)).toEqual(GOOD);
+    // A fresh server, a fresh visitor: no rows, no place, level 1.
+    const fresh = {
+      ladder: { total: 0, rows: [], me: null },
+      own: {
+        ...OWN,
+        name: 'Wanderer 0421',
+        named: false,
+        rank: null,
+        points: 0,
+        level: { level: 1, from: 0, to: 50 },
+        best: 0,
+        above: null,
+      },
+      week: WEEK,
+    };
+    expect(asLandingPage(fresh)).toEqual(fresh);
+  });
+
+  it('is no page at all without a well formed ladder', () => {
+    for (const junk of [null, 1, 'page', [], {}, { own: OWN, week: WEEK }]) {
+      expect(asLandingPage(junk)).toBeNull();
+    }
+    const bad = (ladder: unknown) => asLandingPage({ ...GOOD, ladder });
+    expect(bad({ ...LADDER, total: -1 })).toBeNull();
+    expect(bad({ ...LADDER, total: '2' })).toBeNull();
+    expect(bad({ ...LADDER, rows: 'none' })).toBeNull();
+    expect(bad({ ...LADDER, rows: [{ rank: 1, name: 7, points: 1, guest: false }] })).toBeNull();
+    expect(bad({ ...LADDER, me: { rank: 'two', points: 1, name: 'x' } })).toBeNull();
+    const noMe = { total: 2, rows: LADDER.rows };
+    expect(bad(noMe)).toBeNull();
+    expect(bad({ ...LADDER, me: null })?.ladder.me).toBeNull();
+  });
+
+  it('leaves out an own panel that is not well formed, and keeps the ladder', () => {
+    const own = (patch: Record<string, unknown>) =>
+      asLandingPage({ ...GOOD, own: { ...OWN, ...patch } });
+    expect(own({ name: 3 })?.own).toBeNull();
+    expect(own({ name: '' })?.own).toBeNull();
+    expect(own({ named: 'yes' })?.own).toBeNull();
+    expect(own({ account: undefined })?.own).toBeNull();
+    expect(own({ rank: 'first' })?.own).toBeNull();
+    expect(own({ points: 1.5 })?.own).toBeNull();
+    expect(own({ points: Number.NaN })?.own).toBeNull();
+    expect(own({ best: -1 })?.own).toBeNull();
+    expect(own({ level: { level: 4, from: 350, to: 350 } })?.own).toBeNull();
+    expect(own({ level: null })?.own).toBeNull();
+    expect(own({ above: { rank: 1, name: 'Quillon', points: 352 } })?.own).toBeNull();
+    expect(own({ since: 'today' })?.own).toBeNull();
+    expect(own({ rank: null, above: null })?.own).toEqual({ ...OWN, rank: null, above: null });
+    expect(own({ name: 3 })?.ladder).toEqual(LADDER);
+    expect(asLandingPage({ ...GOOD, own: null })?.own).toBeNull();
+    expect(asLandingPage({ ...GOOD, own: [] })?.own).toBeNull();
+  });
+
+  it('leaves out a week that is missing or not well formed', () => {
+    const { week: _week, ...noWeek } = GOOD;
+    expect(asLandingPage(noWeek)?.week).toBeNull();
+    expect(asLandingPage({ ...GOOD, week: { ...WEEK, rotation: 'korrath' } })?.week).toBeNull();
+    expect(asLandingPage({ ...GOOD, week: { ...WEEK, rotation: [1, 2] } })?.week).toBeNull();
+    expect(asLandingPage({ ...GOOD, week: { ...WEEK, turnsAt: null } })?.week).toBeNull();
+    expect(asLandingPage({ ...GOOD, week: { ...WEEK, rotation: [] } })?.week).toEqual({
+      ...WEEK,
+      rotation: [],
+    });
+  });
+});

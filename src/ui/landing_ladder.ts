@@ -1,8 +1,8 @@
 // The ladder on the landing: the ladder of every human (ADR 0027), the
 // accounts and the Guests ranked by the points their matches banked, shown
 // to a visitor as the reason to press Play: one match puts their name on
-// it, with no account. Read from one request the server answers without a
-// session (server/landing_page.ts); the wire shape is mirrored here and
+// it, with no account. Read from the landing's one request
+// (server/landing_page.ts), whose wire shape src/net/landing.ts mirrors;
 // the module never imports from server/. The bot ladders stay inside the
 // home and the Academy.
 //
@@ -11,32 +11,13 @@
 // the server does not answer, because a landing with an empty box on it
 // reads worse than one without.
 
+import {
+  type LandingLadder,
+  type LandingLadderMe,
+  type LandingPage,
+  loadLanding,
+} from '../net/landing';
 import { el } from './menu';
-
-export interface LandingLadderRow {
-  rank: number;
-  name: string;
-  points: number;
-  guest: boolean;
-}
-
-export interface LandingLadderMe {
-  rank: number | null;
-  points: number;
-  name: string;
-  guest: boolean;
-  named: boolean;
-}
-
-export interface LandingLadder {
-  total: number;
-  rows: LandingLadderRow[];
-  me: LandingLadderMe | null;
-}
-
-export interface LandingPage {
-  ladder: LandingLadder;
-}
 
 export const LADDER_HEADING = 'The ladder';
 // What an empty ladder shows: its first places, open.
@@ -176,10 +157,9 @@ export function renderLandingLadder(
 // be read is not shown half-drawn.
 export function mountLandingLadder(host: HTMLElement, onJoin: () => void): void {
   host.hidden = true;
-  fetch('/api/public/landing', { credentials: 'same-origin' })
-    .then((res) => (res.ok ? (res.json() as Promise<LandingPage>) : null))
+  loadLanding()
     .then((page) => {
-      if (!page?.ladder || !host.isConnected) {
+      if (!page || !host.isConnected) {
         host.remove();
         return;
       }

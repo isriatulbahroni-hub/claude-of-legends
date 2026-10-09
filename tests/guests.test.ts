@@ -69,6 +69,30 @@ describe('guests', () => {
     expect(store.resolve('nope', 0)).toBeUndefined();
   });
 
+  it('are handed out on arrival, or found again on the cookie they left (ADR 0033)', () => {
+    const store = new GuestStore({ ttlMs: 1000, max: 10, tokenGen: seqTokens(), digits: () => 7 });
+    // No cookie: a new Guest, issued.
+    const first = store.arrive(undefined, 0);
+    expect(first).toMatchObject({ token: 't0', issued: true });
+    expect(first.guest).toMatchObject({ name: 'Wanderer 0007', named: false, points: 0 });
+    // A live cookie: the same Guest and token, its window rolled forward.
+    const again = store.arrive('t0', 900);
+    expect(again).toEqual({ token: 't0', guest: first.guest, issued: false });
+    expect(again.guest.seenAt).toBe(900);
+    expect(store.size).toBe(1);
+    // An unknown cookie: a new Guest under a new token.
+    const stranger = store.arrive('nope', 950);
+    expect(stranger.issued).toBe(true);
+    expect(stranger.token).toBe('t1');
+    expect(stranger.guest.id).not.toBe(first.guest.id);
+    // A lapsed cookie: a new Guest too, and the old one is gone.
+    const late = store.arrive('t0', 900 + 1001);
+    expect(late.issued).toBe(true);
+    expect(late.token).not.toBe('t0');
+    expect(late.guest.id).not.toBe(first.guest.id);
+    expect(store.findById(first.guest.id)).toBeUndefined();
+  });
+
   it('are bounded: the oldest with nothing kept goes when the store is full', () => {
     const store = new GuestStore({ ttlMs: 1000, max: 3, tokenGen: seqTokens(), digits: () => 1 });
     const first = store.issue(0).guest;

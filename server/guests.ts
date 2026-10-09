@@ -312,6 +312,15 @@ export class GuestStore {
     return guest;
   }
 
+  // The Guest a browser arrives as (ADR 0033): the one its cookie holds,
+  // rolled forward by resolve, so a kept Guest's year counts from this
+  // visit; else a new one, when the cookie is missing, unknown or lapsed.
+  arrive(token: string | undefined, now: number): { token: string; guest: Guest; issued: boolean } {
+    const known = token === undefined ? undefined : this.resolve(token, now);
+    if (token !== undefined && known) return { token, guest: known, issued: false };
+    return { ...this.issue(now), issued: true };
+  }
+
   findById(id: number): Guest | undefined {
     const digest = this.digestOf.get(id);
     return digest === undefined ? undefined : this.byDigest.get(digest);

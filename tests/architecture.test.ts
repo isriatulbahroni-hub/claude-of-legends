@@ -435,7 +435,6 @@ describe('api methods', () => {
     '/api/bots',
     '/api/public/stats',
     '/api/public/build',
-    '/api/public/landing',
     '/api/public/ladder',
     '/api/public/presence',
     '/api/discord/status',

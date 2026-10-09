@@ -1,7 +1,8 @@
 // Dev seeding for a server with people on it: eight accounts placed by
 // hand with a match log behind them, points on the ladder of every human
-// for most of them and for five Guests, six ranked bots with Arena play in
-// their Records, and seven sealed forged champions with likes. A fresh
+// for most of them and for six Guests, one of them under a known cookie,
+// six ranked bots with Arena play in their Records, and seven sealed
+// forged champions with likes. A fresh
 // state directory shows every surface's empty state (the home's panels,
 // the ladder page, the Arena pool, the gallery) and nothing else, which is
 // the wrong thing to look at while working on any of them. Run via
@@ -35,6 +36,10 @@ import { FORGED_TWINS } from '../tests/forged_twins';
 // never data/: the seed is fiction and the ordinary local state is not.
 const DATA_DIR = process.env.DATA_DIR ?? path.resolve(process.cwd(), '.dev/data');
 export const SEED_PASSWORD = 'seed-home-shots';
+// The cookie token of the seeded Guest Thornwick: a browser given
+// loc_guest=seed-home-guest reads the landing as a named Guest with points
+// and a Respawn best (ADR 0033).
+export const SEED_GUEST_TOKEN = 'seed-home-guest';
 const HOUR = 3600_000;
 const now = Date.now();
 
@@ -173,6 +178,20 @@ for (const [name, points] of GUESTS) {
   if (name) guests.setName(guest.id, name, now - HOUR, (fold) => registry.holdsName(fold));
 }
 guests.flush();
+// And one under a token the seed knows, so a browser can be the Guest the
+// own panel shows: named, mid-ladder, with a best.
+const known = new GuestStore({
+  file: path.join(DATA_DIR, 'guests.json'),
+  tokenGen: () => SEED_GUEST_TOKEN,
+});
+const thornwick = known.issue(now - 3 * 24 * HOUR).guest;
+known.addPoints(thornwick.id, 340, now - HOUR);
+known.raiseBest(thornwick.id, 9, now - HOUR);
+const named = known.setName(thornwick.id, 'Thornwick', now - HOUR, (fold) =>
+  registry.holdsName(fold),
+);
+if (!named.ok) throw new Error(`seed: cannot name the Guest Thornwick (${named.error})`);
+known.flush();
 
 // --- ranked bots with Arena play -------------------------------------------
 
@@ -300,3 +319,4 @@ console.log(
   `seeded ${NAMES.length} accounts, ${BOTS.length} ranked bots, ${FORGED.length} forged champions into ${DATA_DIR}`,
 );
 console.log(`sign in as any of ${NAMES.join(', ')} with the password "${SEED_PASSWORD}"`);
+console.log(`or set the cookie loc_guest=${SEED_GUEST_TOKEN} to be the Guest Thornwick`);

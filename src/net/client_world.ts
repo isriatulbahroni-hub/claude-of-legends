@@ -14,10 +14,12 @@ import { creatureOfRing } from '../sim/content/rings';
 import { draughtLeft } from '../sim/draught';
 import { type FavorStacks, NO_FAVORS } from '../sim/favors';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
-import type { Vec3 } from '../sim/geo';
+import { copy, point, type Vec3 } from '../sim/geo';
+import { type Ground, PlaneGround } from '../sim/ground';
 import type { NavGrid } from '../sim/navgrid';
 import type { Projectile } from '../sim/projectiles';
 import type { RingClock } from '../sim/rings';
+import { padSites, padUnder } from '../sim/royale/pads';
 import { TWO_TEAMS } from '../sim/teams';
 import type { AbilityKey, ScoreRow, TeamId, Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
@@ -193,6 +195,15 @@ function materializeUnit(s: SnapUnit): Unit {
   };
 }
 
+// The planet as the own champion's prediction walks it (ADR 0029): the
+// ground the server's sim walks (its grid, without the walls a match
+// raises), and the launch pads, which throw a champion whose walk ends on
+// one (src/sim/royale/pads.ts).
+export interface PlanetWalk {
+  ground: Ground;
+  pads: readonly { at: Vec3; to: Vec3 }[];
+}
+
 // A unit as the mirror holds it: in a battle royale a champion carries the
 // bot mark of its seat (the identity block's b, ADR 0031), beside the
 // sim's own fields.
@@ -237,6 +248,10 @@ export class ClientWorld implements IWorld {
   // The killer's body drawn from the mode block's wa through a Respawn
   // wait (net/watch_body.ts), by unit id; null when none is.
   private watched: number | null = null;
+  // When the launch pad's throw that carries the own champion ends (0 for
+  // none): the snapshot of that very time no longer lists its statuses,
+  // yet the champion has a tick of its flight still to go.
+  private flightEnds = 0;
 
   // Match-scoped champion resolution, mirroring the server sim's registry:
   // the Forge queue delivers the match's forged definitions at setup and
@@ -244,24 +259,41 @@ export class ClientWorld implements IWorld {
   readonly champions = new ChampionRegistry();
 
   // The own champion drawn where it is going (src/net/self_predict.ts,
-  // ADR 0028), when the host hands in the map's walkability grid; a
+  // ADR 0028), when the host hands in what the server's sim walks: the
+  // map's walkability grid, or the planet's ground and pads (ADR 0029). A
   // spectator's mirror has none and draws what the server says.
   private readonly predictor: SelfPredictor | null;
+  // The predictor walks the planet's sphere, not the plane's grid.
+  private readonly predictsOnSphere: boolean;
 
   // The map the match is played on (ADR 0021): the mirror renders and
   // reasons on the record the server's sim runs, handed in by the host.
   constructor(
     private readonly send: (msg: ClientMsg) => void,
     readonly map: GameMap,
-    nav: NavGrid | null = null,
+    walk: NavGrid | PlanetWalk | null = null,
     private readonly clock: () => number = () => performance.now(),
   ) {
-    this.predictor = nav
-      ? new SelfPredictor(nav, (id) => {
-          const u = this.units.get(id);
-          return u && !u.dead ? { x: u.pos.x, z: u.pos.z, radius: u.radius } : null;
-        })
-      : null;
+    // A unit the sim's chase can strike, as the mirror sees it: in sight,
+    // alive, neither hidden nor untargetable (src/sim/combat/auto_attack.ts).
+    const target = (id: number) => {
+      const u = this.units.get(id);
+      if (!u || u.dead) return null;
+      if (u.statuses.some((s) => s.kind === 'untargetable' || s.kind === 'stealth')) return null;
+      return u.pos.y === undefined
+        ? { x: u.pos.x, z: u.pos.z, radius: u.radius }
+        : { x: u.pos.x, y: u.pos.y, z: u.pos.z, radius: u.radius };
+    };
+    this.predictsOnSphere = walk !== null && 'ground' in walk;
+    // The Star Orchard's sim walks with strict navigation; the planet's
+    // walks its paths as they are, and throws from its pads.
+    if (walk === null) this.predictor = null;
+    else if ('ground' in walk) {
+      const pads = padSites(walk.pads);
+      this.predictor = new SelfPredictor(walk.ground, target, {
+        throws: (pos, dest) => padUnder(pads, pos, dest) !== null,
+      });
+    } else this.predictor = new SelfPredictor(new PlaneGround(walk), target, { strict: true });
   }
 
   // Where the renderer draws a unit this frame when it is not where the
@@ -272,11 +304,11 @@ export class ClientWorld implements IWorld {
     return this.predictor?.drawnAt(now) ?? null;
   }
 
-  // The prediction walks the plane's grid (src/net/self_predict.ts): on the
-  // planet's sphere it stays off, and the own champion is drawn where the
-  // server says.
+  // The prediction walks the ground it was handed (src/net/self_predict.ts):
+  // the plane's grid outside a battle royale, the planet's in one; on any
+  // other the own champion is drawn where the server says.
   private get predicting(): boolean {
-    return this.predictor !== null && this.royaleMatch === null;
+    return this.predictor !== null && (this.royaleMatch !== null) === this.predictsOnSphere;
   }
 
   // The battle royale's state (IWorld): null outside one.
@@ -320,6 +352,7 @@ export class ClientWorld implements IWorld {
     this.kept = {};
     this.seats.clear();
     this.watched = null;
+    this.flightEnds = 0;
   }
 
   // The killer the fallen champion watches through its wait (the mode
@@ -425,12 +458,9 @@ export class ClientWorld implements IWorld {
       this.send({ t: 'order', kind: 'goto', x, z });
       return;
     }
-    if (y !== undefined) {
-      this.send({ t: 'move', x, y, z });
-      return;
-    }
-    const n = this.predicting ? this.predictor?.move({ x, z }, this.clock()) : undefined;
-    this.send(n === undefined ? { t: 'move', x, z } : { t: 'move', x, z, n });
+    const n = this.predicting ? this.predictor?.move(point(x, z, y), this.clock()) : undefined;
+    const msg: ClientMsg = y === undefined ? { t: 'move', x, z } : { t: 'move', x, y, z };
+    this.send(n === undefined ? msg : { ...msg, n });
   }
 
   orderAttack(_unitId: number, targetId: number): void {
@@ -449,21 +479,24 @@ export class ClientWorld implements IWorld {
       this.send({ t: 'order', kind: 'goto', x, z });
       return;
     }
-    if (y !== undefined) {
-      this.send({ t: 'attack_move', x, y, z });
-      return;
-    }
-    const n = this.predicting ? this.predictor?.move({ x, z }, this.clock()) : undefined;
-    this.send(n === undefined ? { t: 'attack_move', x, z } : { t: 'attack_move', x, z, n });
+    const n = this.predicting
+      ? this.predictor?.move(point(x, z, y), this.clock(), true)
+      : undefined;
+    const msg: ClientMsg =
+      y === undefined ? { t: 'attack_move', x, z } : { t: 'attack_move', x, y, z };
+    this.send(n === undefined ? msg : { ...msg, n });
   }
 
-  // A recall stands the champion still to channel (src/sim/recall.ts).
+  // A recall stands the champion still to channel (src/sim/recall.ts). A
+  // battle royale has none (server/royale_commands.ts): nothing answers
+  // it there, so nothing is predicted of it.
   startRecall(_unitId: number): void {
     if (this.coach) {
       this.send({ t: 'order', kind: 'back' });
       return;
     }
-    const n = this.predicting ? this.predictor?.stop(this.clock()) : undefined;
+    const n =
+      this.predicting && this.royaleMatch === null ? this.predictor?.stop(this.clock()) : undefined;
     this.send(n === undefined ? { t: 'recall' } : { t: 'recall', n });
   }
 
@@ -478,17 +511,13 @@ export class ClientWorld implements IWorld {
 
   castAbility(_unitId: number, key: AbilityKey, aim: Vec2): boolean {
     if (this.coach) return false;
-    if (aim.y !== undefined) {
-      this.send({ t: 'cast', key, x: aim.x, y: aim.y, z: aim.z });
-      return true;
-    }
     const now = this.clock();
     const n = this.predicting ? this.predictor?.cast(this.windupOf(key, now), now) : undefined;
-    this.send(
-      n === undefined
+    const msg: ClientMsg =
+      aim.y === undefined
         ? { t: 'cast', key, x: aim.x, z: aim.z }
-        : { t: 'cast', key, x: aim.x, z: aim.z, n },
-    );
+        : { t: 'cast', key, x: aim.x, y: aim.y, z: aim.z };
+    this.send(n === undefined ? msg : { ...msg, n });
     return true;
   }
 
@@ -574,6 +603,11 @@ export class ClientWorld implements IWorld {
       return false;
     }
     if (msg.t !== 'snap') return false;
+
+    // Where the prediction walks the own champion, before the snapshot
+    // moves the unit it may be chasing: the ease starts from there.
+    const now = this.clock();
+    const walked = this.predicting ? (this.predictor?.walkedAt(now) ?? null) : null;
 
     this.time = msg.time;
     this.winner = msg.winner;
@@ -792,25 +826,47 @@ export class ClientWorld implements IWorld {
       }
     }
 
-    if (this.predicting && msg.self) this.observeSelf(msg.self, msg.time, msg.winner !== null);
+    if (this.predicting && msg.self) {
+      this.observeSelf(msg.self, msg.time, msg.winner !== null, now, walked);
+    }
     return true;
   }
 
-  // The newest state of the own champion's walk, for the prediction.
-  private observeSelf(snap: SelfSnap, time: number, over: boolean): void {
+  // The newest state of the own champion's walk, for the prediction. On
+  // the planet the snapshot does not carry the path (the predictor
+  // remembers the walk it answered), and the prediction rests through the
+  // drop and a launch pad's throw, where the server carries the champion
+  // in ways no walk draws.
+  private observeSelf(
+    snap: SelfSnap,
+    time: number,
+    over: boolean,
+    now: number,
+    walked: Vec2 | null,
+  ): void {
     const self = this.units.get(this.selfUnitId);
     if (!self || !this.predictor) return;
     let stillUntil = self.pendingSpell?.resolveAt ?? 0;
+    let airborne = 0;
+    let untargetable = 0;
     for (const s of snap.statuses) {
       if (s.k === 'root' || s.k === 'stun' || s.k === 'airborne') {
         stillUntil = Math.max(stillUntil, s.until);
       }
+      if (s.k === 'airborne') airborne = Math.max(airborne, s.until);
+      if (s.k === 'untargetable') untargetable = Math.max(untargetable, s.until);
     }
+    const planet = this.royaleMatch !== null;
+    // A pad's throw: airborne and untargetable to the same end
+    // (src/sim/royale/mode.ts stepPads).
+    if (planet && airborne > time && airborne === untargetable) this.flightEnds = airborne;
+    const flying = planet && time <= this.flightEnds + 1e-6;
+    const resting = planet && (this.royaleBlock?.st !== 'play' || flying);
     this.predictor.observe(
       {
         time,
-        pos: { x: self.pos.x, z: self.pos.z },
-        path: pathOfPairs(snap.path),
+        pos: copy(self.pos),
+        path: planet ? null : pathOfPairs(snap.path),
         speed: snap.ms,
         stillUntil,
         chaseId: snap.tgt ?? null,
@@ -821,13 +877,18 @@ export class ClientWorld implements IWorld {
           self.dead ||
           snap.dash === 1 ||
           over ||
+          resting ||
           this.coach ||
           typeof snap.ms !== 'number' ||
           typeof snap.ack !== 'number',
         ack: snap.ack ?? 0,
         ackAt: snap.ackAt ?? 0,
+        ...(planet
+          ? { windupEnds: self.pendingSpell?.resolveAt ?? 0, airborneEnds: airborne }
+          : {}),
       },
-      this.clock(),
+      now,
+      walked,
     );
   }
 }

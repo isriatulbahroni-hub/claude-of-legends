@@ -18,7 +18,7 @@ import { frameRate, watchFrames } from './game/frame_rate';
 import { requestGameFullscreen } from './game/fullscreen';
 import { parseJoinCode } from './game/invite';
 import { appNav, installNav, sectionFromHash } from './game/nav';
-import { loadPlanetRecords } from './game/planet_records';
+import { loadPlanetRecords, planetWalk } from './game/planet_records';
 import { type PracticeBots, practiceOpponents } from './game/practice_bots';
 import { advancePracticeClock, type PracticeClock, practiceHeld } from './game/practice_clock';
 import { practiceSeed } from './game/practice_seed';
@@ -39,7 +39,7 @@ import {
 } from './game/star_orchard';
 import { loadStarOrchard } from './game/star_orchard_records';
 import { buildIdFromMeta, startBuildWatch } from './net/build_watch';
-import { ClientWorld } from './net/client_world';
+import { ClientWorld, type PlanetWalk } from './net/client_world';
 import { openGuest } from './net/guest';
 import { buildPracticeReport, sendPracticeReport } from './net/practice_report';
 import type { ClientMsg, ForgedMatchAssets, ServerMsg } from './net/protocol';
@@ -1315,7 +1315,11 @@ async function pickForRoyale(variant: RoyaleVariant): Promise<RoyalePick | null>
 // holds: the Wanderseed's records, its model drawn as a sphere
 // (render/planet_terrain.ts) and the champions, behind a loading card like
 // the Orchard's. Null after the notice when the planet cannot load.
-async function loadRoyaleGround(): Promise<{ map: GameMap; terrain: RenderTerrain } | null> {
+async function loadRoyaleGround(): Promise<{
+  map: GameMap;
+  terrain: RenderTerrain;
+  walk: PlanetWalk;
+} | null> {
   const { root, card } = screen(container);
   const line = el('p', 'menu-sub', 'Loading the planet');
   const bar = el('div', 'menu-progress');
@@ -1336,7 +1340,8 @@ async function loadRoyaleGround(): Promise<{ map: GameMap; terrain: RenderTerrai
       showDone(0.75 + 0.25 * (total > 0 ? loaded / total : 1));
     });
     showDone(1);
-    return { map: planetGameMap(assemblePlanet(records.layout)), terrain };
+    const layout = assemblePlanet(records.layout);
+    return { map: planetGameMap(layout), terrain, walk: planetWalk(records, layout) };
   } catch (err) {
     await showNotice(
       container,
@@ -1368,7 +1373,9 @@ async function runRoyale(
     const send = (msg: unknown): void => {
       if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
     };
-    const world = new ClientWorld((msg) => send(msg), loaded.map);
+    // The planet's ground and pads, for the own champion's prediction
+    // (src/net/self_predict.ts): what the server's sim walks.
+    const world = new ClientWorld((msg) => send(msg), loaded.map, loaded.walk);
     let pres: Presentation | null = null;
     let ends: MatchEndReporter | null = null;
     // When the match came on screen (performance.now), for the seconds it

@@ -68,7 +68,7 @@ const CSS = `
    eleven the Respawn line ran to four lines and pushed the gold button
    under the fold of a laptop. */
 .pg.land .pg-cards { display: grid; max-width: 1180px; gap: 18px; align-items: stretch;
-  margin-left: auto; margin-right: auto;
+  margin-left: auto; margin-right: auto; margin-top: clamp(16px, 3vh, 30px);
   grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); }
 .pg.land .pg-cards > .pg-card.plain { order: -2; }
 .pg.land .pg-cards > .pg-card.gold { grid-column: 1 / -1; }
@@ -220,9 +220,17 @@ const CSS = `
    the first frame, unseen until the landing's answer comes, so nothing
    under it moves. The New banner speaks to a first visit: a line the server
    already keeps reads its own name, place and level there instead. */
-.pg.land .pg-card.plain > .own { min-height: 182px; }
+.pg.land .pg-card.plain > .own { min-height: 196px; }
 .pg.land .pg-card.plain > .own.own-wait { visibility: hidden; }
 .pg.land.own-back .pg-new { display: none; }
+/* Under the own panel the New banner wears its compact dress at every size,
+   its kicker left to the ways in under the button, so the panel, the banner
+   and the gold button share the first screen. Always, so nothing moves. */
+.pg-new { padding: 9px 12px; gap: 12px; margin: 0 0 12px; }
+.pg-new > .planet-emblem { --planet: 60px; }
+.pg-new-kicker { display: none; }
+.pg.land .pg-card .pg-new h2 { font-size: 17px; }
+.pg.land .pg-card .pg-new p { font-size: 12px; line-height: 1.4; }
 /* The hero's second line: the game is ranked from the first match, in the
    browser, with no account (ADR 0027). Gold, since it is the news. The gaps
    around it give back the room it takes, so the two cards, and the gold
@@ -230,7 +238,18 @@ const CSS = `
 .pg.land .pg-ranked { margin: 6px 0 0; font-size: clamp(13.5px, 1.4vw, 15.5px); font-weight: 700;
   letter-spacing: 0.3px; color: #f0dca0; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.85); }
 .pg.land .pg-ranked + .pg-hero-cta { margin-top: 10px; }
-.pg.land .pg-hero { gap: clamp(10px, 1.7vh, 18px); }
+.pg.land .pg-hero { gap: clamp(10px, 1.7vh, 18px); padding-top: clamp(10px, 2.4vh, 26px); }
+/* The hero is a row on every screen wider than a phone held upright: the
+   lockup beside the copy rather than over it, so the Play now card, and
+   the own panel at its top, stand in the first screen. Always, not once
+   the landing's answer comes, so nothing moves. */
+@media (min-width: 561px) {
+  .pg.land .pg-hero { flex-direction: row; justify-content: center; text-align: left;
+    gap: clamp(16px, 2.2vw, 28px); }
+  .pg.land .pg-lockup { width: clamp(96px, 9vw, 132px); }
+  .pg.land .pg-hero-copy { align-items: flex-start; }
+  .pg.land .pg-hero-cta { justify-content: flex-start; }
+}
 /* The ladder of every human (ui/landing_ladder.ts) stands in the grid of
    the two ways in: beside the Play now card on a wide screen, and between
    the Play now card and the account card once they stack, so a phone
@@ -246,10 +265,11 @@ const CSS = `
    as it can, and the card leaves its painting out, so the ladder under it
    is read on the second screen rather than the third. */
 @media (max-height: 560px) {
-  .pg.land .pg-hero { padding-top: 6px; gap: 10px; }
-  .pg.land .pg-lockup { width: 104px; }
-  .pg.land .pg-hero-cta { margin-top: 14px; }
-  .pg.land .pg-ranked + .pg-hero-cta { margin-top: 10px; }
+  .pg.land .pg-hero { padding-top: 6px; gap: 20px; }
+  .pg.land .pg-lockup { width: 76px; }
+  /* The tagline alone beside the crest: the ranked line and the count
+     give their room to the own panel and the gold button under them. */
+  .pg.land .pg-ranked, .pg.land .pg-hero-cta { display: none; }
   .pg.land .pg-cards { margin-top: 14px; }
   .pg.land .pg-card.plain { padding-top: 14px; }
   .pg-new { padding: 8px 12px; gap: 12px; margin-bottom: 10px; }
@@ -264,22 +284,14 @@ const CSS = `
   .pg-way-words span { font-size: 11.5px; line-height: 1.3; }
   /* The panel in its compact dress, and the banner left to the hero's
      line once the panel stands: the gold button keeps the first screen. */
-  .pg.land .pg-card.plain > .own { min-height: 110px; }
+  .pg.land .pg-card.plain > .own { min-height: 112px; margin-bottom: 8px; }
+  /* The bar, the presence line and the panel give a few pixels each. */
+  .pg.land .pg-bar { padding-top: 8px; min-height: 50px; }
+  .pg.land .pg-presence { padding: 5px 10px; margin-bottom: 6px; font-size: 12px; }
   .pg.land.own-on .pg-new { display: none; }
   .pg-way-words .pg-way-week-faces { display: none; }
   .pg-way-words .pg-way-week-text { white-space: nowrap; overflow: hidden;
     text-overflow: ellipsis; }
-}
-/* Sideways on a phone the stacked hero, crest over words, took the whole
-   first screen and the gold button sat under it: the crest stands beside
-   the words instead, and the card rises with the button on the first
-   screen. */
-@media (max-height: 560px) and (min-width: 640px) {
-  .pg.land .pg-hero { flex-direction: row; justify-content: center; gap: 20px; text-align: left; }
-  .pg.land .pg-lockup { width: 76px; }
-  .pg.land .pg-hero-copy { align-items: flex-start; }
-  .pg.land .pg-hero-cta { justify-content: flex-start; margin-top: 6px; }
-  .pg.land .pg-ranked + .pg-hero-cta { margin-top: 6px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .pg.land .pg-cards .pg-card.glow { animation: none; }
@@ -348,14 +360,22 @@ const CSS = `
      one thing to press at the foot of a card that had already used the
      screen. Heading, line, button, then the picture as what it is,
      decoration under the offer. */
-  .pg.land .pg-card.plain > .own { order: 0; min-height: 192px; }
+  .pg.land .pg-lockup { width: 96px; }
+  .pg.land .pg-card.plain > .own { order: 0; min-height: 214px; }
   .pg.land .pg-card.plain > .pg-new { order: 1; }
   .pg.land .pg-card.plain > .pg-presence { order: 3; margin-top: 2px; }
   .pg.land .pg-card.plain > .menu-btn { order: 3; margin-top: 2px; }
   .pg.land .pg-card.plain > .pg-fine { order: 4; }
   .pg.land .pg-card.plain > .pg-ways { order: 5; }
-  .pg-new { gap: 12px; }
-  .pg-new > .planet-emblem { --planet: 56px; }
+  .pg-new { gap: 12px; padding: 8px 12px; }
+  .pg-new > .planet-emblem { --planet: 44px; }
+  /* Upright, the banner is its title: the line under it ran to five lines
+     in a phone's column, and Respawn's row under the button says it. */
+  .pg.land .pg-card .pg-new p { display: none; }
+  /* A little more width for the name beside its Change, a little less
+     height over the gold button. */
+  .pg.land .pg-card.plain { padding: 16px 16px 18px; }
+  .pg.land .pg-hero { gap: 12px; }
   .pg.land .pg-card .pg-new h2 { font-size: 13.5px; letter-spacing: 0.6px; white-space: nowrap; }
   .pg.land .pg-card.plain > .pg-news { order: 6; }
   .pg-mode { height: auto; aspect-ratio: 3 / 4; }

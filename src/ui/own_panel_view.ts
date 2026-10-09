@@ -79,7 +79,7 @@ const CSS = `
   color: #8ba1c0; }
 .pg.land .own p.own-sub { margin: 2px 0 0; font-size: 12px; line-height: 1.4; color: #9db2cf;
   min-width: 0; }
-.own-keep { margin: 0 0 0 4px; padding: 0; border: 0; background: none; font: inherit;
+.own-keep { margin: 0; padding: 0; border: 0; background: none; font: inherit;
   font-weight: 700; color: #e8c46c; text-decoration: underline; cursor: pointer;
   white-space: nowrap; }
 .own-keep:hover, .own-keep:focus-visible { color: #fff1b8; outline: none; }
@@ -118,7 +118,7 @@ const CSS = `
   .pg.land .own p.own-sub { margin-top: 0; font-size: 11px; display: flex; min-width: 0;
     white-space: nowrap; }
   .own-sub-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .own-keep { flex: none; }
+  .own-keep { flex: none; margin-left: 5px; }
   .own-tiles { gap: 6px; margin-top: 8px; }
   .own-tile { display: grid; grid-template-columns: auto auto; justify-content: start;
     align-items: baseline; column-gap: 6px; row-gap: 2px; padding: 5px 8px; }
@@ -130,11 +130,14 @@ const CSS = `
 }
 /* A phone held upright: three narrow tiles, their lines on up to two. */
 @media (max-width: 560px) {
+  .own-who { gap: 10px; }
   .own-mark { width: 48px; height: 48px; }
-  .pg.land .own h2.own-name { font-size: 20px; }
+  .own-line { gap: 8px; }
+  .pg.land .own h2.own-name { font-size: 20px; letter-spacing: 0.3px; }
+  .own-change { padding: 0 10px; font-size: 11px; letter-spacing: 0.8px; }
   .own-tiles { gap: 6px; }
-  .own-tile { padding: 7px 8px; }
-  .own-tile b { font-size: 20px; }
+  .own-tile { padding: 7px 6px 7px 8px; }
+  .own-tile b { font-size: 18px; }
   .own-tile span { font-size: 10.5px; display: -webkit-box; -webkit-line-clamp: 2;
     -webkit-box-orient: vertical; overflow: hidden; }
   .pg.land .own p.own-next { font-size: 12.5px; }
@@ -244,7 +247,7 @@ export function mountOwnPanel(host: HTMLElement, first: LandingOwn, opts: OwnPan
   const subText = el('span', 'own-sub-text');
   const keep = el('button', 'own-keep');
   keep.type = 'button';
-  sub.append(subText, keep);
+  sub.append(subText, ' ', keep);
   const status = el('p', 'own-status');
   status.setAttribute('role', 'status');
 

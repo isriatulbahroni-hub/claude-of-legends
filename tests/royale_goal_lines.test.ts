@@ -1,11 +1,18 @@
 // The goal across battle royales said before the end card
 // (src/ui/royale_goal_lines.ts): the one line of the wash of a Respawn
-// death, the note under the points' pop in play, and the note under Play
-// the next match.
+// death, the note under the points' pop in play, the note under Play the
+// next match, and the greeting of a browser that has played before.
 
 import { describe, expect, it } from 'vitest';
 import { GOAL_HEAD_START, GOAL_MAX_POINTS, goalModel } from '../src/ui/royale_goal';
-import { goalLine, goalPopNote, nextMatchNote, pointsText } from '../src/ui/royale_goal_lines';
+import {
+  goalLine,
+  goalPopNote,
+  goalWelcome,
+  nextMatchNote,
+  pointsText,
+  WELCOME_BACK,
+} from '../src/ui/royale_goal_lines';
 
 describe('the line', () => {
   it('says the level and the points to the next, the bar as full as the card would draw it', () => {
@@ -62,12 +69,35 @@ describe('the note under Play the next match', () => {
   });
 });
 
+describe('the greeting', () => {
+  const fresh = { royaleGoal: 0, royaleBest: 0, royalePick: null };
+
+  it('greets nobody who never played a battle royale here', () => {
+    expect(goalWelcome(fresh)).toBeNull();
+  });
+
+  it("greets a browser with points with its level and the next level's points", () => {
+    const back = goalWelcome({ ...fresh, royaleGoal: 155 });
+    expect(back?.text).toBe('Level 3 · 70 points to Level 4');
+    expect(WELCOME_BACK).toBe('Welcome back');
+  });
+
+  it('greets a browser that played without points yet, from the first level', () => {
+    const pick = { championId: 'torv', skin: 0, sigils: ['riftstep', 'mend'] };
+    expect(goalWelcome({ ...fresh, royalePick: pick })?.text).toBe(
+      'Level 1 · 50 points to Level 2',
+    );
+    expect(goalWelcome({ ...fresh, royaleBest: 2 })?.level).toBe(1);
+  });
+});
+
 describe('the words', () => {
   it('names no ladder entry and no other player anywhere', () => {
     const words = [
       goalLine(300).text,
       goalPopNote(290, 300),
       nextMatchNote(goalModel(290, 10)),
+      WELCOME_BACK,
     ].join(' ');
     expect(words).not.toMatch(/ladder|rank|place/i);
   });

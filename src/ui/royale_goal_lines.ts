@@ -1,9 +1,11 @@
 // The goal across battle royales (ui/royale_goal.ts) said before the end
 // card, so the levels are in sight while they are earned: the one line on
-// the wash of a Respawn death, the note under the points' pop in play, and
-// the note on the end card's Play the next match. Pure, read off the total
-// this browser keeps (game/settings.ts royaleGoal); ui/royale_goal_line.ts
-// draws the line with its small bar.
+// the wash of a Respawn death, the note under the points' pop in play, the
+// note on the end card's Play the next match, and the greeting a browser
+// that has played before meets on the landing and on the home's battle
+// royale card. Pure, read off the total this browser keeps
+// (game/settings.ts royaleGoal); ui/royale_goal_line.ts draws the line
+// with its small bar.
 
 import { GOAL_MAX_POINTS, type GoalModel, goalShare, goalStep } from './royale_goal';
 
@@ -54,4 +56,24 @@ export function goalPopNote(before: number, after: number): string {
 // still wants. Null when the card shows no goal.
 export function nextMatchNote(goal: GoalModel | null): string | null {
   return goal ? `${pointsText(goal.left)} to Level ${goal.next}` : null;
+}
+
+// What this browser remembers of the battle royale (game/settings.ts): the
+// points, the best Respawn tally, and the quick pick, which is kept on the
+// Play that starts a first match (main.ts pickForRoyale).
+export interface GoalMemory {
+  royaleGoal: number;
+  royaleBest: number;
+  royalePick: unknown;
+}
+
+export const WELCOME_BACK = 'Welcome back';
+
+// The greeting's line, for a browser that has played a battle royale
+// before; null for one that never has, which reads the planet's own
+// words instead.
+export function goalWelcome(memory: GoalMemory): GoalLine | null {
+  const played =
+    whole(memory.royaleGoal) > 0 || whole(memory.royaleBest) > 0 || memory.royalePick != null;
+  return played ? goalLine(memory.royaleGoal) : null;
 }

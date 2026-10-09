@@ -13,6 +13,7 @@
 // The chrome it shares with the signed-in home lives in ui/page.ts.
 
 import { appNav } from '../game/nav';
+import { getSettings } from '../game/settings';
 import { type AuthedAccount, buildAuthForm } from './auth';
 import type { DiscordResult } from './discord_entry';
 import { startBackdrop } from './home_backdrop';
@@ -44,6 +45,8 @@ import { openNews } from './news_section';
 import { buildPage, ensurePageCss, mountLiveStats, navLink } from './page';
 import { planetEmblem } from './planet_emblem';
 import { buildRepoLink } from './repo_link';
+import { goalLineView } from './royale_goal_line';
+import { goalWelcome, WELCOME_BACK } from './royale_goal_lines';
 import { ROYALE_LABEL, royaleArtUrl } from './royale_modes';
 
 // Only what the landing page adds to the shared chrome: the bento, which
@@ -117,6 +120,9 @@ const CSS = `
   box-shadow: 0 0 12px rgba(232, 196, 108, 0.45); }
 .pg.land .pg-card .pg-new h2 { margin: 0; font-size: 20px; letter-spacing: 1.8px; color: #f0dca0; }
 .pg.land .pg-card .pg-new p { margin: 0; font-size: 12.5px; line-height: 1.45; color: #c9d6ea; }
+/* A returning browser's greeting in its place (ui/royale_goal_line.ts),
+   the level on a line of its own under the greeting on a narrow card. */
+.pg-new .goal-line.pg-new-back { margin-top: 2px; font-size: 13px; }
 /* What every way in shares, in small print under the gold button. */
 .pg.land .pg-card p.pg-fine { margin: 8px 0 0; font-size: 11.5px; line-height: 1.4;
   color: #8ba1c0; text-align: center; }
@@ -714,7 +720,17 @@ export function showLanding(
     // the kicker out and keep it.
     const newTitle = el('h2', '');
     newTitle.append(el('span', 'pg-new-tag', NEW_TAG), ` ${NEW_TITLE}`);
-    bannerWords.append(el('div', 'pg-new-kicker', ROYALE_LABEL), newTitle, el('p', '', NEW_LINE));
+    // A browser that has played there before reads where its goal across
+    // matches stands (ui/royale_goal_lines.ts) in place of the planet's
+    // line, which it has read: the level and the points to the next.
+    const back = goalWelcome(getSettings());
+    let bannerLine: HTMLElement = el('p', '', NEW_LINE);
+    if (back) {
+      const line = goalLineView('pg-new-back wraps', WELCOME_BACK);
+      line.draw(back);
+      bannerLine = line.root;
+    }
+    bannerWords.append(el('div', 'pg-new-kicker', ROYALE_LABEL), newTitle, bannerLine);
     banner.append(planetEmblem('respawn'), bannerWords);
     playCard.append(banner, presence, playBtn, wayList);
     // The newest news in one line (CONTEXT.md: News): a site whose last

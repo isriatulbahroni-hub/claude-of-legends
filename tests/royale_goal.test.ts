@@ -98,4 +98,22 @@ describe('the count', () => {
     expect(reads).toEqual([60]);
     expect(track.model()).toMatchObject({ earned: 15, level: 2, left: 50 });
   });
+
+  it('says the total as it stands, before the card and without another read', () => {
+    let stored = 40;
+    let reads = 0;
+    const track = new GoalTrack(
+      () => {
+        reads += 1;
+        return stored;
+      },
+      (total) => {
+        stored = total;
+      },
+    );
+    expect(track.total()).toBe(40);
+    track.earn(10);
+    expect(track.total()).toBe(50);
+    expect(reads).toBe(1);
+  });
 });

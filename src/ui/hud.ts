@@ -136,6 +136,8 @@ import {
 import { firstPointsText, pointsWord, popText } from './points_text';
 import { BURR_COLOR, burrWashLine } from './royale_burr';
 import { GoalTrack } from './royale_goal';
+import { type GoalLineView, goalLineView } from './royale_goal_line';
+import { goalLine, goalPopNote } from './royale_goal_lines';
 import { RoyaleHud, type RoyaleKill } from './royale_hud';
 import {
   ANNOUNCE_TOP_PX,
@@ -779,6 +781,11 @@ const CSS = `
   opacity: 0; white-space: nowrap;
 }
 .hud-points-pop.on { animation: hud-points-pop 1.6s ease-out forwards; }
+/* A battle royale's note under it: where the points leave the goal's bar
+   (ui/royale_goal_lines.ts). */
+.hud-points-pop small { display: block; text-align: right; font-size: 11.5px; font-weight: 700;
+  color: #f2e6c0; }
+.hud.compact .hud-points-pop small { font-size: 10.5px; }
 @keyframes hud-points-pop {
   0% { opacity: 0; transform: translateY(6px); }
   12% { opacity: 1; transform: translateY(0); }
@@ -809,6 +816,9 @@ const CSS = `
 /* A Respawn death's life line, under the subtitle (ui/royale_life.ts). */
 .hud-overlay-life { font-size: 14px; margin-top: 6px; color: #e6dcb8;
   font-variant-numeric: tabular-nums; }
+/* Where the goal across matches stands, under the life line
+   (ui/royale_goal_line.ts). */
+.hud-overlay-goal { font-size: 13.5px; margin-top: 6px; }
 /* Who carries the Burr of a Respawn death, under the life line
    (ui/royale_burr.ts): a thorn's red, the next life's target. */
 .hud-overlay-burr { font-size: 15px; font-weight: 700; margin-top: 8px; color: ${BURR_COLOR};
@@ -870,6 +880,7 @@ const CSS = `
 .hud.compact .hud-overlay-title { font-size: 26px; letter-spacing: 1px; }
 .hud.compact .hud-overlay-sub { font-size: 12.5px; margin-top: 2px; }
 .hud.compact .hud-overlay-life { font-size: 11.5px; margin-top: 3px; }
+.hud.compact .hud-overlay-goal { font-size: 11px; margin-top: 3px; }
 /* A phone: the Burr's line in two short lines, clear of the feed at the
    right, and the wash raised by their height, clear of the notices under
    it (ui/royale_layout.ts compactNotesBox). */
@@ -1400,6 +1411,9 @@ export class Hud {
   private readonly royaleLife = new RoyaleLife();
   private readonly royaleSeen = new SeenChampions();
   private readonly deathLife: HTMLElement;
+  // Respawn's wash: where the goal across matches stands
+  // (ui/royale_goal_lines.ts); null outside Respawn.
+  private readonly deathGoal: GoalLineView | null;
   // Who carries the Burr of a Respawn death (ui/royale_burr.ts).
   private readonly deathBurr: HTMLElement;
   // The Respawn wait's globe line (ui/royale_return.ts returnHint).
@@ -2018,18 +2032,17 @@ export class Hud {
     this.deathTitle = el('div', 'hud-overlay-title', 'SLAIN');
     this.deathLife = el('div', 'hud-overlay-life');
     this.deathLife.hidden = true;
+    this.deathGoal = royale === 'respawn' ? goalLineView('hud-overlay-goal') : null;
+    if (this.deathGoal) this.deathGoal.root.hidden = true;
     this.deathHint = el('div', 'hud-overlay-hint');
     this.deathHint.hidden = true;
     this.deathBurr = el('div', 'hud-overlay-burr');
     this.deathBurr.hidden = true;
-    // In reading order: who, this life, the Burr, then the globe's line.
-    this.deathOverlay.append(
-      this.deathTitle,
-      this.deathSub,
-      this.deathLife,
-      this.deathBurr,
-      this.deathHint,
-    );
+    // In reading order: who, this life, the goal, the Burr, then the
+    // globe's line.
+    this.deathOverlay.append(this.deathTitle, this.deathSub, this.deathLife);
+    if (this.deathGoal) this.deathOverlay.append(this.deathGoal.root);
+    this.deathOverlay.append(this.deathBurr, this.deathHint);
 
     this.endOverlay = el('div', 'hud-overlay modal');
     this.endTitle = el('div', 'hud-overlay-title');
@@ -2191,6 +2204,7 @@ export class Hud {
   showPoints(delta: number, total: number, reason: PointsReason): void {
     this.pointsSeen = true;
     this.pointsEarned += delta;
+    const goalBefore = this.royaleGoal?.total() ?? null;
     this.royaleGoal?.earn(delta);
     this.endLadder.setEarned(this.pointsEarned);
     this.pauseLadder.setEarned(this.pointsEarned);
@@ -2198,6 +2212,12 @@ export class Hud {
     this.pointsTotal.textContent = total.toLocaleString('en-US');
     this.pointsLabel.textContent = pointsWord(total);
     this.pointsPop.textContent = popText(delta, reason);
+    // In a battle royale, under it, where the points leave the goal's bar.
+    if (this.royaleGoal && goalBefore !== null) {
+      const note = document.createElement('small');
+      note.textContent = goalPopNote(goalBefore, this.royaleGoal.total());
+      this.pointsPop.appendChild(note);
+    }
     this.pointsPop.classList.remove('on');
     // Reading the layout flushes the removal, so the pop plays again.
     void this.pointsPop.offsetWidth;
@@ -3670,6 +3690,13 @@ export class Hud {
       const life = dead && this.royaleVariant === 'respawn' ? this.royaleLife.line(selfRow) : null;
       if (life !== null) setText(this.deathLife, life);
       if (this.deathLife.hidden !== (life === null)) this.deathLife.hidden = life === null;
+      // And where the goal across matches stands (ui/royale_goal_lines.ts),
+      // in a match that scores, as the end card shows it.
+      if (this.deathGoal) {
+        const goal = dead && this.scores() ? this.royaleGoal : null;
+        if (goal) this.deathGoal.draw(goalLine(goal.total()));
+        if (this.deathGoal.root.hidden !== !goal) this.deathGoal.root.hidden = !goal;
+      }
       const view = this.world.royaleView?.() ?? null;
       // And who carries the Burr of it: the next life's target.
       const burr = dead

@@ -62,10 +62,10 @@ describe('player settings', () => {
     }
   });
 
-  // The Respawn end card's goal (ui/royale_goal.ts): the points this
-  // browser's battle royale seats earned, a whole number, far past a
+  // The Respawn end card's goal (ui/royale_goal.ts): the points on this
+  // browser's line of the ladder as last read, a whole number, far past a
   // count's cap, junk read as nothing.
-  it('keeps the battle royale points of the goal as a whole number, 0 by default', () => {
+  it("keeps the line's points of the goal as a whole number, 0 by default", () => {
     expect(DEFAULT_SETTINGS.royaleGoal).toBe(0);
     expect(clampSettings({ royaleGoal: 1234.7 }).royaleGoal).toBe(1234);
     expect(clampSettings({ royaleGoal: 5e9 }).royaleGoal).toBe(10_000_000);

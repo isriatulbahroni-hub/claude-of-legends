@@ -1,7 +1,7 @@
-// The goal across battle royales (src/ui/royale_goal.ts): the points a
-// browser's seats earned, climbed as levels on Respawn's end card, the bar
-// from the last level reached to the next, starting partly filled, and the
-// count kept as the points come.
+// The goal across matches (src/ui/royale_goal.ts): the points on the
+// browser's line of the ladder, climbed as levels on Respawn's end card,
+// the bar from the last level reached to the next, starting partly filled,
+// and the count kept as the points come, anchored to the line's total.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -97,5 +97,84 @@ describe('the count', () => {
     expect(stored).toBe(75);
     expect(reads).toEqual([60]);
     expect(track.model()).toMatchObject({ earned: 15, level: 2, left: 50 });
+  });
+});
+
+describe('the count on the line', () => {
+  // A track whose browser read `stored` before the match, and what it wrote.
+  const tracked = (stored: number) => {
+    const writes: number[] = [];
+    const track = new GoalTrack(
+      () => stored,
+      (total) => {
+        writes.push(total);
+      },
+    );
+    return { track, writes };
+  };
+
+  it("anchors the level to the line's total as the points land", () => {
+    const { track, writes } = tracked(0);
+    track.earn(10, 310);
+    const step = goalStep(310);
+    expect(step.level).toBe(4);
+    expect(track.model()).toMatchObject({ level: step.level, earned: 10, reached: null });
+    expect(track.model().was).toBeCloseTo(goalShare(300, step));
+    expect(track.model().now).toBeCloseTo(goalShare(310, step));
+    expect(writes).toEqual([310]);
+  });
+
+  it('stays anchored as the next points come', () => {
+    const { track, writes } = tracked(0);
+    track.earn(10, 310);
+    track.earn(5, 315);
+    expect(writes).toEqual([310, 315]);
+    expect(track.model()).toMatchObject({ earned: 15, level: 4, left: 35 });
+    expect(track.total()).toBe(315);
+  });
+
+  it('follows the line when the browser read another total before', () => {
+    const { track, writes } = tracked(900);
+    track.earn(10, 40);
+    expect(writes).toEqual([40]);
+    expect(track.model()).toMatchObject({ level: 1, earned: 10, left: 10 });
+  });
+
+  it('keeps the count from the read when a message carries no total', () => {
+    const { track, writes } = tracked(60);
+    track.earn(10);
+    track.earn(5, Number.NaN);
+    expect(writes).toEqual([70, 75]);
+    expect(track.total()).toBe(75);
+    const anchored = tracked(0);
+    anchored.track.earn(10, 310);
+    anchored.track.earn(5);
+    expect(anchored.writes).toEqual([310, 315]);
+  });
+
+  it('ignores an award of nothing, total or not', () => {
+    const { track, writes } = tracked(60);
+    track.earn(0, 500);
+    track.earn(-3, 500);
+    expect(writes).toEqual([]);
+    expect(track.total()).toBe(60);
+  });
+
+  it('clamps a total below the points earned at 0', () => {
+    const { track, writes } = tracked(80);
+    track.earn(20, 5);
+    expect(track.model()).toMatchObject({ earned: 20, level: 1 });
+    expect(track.model().was).toBe(GOAL_HEAD_START);
+    expect(writes).toEqual([20]);
+    expect(track.total()).toBe(20);
+  });
+
+  it('says the total as before plus the points earned, capped', () => {
+    const { track } = tracked(30);
+    expect(track.total()).toBe(30);
+    track.earn(12);
+    expect(track.total()).toBe(42);
+    track.earn(5, GOAL_MAX_POINTS * 3);
+    expect(track.total()).toBe(GOAL_MAX_POINTS);
   });
 });

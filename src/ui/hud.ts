@@ -1401,8 +1401,10 @@ export class Hud {
   // The best Respawn tally this browser kept before this match's card,
   // read once (game/settings.ts royaleBest).
   private royaleBestBefore: number | null = null;
-  // The points this browser's battle royale seats earned before this match
-  // and since, for the end card's goal (ui/royale_goal.ts); null in a 5v5.
+  // The points on this browser's line of the ladder before this match and
+  // since, anchored to the total each points message carries, for the end
+  // card's goal (ui/royale_goal.ts); null in a 5v5, which writes the total
+  // as it comes (showPoints).
   private readonly royaleGoal: GoalTrack | null;
 
   constructor(
@@ -2183,10 +2185,14 @@ export class Hud {
   // Points banked on this player's line of the ladder (ADR 0027): the
   // total beside the K/D/A and a pop with the reason. A Guest's first
   // points say plainly, once per browser, that the match is on a ladder.
+  // The total is the line's, both modes: the goal's level anchors to it,
+  // and a 5v5 keeps it for the landing and the next battle royale's card
+  // (game/settings.ts royaleGoal).
   showPoints(delta: number, total: number, reason: PointsReason): void {
     this.pointsSeen = true;
     this.pointsEarned += delta;
-    this.royaleGoal?.earn(delta);
+    if (this.royaleGoal) this.royaleGoal.earn(delta, total);
+    else if (Number.isFinite(total)) updateSettings({ royaleGoal: total });
     this.endLadder.setEarned(this.pointsEarned);
     this.pauseLadder.setEarned(this.pointsEarned);
     this.pointsBox.classList.add('on');

@@ -55,9 +55,10 @@ export interface GameSettings {
   // since landing for a drop-in: the end card's best (ui/royale_result.ts).
   // 0 before the first. Not a choice, so the settings panel never shows it.
   royaleBest: number;
-  // The points this browser's seats earned in battle royales: Respawn's end
-  // card climbs them as levels (ui/royale_goal.ts). 0 before the first. Not
-  // a choice, so the settings panel never shows it.
+  // The points on this browser's line of the ladder as last read (the
+  // landing's own panel, every points message): the level reads it before
+  // the server has spoken in a match (ui/royale_goal.ts). 0 before the
+  // first. Not a choice, so the settings panel never shows it.
   royaleGoal: number;
 }
 

@@ -188,7 +188,7 @@ The headless host that runs a match with no browser and no server, exposing the 
 _Avoid_: gym, harness, env wrapper
 
 **Prediction**:
-Online, the client drawing its own champion where the server will have it once the orders on their way land: the newest snapshot walked forward with the sim's own path search and step, each unanswered order applied when it lands, and what a new snapshot corrects eased out over a few frames (ADR 0028). Display only: the server decides, and every rule that reads a position reads the server's.
+Online, the client drawing its own champion where the server will have it once the orders on their way land: the newest snapshot walked forward with the sim's own path search and step on the match's ground, the plane's grid or the planet's sphere (where the path the server walks is remembered from the orders it answered rather than told), each unanswered order applied when it lands, and what a new snapshot corrects eased out over a few frames (ADR 0028). Display only: the server decides, and every rule that reads a position reads the server's.
 _Avoid_: client authority, rollback, netcode
 
 **Skin**:

@@ -64,3 +64,41 @@ So the own champion is drawn where it is going (CONTEXT.md: Prediction), and not
   delay each way and pins the promises: the next frame answers the click, no frame jumps, the
   drawing is where the server's champion will be, and it ends where the server's champion ends
   through a stop, a root the client could not know, an attack and a cast with a windup.
+
+## Amended: the planet walks at the click too (2026-10-09)
+
+On the Wanderseed (ADR 0029, ADR 0031) the prediction stayed off: the own champion was drawn
+where the server said, so every move there waited a full round trip. It now walks at the click
+as on the plane, with the same predictor, and still nothing on the wire or in the sim changes.
+
+- **The ground is the planet's.** The predictor walks a `Ground` (`src/sim/ground.ts`): the
+  plane's grid with strict navigation in a 5v5, the planet's sphere in a battle royale, over the
+  grid the browser already fetched for the match (`planetWalk`, `src/game/planet_records.ts`),
+  with the sim's own path search and step along great circles. A step that ends on a launch pad
+  with the walk ending there stops the walk where the pad throws it; the throw and the flight are
+  drawn as the server tells them, and the drop too. The walls an ability raises are not on the
+  client's grid: a walk that runs into one ends as the snapshots show it.
+- **The walk is remembered, not told.** A battle royale's snapshot does not carry the path (it
+  never did, and the wire stays as it is), so the client remembers the path it searched for each
+  order the server answered (`src/net/walk_memory.ts`), wears it down as the server's champion
+  passes its waypoints, searches it again from where it stands when the server's champion leaves
+  it, and follows a chase as the sim does: searched again when the chased unit moves away from
+  where the path ends, nothing to walk in range, the rest of the path walked when the chase ends
+  out of range, an attack-move going on from there. What the sim does to a walk on its own, the
+  snapshots show and the memory follows: a windup that plants the caster, a knock-up, a move
+  farther than a walk could make (a blink, a knockback), a walk that stopped short, and an attack
+  the snapshot does not show the champion on, which did not take (the sim leaves the walk as it
+  was).
+- **What a correction looks like.** The ease now starts from where the champion was drawn before
+  the snapshot moved anything, the chased unit included, so a chase no longer hops at each
+  snapshot. A correction past 4 m is shown as a jump only when the server moved the champion
+  farther than a walk could; any other (an order the server dropped, a turn it could not know
+  over a long trip) slides out, however far. Before the first answer, every snapshot that has not
+  answered the oldest order says it lands later still, so from far away the first click walks at
+  its pace from the start and catches nothing up once answered.
+
+`tests/planet_predict.test.ts` serves a real battle royale on the real planet to a mirror world
+through a connection of 50 to 250 ms each way, ragged or not, and pins the same promises as the
+plane's: the next frame answers the click, no frame jumps, the drawing is a trip ahead of the
+server's champion, and it ends where the server's champion ends, through a stop, a knock-up, a
+blink, a chase and its end, an attack that did not take and a launch pad.

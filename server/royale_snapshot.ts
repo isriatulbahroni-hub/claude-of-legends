@@ -403,8 +403,8 @@ export function buildRoyaleSnapshot(
     projectiles,
     zones,
     walls,
-    // The planet's prediction is off (ADR 0028 walks the plane's grid):
-    // the path to walk is not sent.
+    // The path to walk is not sent: the planet's prediction remembers the
+    // walk of each order answered (ADR 0028, src/net/walk_memory.ts).
     self: selfUnit ? selfRecord(selfUnit, sim.time, viewer.seat, false) : null,
     events: royaleEvents(sim, viewer, knownBefore, events, ctx),
     winner: winnerTeam,

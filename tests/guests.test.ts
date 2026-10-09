@@ -306,6 +306,14 @@ describe('a Guest naming itself', () => {
     for (const err of ['too_short', 'charset', 'blocked', 'taken', 'unknown_guest'] as const) {
       expect(guestNameMessage(err).length).toBeGreaterThan(10);
     }
+    // A Guest exists from the first page, so one the server lost asks for
+    // a reload, not a match.
+    expect(guestNameMessage('unknown_guest')).toBe(
+      'Your Guest has expired on the server. Reload the page, then pick the name again.',
+    );
+    expect(guestNameMessage('taken')).toBe(
+      'Somebody already plays under that name. Pick another one.',
+    );
   });
 
   it('cannot take a name an account holds or once held, or another Guest holds', () => {

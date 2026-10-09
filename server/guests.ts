@@ -158,7 +158,9 @@ export function guestNameMessage(err: GuestNameError): string {
     case 'taken':
       return 'Somebody already plays under that name. Pick another one.';
     case 'unknown_guest':
-      return 'This browser has no Guest to name yet: play a match first.';
+      // A Guest is handed out as the landing opens (ADR 0033), so a browser
+      // without one has outlived it on the server.
+      return 'Your Guest has expired on the server. Reload the page, then pick the name again.';
     default:
       return nameErrorMessage(err);
   }

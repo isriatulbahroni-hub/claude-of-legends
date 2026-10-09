@@ -16,6 +16,7 @@ import { appNav } from '../game/nav';
 import { updateSettings } from '../game/settings';
 import { loadLanding, untilLanded } from '../net/landing';
 import { type AuthedAccount, type AuthFormControl, buildAuthForm } from './auth';
+import { setPortrait } from './champion_art';
 import type { DiscordResult } from './discord_entry';
 import { startBackdrop } from './home_backdrop';
 import { CONTRIBUTE_LEAD, CONTRIBUTE_TITLE, CONTRIBUTE_WAYS } from './landing_contribute';
@@ -43,7 +44,7 @@ import { el, ensureMenuCss } from './menu';
 import { allNews, countdownText, dayText, isPinned, newestOf } from './news';
 import { newsImageUrl } from './news_images';
 import { openNews } from './news_section';
-import { kept } from './own_panel';
+import { kept, weekLine } from './own_panel';
 import { mountOwnPanel } from './own_panel_view';
 import { buildPage, ensurePageCss, mountLiveStats, navLink } from './page';
 import { planetEmblem } from './planet_emblem';
@@ -145,6 +146,16 @@ const CSS = `
   letter-spacing: 1.2px; text-transform: uppercase; color: #f0dca0; line-height: 1.15; }
 .pg-way-words span { font-size: 12px; line-height: 1.4; color: #b9cbe4; }
 .pg-way-go { flex: none; font-size: 20px; line-height: 1; color: #c9a84a; }
+/* The 5v5's week under its rules: the three champions' faces, overlapping,
+   and the line naming them. */
+.pg-way-words .pg-way-week { display: flex; align-items: center; gap: 7px; min-width: 0;
+  margin: 3px 0 0; font-size: 11.5px; line-height: 1.3; color: #e6d7a8; }
+.pg-way-words .pg-way-week[hidden] { display: none; }
+.pg-way-words .pg-way-week-faces { display: flex; flex: none; font-size: 0; }
+.pg-way-week-faces img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover;
+  object-position: 50% 18%; border: 1px solid #8a7433; background: #0a1120; margin-left: -6px; }
+.pg-way-week-faces img:first-child { margin-left: 0; }
+.pg-way-words .pg-way-week-text { min-width: 0; font-size: inherit; color: inherit; }
 /* The emblem: the Wanderseed (ui/planet_emblem.ts) for the battle
    royale's two, the ranked painting for the 5v5. */
 .pg-way > .pg-way-art { flex: none; width: 46px; height: 46px; --planet: 46px; position: relative; }
@@ -255,6 +266,9 @@ const CSS = `
      line once the panel stands: the gold button keeps the first screen. */
   .pg.land .pg-card.plain > .own { min-height: 110px; }
   .pg.land.own-on .pg-new { display: none; }
+  .pg-way-words .pg-way-week-faces { display: none; }
+  .pg-way-words .pg-way-week-text { white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; }
 }
 /* Sideways on a phone the stacked hero, crest over words, took the whole
    first screen and the gold button sat under it: the crest stands beside
@@ -586,6 +600,8 @@ export function showLanding(
     };
     // One of the Play now card's ways in, a door of its own: the emblem,
     // the kind of match, the name and its rules, and the chevron.
+    const classicWeek = el('span', 'pg-way-week');
+    classicWeek.hidden = true;
     const wayRow = (way: LandingWay): HTMLButtonElement => {
       const row = el('button', `pg-way${way.door === PLAY_NOW ? ' lead' : ''}`);
       row.type = 'button';
@@ -605,6 +621,9 @@ export function showLanding(
       }
       const words = el('span', 'pg-way-words');
       words.append(el('small', '', way.kicker), el('b', '', way.title), el('span', '', way.line));
+      // The 5v5's week (ADR 0018): the three champions any player may pick
+      // there this week, a Guest too, filled from the landing's answer.
+      if (way.id === 'classic') words.appendChild(classicWeek);
       row.append(art, words, el('span', 'pg-way-go', '\u203a'));
       row.addEventListener('click', () => finish({ kind: way.door.kind, play: way.door.play }));
       return row;
@@ -832,6 +851,22 @@ export function showLanding(
     mountLandingLadder(ladder, pagePromise, () =>
       finish({ kind: PLAY_NOW.kind, play: PLAY_NOW.play }),
     );
+    void pagePromise.then((page) => {
+      const week = page?.week ?? null;
+      const said = week ? weekLine(week, Date.now()) : '';
+      if (week && said) {
+        const faces = el('span', 'pg-way-week-faces');
+        for (const id of week.rotation) {
+          const face = el('img', '');
+          face.alt = '';
+          face.decoding = 'async';
+          setPortrait(face, id, 0x6b5a2e);
+          faces.appendChild(face);
+        }
+        classicWeek.replaceChildren(faces, el('span', 'pg-way-week-text', said));
+        classicWeek.hidden = false;
+      }
+    });
     void pagePromise.then((page) => {
       const own = page?.own ?? null;
       if (!own || !ownHost.isConnected) {

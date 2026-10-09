@@ -6,10 +6,12 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import type { LandingOwn } from '../src/net/landing';
 import { PLAY_TILES, tileArtUrl } from '../src/ui/home_tiles';
 import { JOIN_CALL, LADDER_HEADING, ladderLead } from '../src/ui/landing_ladder';
 import {
   ACCOUNT_LINE,
+  accountCardWords,
   CLASSIC_ART,
   HERO_RANKED_LINE,
   LANDING_MODES,
@@ -186,5 +188,43 @@ describe('what the landing says at once (ADR 0027)', () => {
     for (const mode of ['ranked', 'bots', 'forge']) {
       expect(ACCOUNT_LINE.toLowerCase()).toContain(mode);
     }
+  });
+});
+
+describe('the account card, by who reads it (ADR 0033)', () => {
+  const fresh: LandingOwn = {
+    name: 'Wanderer 0421',
+    named: false,
+    account: false,
+    rank: null,
+    points: 0,
+    level: { level: 1, from: 0, to: 50 },
+    best: 0,
+    above: null,
+    since: Date.UTC(2026, 9, 6),
+  };
+
+  it('makes the plain offer with no answer, and to a Guest holding nothing yet', () => {
+    const plain = { title: 'Create a free account', line: ACCOUNT_LINE };
+    expect(accountCardWords(null)).toEqual(plain);
+    expect(accountCardWords(fresh)).toEqual(plain);
+    expect(ACCOUNT_LINE).toBe(
+      'It keeps your points on every device, and opens ranked, bots and the Forge.',
+    );
+  });
+
+  it('offers to keep what a Guest holds once it holds something', () => {
+    const keep = {
+      title: 'Keep it on every device',
+      line:
+        'A free account carries your points, your level and your best to every device behind ' +
+        'a password, and opens ranked, bots and the Forge.',
+    };
+    expect(accountCardWords({ ...fresh, rank: 31, points: 85 })).toEqual(keep);
+    expect(accountCardWords({ ...fresh, name: 'Thornwick', named: true })).toEqual(keep);
+  });
+
+  it('offers nothing to an account', () => {
+    expect(accountCardWords({ ...fresh, name: 'Marrow', named: true, account: true })).toBeNull();
   });
 });

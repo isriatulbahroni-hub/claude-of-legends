@@ -15,14 +15,14 @@
 import { appNav } from '../game/nav';
 import { updateSettings } from '../game/settings';
 import { loadLanding, untilLanded } from '../net/landing';
-import { type AuthedAccount, buildAuthForm } from './auth';
+import { type AuthedAccount, type AuthFormControl, buildAuthForm } from './auth';
 import type { DiscordResult } from './discord_entry';
 import { startBackdrop } from './home_backdrop';
 import { CONTRIBUTE_LEAD, CONTRIBUTE_TITLE, CONTRIBUTE_WAYS } from './landing_contribute';
 import { mountEmbers } from './landing_embers';
 import { markOwnRow, mountLandingLadder } from './landing_ladder';
 import {
-  ACCOUNT_LINE,
+  accountCardWords,
   CLASSIC_ART,
   HERO_RANKED_LINE,
   LANDING_MODES,
@@ -71,6 +71,8 @@ const CSS = `
   grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); }
 .pg.land .pg-cards > .pg-card.plain { order: -2; }
 .pg.land .pg-cards > .pg-card.gold { grid-column: 1 / -1; }
+/* An account reading the landing has no card to be offered. */
+.pg.land .pg-cards > .pg-card.gold[hidden] { display: none; }
 /* What the account opens, inside the card that opens it: the same three
    paintings the home stands at full height, in the same order, so the
    door and the room behind it look alike. Upright and edge to edge, with
@@ -681,7 +683,19 @@ export function showLanding(
     // account opens, and nothing explains what a bot or a forge is. The
     // paintings do that, and the page is not a manual.
     const online = el('section', 'pg-card gold');
-    online.append(el('h2', '', 'Create a free account'), el('p', '', ACCOUNT_LINE));
+    // Its words follow who reads it (ui/landing_modes.ts accountCardWords):
+    // the plain offer until the answer comes, the account as keeping what
+    // a Guest holds once it holds something, and no card for an account.
+    const onlineTitle = el('h2', '');
+    const onlineLine = el('p', '');
+    const sayAccount = (words: ReturnType<typeof accountCardWords>): void => {
+      online.hidden = words === null;
+      if (!words) return;
+      onlineTitle.textContent = words.title;
+      onlineLine.textContent = words.line;
+    };
+    sayAccount(accountCardWords(null));
+    online.append(onlineTitle, onlineLine);
     // The three the home stands at full height, wearing the paintings the
     // home gives them, standing beside the form rather than under it:
     // what an account opens, next to the thing that opens it.
@@ -700,11 +714,15 @@ export function showLanding(
       opens.appendChild(item);
     }
     const formPanel = el('div', 'pg-opens-form');
+    // Filled by the form: the own panel's Keep it on every device opens its
+    // register tab with the Guest's name in it.
+    const authControl: AuthFormControl = { register: () => {} };
     formPanel.appendChild(
       buildAuthForm(
         (account) => finish({ kind: 'account', account }),
         discordResult,
         intent === 'register' ? 'register' : 'login',
+        authControl,
       ),
     );
     const openRow = el('div', 'pg-open-row');
@@ -823,9 +841,18 @@ export function showLanding(
       // The browser's copy of the line's total, which the end card's level
       // climbs from (ui/royale_goal.ts).
       updateSettings({ royaleGoal: own.points });
-      mountOwnPanel(ownHost, own, {
-        onKeep: () => online.scrollIntoView({ block: 'start', behavior: 'smooth' }),
-        onRenamed: (name) => markOwnRow(ladder, name),
+      sayAccount(accountCardWords(own));
+      const panel = mountOwnPanel(ownHost, own, {
+        // Offered, never demanded: the account card, on its register tab,
+        // with the name the Guest stands under.
+        onKeep: (name) => {
+          online.scrollIntoView({ block: 'start', behavior: 'smooth' });
+          authControl.register(name);
+        },
+        onRenamed: (name) => {
+          markOwnRow(ladder, name);
+          sayAccount(accountCardWords(panel.own()));
+        },
         // The session is there: the boot finds it and opens the home.
         onHome: () => window.location.reload(),
       });

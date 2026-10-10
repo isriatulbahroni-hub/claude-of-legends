@@ -66,7 +66,7 @@ const CSS = `
   outline: none; }
 .own-change[hidden], .own-line[hidden], .own-edit[hidden], .own-keep[hidden] { display: none; }
 .own-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 0; }
-.pg .own-edit .menu-input.own-field { flex: 1 1 150px; width: auto; min-width: 0; margin: 0;
+.pg .own-edit .menu-input.own-field { flex: 1 1 96px; width: auto; min-width: 0; margin: 0;
   height: 36px; padding: 0 10px; font-size: 16px; border-color: #8a7433; }
 .pg .own-edit .menu-input.own-field:focus { border-color: #e8c46c; }
 .pg.land .pg-card .own-edit .menu-btn.own-save { flex: none; width: auto; margin: 0;
@@ -79,6 +79,9 @@ const CSS = `
   color: #8ba1c0; }
 .pg.land .own p.own-sub { margin: 2px 0 0; font-size: 12px; line-height: 1.4; color: #9db2cf;
   min-width: 0; }
+/* The sub line steps aside while the name is edited, so a refusal reads
+   right under the field; specific enough to beat the sideways flex. */
+.pg.land .own p.own-sub[hidden] { display: none; }
 .own-keep { margin: 0; padding: 0; border: 0; background: none; font: inherit;
   font-weight: 700; color: #e8c46c; text-decoration: underline; cursor: pointer;
   white-space: nowrap; }
@@ -288,6 +291,7 @@ export function mountOwnPanel(host: HTMLElement, first: LandingOwn, opts: OwnPan
     say('', '');
     field.value = editValue(own);
     line.hidden = true;
+    sub.hidden = true;
     form.hidden = false;
     field.focus();
     field.select();
@@ -296,6 +300,7 @@ export function mountOwnPanel(host: HTMLElement, first: LandingOwn, opts: OwnPan
   const close = (): void => {
     form.hidden = true;
     line.hidden = false;
+    sub.hidden = false;
   };
 
   let busy = false;

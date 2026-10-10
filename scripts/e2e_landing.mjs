@@ -498,6 +498,28 @@ async function fixtureRun(browser, size) {
     kept.open && kept.focused && fixture.renames.length === 1,
     `${size.id}: 'Quillon' is refused in the server's words, the form kept`,
   );
+  // The refusal reads right under the field: the sub line steps aside while
+  // the form is open, and the field, Save and Cancel share one row.
+  const edit = await page.evaluate(() => {
+    const box = (sel) => document.querySelector(sel).getBoundingClientRect();
+    const field = box('.own-field');
+    return {
+      subShown: getComputedStyle(document.querySelector('.own-sub')).display !== 'none',
+      gap: box('.own-status').top - field.bottom,
+      saveRow: Math.abs(
+        box('.own-save').top + box('.own-save').height / 2 - field.top - field.height / 2,
+      ),
+      cancelRow: Math.abs(
+        box('.own-cancel').top + box('.own-cancel').height / 2 - field.top - field.height / 2,
+      ),
+    };
+  });
+  check(!edit.subShown, `${size.id}: the sub line steps aside while the name is edited`);
+  check(
+    edit.saveRow < 4 && edit.cancelRow < 4,
+    `${size.id}: field, Save and Cancel share a row (${edit.saveRow}, ${edit.cancelRow})`,
+  );
+  check(edit.gap <= 40, `${size.id}: the refusal is ${edit.gap.toFixed(1)} px under the field`);
   await shot(page, `own-${size.id}-refused`);
   await selectAndType(page, 'Thornwick2');
   await waitFor(

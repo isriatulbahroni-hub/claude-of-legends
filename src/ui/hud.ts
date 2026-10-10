@@ -133,6 +133,7 @@ import {
   objectiveLine,
   wrathChipText,
 } from './objective_line';
+import { fillPauseMenu } from './pause_menu';
 import { firstPointsText, pointsWord, popText } from './points_text';
 import { BURR_COLOR, burrWashLine } from './royale_burr';
 import { GoalTrack } from './royale_goal';
@@ -855,9 +856,10 @@ const CSS = `
    scoreboard, two buttons and the feedback box. It never fitted; adding
    the box made it obvious, with the field and its button hanging off the
    bottom edge where no finger could reach them. So on a touchscreen the
-   two modal overlays start at the top and scroll, everything in them
-   comes down a size, and the touch bar on the edge stands down while one
-   is up, the way it does for the shop. */
+   end screen starts at the top and scrolls, everything in it comes down a
+   size, and the touch bar on the edge stands down while a modal overlay
+   is up, the way it does for the shop. The pause menu lays its boxes over
+   the screen instead (ui/pause_menu.ts) and sets its own rules over these. */
 .hud.compact .hud-overlay.modal {
   justify-content: flex-start; overflow-y: auto; pointer-events: auto;
   padding: 8px 10px 14px; gap: 2px;
@@ -2090,24 +2092,18 @@ export class Hud {
     );
 
     this.escapeOverlay = el('div', 'hud-overlay modal');
-    const resume = el('button', 'hud-menu-btn', 'Resume (Esc)');
-    resume.addEventListener('click', () => this.toggleEscapeMenu());
-    const fullscreenBtn = el('button', 'hud-menu-btn', 'Toggle fullscreen');
-    fullscreenBtn.addEventListener('click', () => toggleGameFullscreen());
-    const quit = el('button', 'hud-menu-btn', 'Leave match');
-    quit.addEventListener('click', () => onExit('menu'));
     // And in the pause menu, which is the other door out: whoever is
     // about to press Leave match is the one with something to say.
     this.pauseFeedback = this.buildFeedback('pause');
-    this.escapeOverlay.append(
-      el('div', 'hud-overlay-title', 'Paused view'),
-      resume,
-      this.pauseLadder.root,
-      buildSettingsPanel(),
-      fullscreenBtn,
-      this.pauseFeedback.root,
-      quit,
-    );
+    // Its boxes laid over the screen (ui/pause_menu.ts).
+    fillPauseMenu(this.escapeOverlay, {
+      settings: buildSettingsPanel(),
+      ladder: this.pauseLadder.root,
+      feedback: this.pauseFeedback.root,
+      onResume: () => this.toggleEscapeMenu(),
+      onFullscreen: () => toggleGameFullscreen(),
+      onLeave: () => onExit('menu'),
+    });
 
     // The turn wall: the ask, where an iPhone keeps its rotation lock, and
     // the pause menu's own way out, for a phone that will not turn.
@@ -2383,6 +2379,9 @@ export class Hud {
         this.endOverlay.classList.contains('open') ||
         this.royale?.resultShown() === true,
     );
+    // The pause menu alone: what the HUD draws stands down behind it
+    // (ui/pause_menu.ts), so only the dimmed match shows between its boxes.
+    this.rootEl.classList.toggle('paused', this.escapeOverlay.classList.contains('open'));
   }
 
   // Something covers the HUD: the shop, the pause menu, the end screen or

@@ -125,7 +125,7 @@ describe('the Guest cookie', () => {
   it('is named on the page with its life, and with what the server keeps of a Guest', () => {
     const page = read('PRIVACY.md');
     expect(page).toContain(`\`${GUEST_COOKIE}\``);
-    expect(page).toContain('lasts\na year');
+    expect(page.replace(/\s+/g, ' ')).toContain('lasts a year');
     expect(page).toContain('`guests.json`');
     expect(page).toContain('SHA-256');
     // The page's year is the code's, for the cookie and for the record.

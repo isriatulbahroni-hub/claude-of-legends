@@ -808,7 +808,8 @@ export class ClientWorld implements IWorld {
           a: w.y1 !== undefined ? { x: w.x1, y: w.y1, z: w.z1 } : { x: w.x1, z: w.z1 },
           b: w.y2 !== undefined ? { x: w.x2, y: w.y2, z: w.z2 } : { x: w.x2, z: w.z2 },
           until: w.u,
-          // The mirror never blocks or unblocks: pathing is server truth.
+          // The mirror's record blocks nothing: pathing is server truth, and
+          // the prediction blocks its own grid (standWalls, below).
           samples: [],
         });
       }
@@ -816,9 +817,9 @@ export class ClientWorld implements IWorld {
     for (const id of [...this.walls.keys()]) {
       if (!seenW.has(id)) this.walls.delete(id);
     }
-    // The planet's prediction walks round the walls standing, as its sim
-    // does (src/net/self_predict.ts).
-    if (this.predictsOnSphere) this.predictor?.standWalls(this.walls.values());
+    // The prediction walks round the walls standing, as the sim does, on
+    // the plane's grid as on the planet's (src/net/self_predict.ts).
+    if (this.predicting) this.predictor?.standWalls(this.walls.values());
 
     if (msg.royale) this.applyRoyale(msg.royale);
     if (this.royaleMatch) this.applyWatch(msg.royale?.wa, new Set(msg.units.map((s) => s.i)));

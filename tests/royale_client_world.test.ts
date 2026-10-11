@@ -1,7 +1,9 @@
 // The online mirror in a battle royale (src/net/client_world.ts, ADR 0031):
 // positions with y, the mode's block and the last caches list, the drop
 // pick and the orders carrying y up the wire, who holds each seat, a new
-// match starting the mirror over, and the prediction off on the planet.
+// match starting the mirror over, and the prediction on the planet only
+// when the host hands in the planet's ground (tests/planet_predict.test.ts
+// walks it).
 // End to end on the fake sim too: the service's snapshots read back whole.
 
 import { describe, expect, it } from 'vitest';
@@ -9,6 +11,7 @@ import { RoyaleMatch } from '../server/royale_match';
 import { starOrchard } from '../server/star_orchard';
 import { ClientWorld } from '../src/net/client_world';
 import type { ClientMsg, ServerMsg } from '../src/net/protocol';
+import { OpenSphereGround } from '../src/sim/ground';
 import { TerrainNavGrid } from '../src/sim/terrain_nav';
 import { fakeFactory, near } from './royale_fake';
 
@@ -112,7 +115,7 @@ describe('the mirror on the planet', () => {
     expect(world.royaleView()?.caches).toHaveLength(1);
   });
 
-  it('sends the drop pick and the orders with y, and no prediction numbers', () => {
+  it("sends the drop pick and the orders with y, and no prediction numbers without the planet's ground", () => {
     const { world, sent } = mirror();
     world.pickDrop(1, { x: 0, y: 80, z: 0 });
     world.orderMove(1, 1, 2, 79);
@@ -217,6 +220,51 @@ describe('the mirror on the planet', () => {
     expect(world.royaleView()).toBeNull();
     expect(world.seat(1)).toBeNull();
     expect(world.selfUnitId).toBe(4);
+  });
+
+  it("numbers the orders for the prediction on the planet's ground, never a recall", () => {
+    const sent: ClientMsg[] = [];
+    const planet = { ground: new OpenSphereGround(80), pads: [] };
+    const world = new ClientWorld(
+      (m) => sent.push(m),
+      starOrchard().map,
+      planet,
+      () => 0,
+    );
+    world.applyServer({
+      t: 'match_start',
+      selfUnitId: 1,
+      team: 0,
+      royale: { v: 'respawn', seats: 50 },
+    });
+    world.orderMove(1, 1, 2, 79);
+    world.orderAttackMove(1, 1, 2, 79);
+    world.castAbility(1, 'Q', { x: 1, y: 79, z: 2 });
+    world.orderStop(1);
+    // A battle royale has no recall: nothing would answer its number.
+    world.startRecall(1);
+    world.castSigil(1, 0, { x: 1, y: 79, z: 2 });
+    expect(sent).toEqual<ClientMsg[]>([
+      { t: 'move', x: 1, y: 79, z: 2, n: 1 },
+      { t: 'attack_move', x: 1, y: 79, z: 2, n: 2 },
+      { t: 'cast', key: 'Q', x: 1, y: 79, z: 2, n: 3 },
+      { t: 'stop', n: 4 },
+      { t: 'recall' },
+      { t: 'sigil', slot: 0, x: 1, y: 79, z: 2 },
+    ]);
+    // The planet's ground walks no plane: a 5v5 on this mirror predicts
+    // nothing.
+    const plane: ClientMsg[] = [];
+    const other = new ClientWorld(
+      (m) => plane.push(m),
+      starOrchard().map,
+      planet,
+      () => 0,
+    );
+    other.applyServer({ t: 'match_start', selfUnitId: 1, team: 0 });
+    other.orderMove(1, 1, 2);
+    expect(plane).toEqual([{ t: 'move', x: 1, z: 2 }]);
+    expect(other.predictedPos(1, 0)).toBeNull();
   });
 
   it('keeps the prediction on the plane', () => {

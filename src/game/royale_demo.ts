@@ -78,6 +78,8 @@ function result(v: RoyaleVariant, place: number, score: number): RoyaleResult {
       bot: i + 1 !== place && i % 2 === 0,
     })),
     grafts: ['thornhide', 'keen_edge', 'keen_edge', 'chainsap'],
+    // Respawn: the best the line kept before, for the card's best line.
+    ...(v === 'respawn' ? { bestBefore: 12 } : {}),
   };
 }
 
@@ -242,10 +244,12 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
   } else if (scene === 'end-respawn') {
     window.setTimeout(() => {
       // What the seat banked, for the goal across matches on the card
-      // (ui/royale_goal.ts): nine takedowns, four assists, three caches.
-      for (let i = 0; i < 9; i++) pres.showPoints(10, 10 * (i + 1), 'kill');
-      for (let i = 0; i < 4; i++) pres.showPoints(5, 90 + 5 * (i + 1), 'assist');
-      for (let i = 0; i < 3; i++) pres.showPoints(1, 110 + i + 1, 'cache');
+      // (ui/royale_goal.ts): nine takedowns, four assists, three caches,
+      // on a line that held 227 points before (340 after, Level 4).
+      const line = 227;
+      for (let i = 0; i < 9; i++) pres.showPoints(10, line + 10 * (i + 1), 'kill');
+      for (let i = 0; i < 4; i++) pres.showPoints(5, line + 90 + 5 * (i + 1), 'assist');
+      for (let i = 0; i < 3; i++) pres.showPoints(1, line + 110 + i + 1, 'cache');
       pres.showRoyaleResult(result('respawn', 3, 9));
     }, 600);
   }

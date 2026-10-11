@@ -31,6 +31,33 @@ describe('account offer', () => {
     expect(offer?.reason).not.toContain('not saved');
   });
 
+  // ADR 0033: the same keep wording as the landing's own panel.
+  it('names what the account carries when the match scored', () => {
+    expect(accountOffer({ ...base, scored: true })?.reason).toBe(
+      'Your points, your level and your best are saved for this browser. A free account ' +
+        'carries them to every device behind a password, and opens ranked, bots and the Forge.',
+    );
+  });
+
+  it('says the practice match was not saved, as before', () => {
+    expect(accountOffer(base)?.reason).toBe(
+      'This match was not saved. Online, every match scores on the ladder, and a free ' +
+        'account keeps your points on every device.',
+    );
+  });
+
+  it('writes no long dash', () => {
+    for (const scored of [false, true]) {
+      for (const won of [false, true]) {
+        const offer = accountOffer({ ...base, scored, won });
+        const words = `${offer?.line} ${offer?.reason} ${offer?.call}`;
+        for (let i = 0; i < words.length; i++) {
+          expect([8211, 8212]).not.toContain(words.charCodeAt(i));
+        }
+      }
+    }
+  });
+
   it('says so when they won', () => {
     expect(accountOffer({ ...base, won: true })?.line).toBe('You won 7 / 2 / 5 with Sylra.');
   });

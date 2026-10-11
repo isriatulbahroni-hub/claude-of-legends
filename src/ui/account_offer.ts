@@ -1,15 +1,14 @@
 // The account offer: the line at the end of a visitor's match that asks
 // for the account, once the match has given them a reason.
 //
-// The landing asks for an account before anything has happened, and a
-// visitor takes the free door instead. The end screen is the one moment
-// they hold something the account would keep: a score, a champion, a win,
-// and since ADR 0027 the points the match banked on the ladder. A Guest's
-// points are kept already, by this browser; what the account adds is
-// keeping them on every device, and ranked, bots and the Forge. So the
-// offer is made there, in their own numbers, and only there. The decision
-// and the words are pure so a test reads them without a browser; ui/hud.ts
-// draws the block.
+// The end screen is a moment the visitor holds something the account
+// would keep: a score, a champion, a win, and since ADR 0027 the points the
+// match banked on the ladder, with the level they climb and Respawn's best
+// (ADR 0033). A Guest's are kept already, for this browser; what the
+// account adds is carrying them to every device, and ranked, bots and the
+// Forge. So the offer is made there in their own numbers, in the same keep
+// words as the landing's own panel. The decision and the words are pure so
+// a test reads them without a browser; ui/hud.ts draws the block.
 
 export interface AccountOfferInput {
   // No account behind the match: a Guest in the public queue, or the
@@ -52,8 +51,8 @@ export function accountOffer(input: AccountOfferInput): AccountOffer | null {
   return {
     line,
     reason: input.scored
-      ? 'Your points are on the ladder, kept by this browser. A free account keeps them on ' +
-        'every device, and opens ranked, bots and the Forge.'
+      ? 'Your points, your level and your best are saved for this browser. A free account ' +
+        'carries them to every device behind a password, and opens ranked, bots and the Forge.'
       : 'This match was not saved. Online, every match scores on the ladder, and a free ' +
         'account keeps your points on every device.',
     call: OFFER_CALL,

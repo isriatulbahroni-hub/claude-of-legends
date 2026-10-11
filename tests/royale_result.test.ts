@@ -5,7 +5,13 @@
 import { describe, expect, it } from 'vitest';
 import type { RoyaleResult } from '../src/net/royale_wire';
 import { goalModel } from '../src/ui/royale_goal';
-import { ONE_LIFE_TOP, RESPAWN_TOP, royaleEnd, royaleSting } from '../src/ui/royale_result';
+import {
+  cardBest,
+  ONE_LIFE_TOP,
+  RESPAWN_TOP,
+  royaleEnd,
+  royaleSting,
+} from '../src/ui/royale_result';
 
 const top = (n: number) =>
   Array.from({ length: n }, (_, i) => ({
@@ -242,5 +248,39 @@ describe('the goal across matches on the end card', () => {
   it('names no ladder entry and no other player', () => {
     const words = `${goal.title} ${goal.line}`;
     expect(words).not.toMatch(/ladder|rank|place|Kestrel/i);
+  });
+});
+
+describe("the best on Respawn's card", () => {
+  const respawn = (over: Partial<RoyaleResult> = {}) =>
+    result({ v: 'respawn', place: 4, score: 5, ...over });
+
+  it("is the line's best the server sent, over the browser's", () => {
+    expect(cardBest(respawn({ bestBefore: 7 }), 3)).toBe(7);
+    expect(cardBest(respawn({ bestBefore: 0 }), 3)).toBe(0);
+    expect(cardBest(respawn({ bestBefore: 2 }), 9)).toBe(2);
+  });
+
+  it("is the browser's when the server sent none or junk", () => {
+    expect(cardBest(respawn(), 3)).toBe(3);
+    expect(cardBest(respawn({ bestBefore: -1 }), 3)).toBe(3);
+    expect(cardBest(respawn({ bestBefore: Number.NaN }), 3)).toBe(3);
+    expect(cardBest(respawn({ bestBefore: Number.POSITIVE_INFINITY }), 3)).toBe(3);
+    expect(cardBest(respawn({ bestBefore: '7' as unknown as number }), 3)).toBe(3);
+  });
+
+  it('is a whole number', () => {
+    expect(cardBest(respawn({ bestBefore: 6.6 }), 3)).toBe(7);
+    expect(cardBest(respawn(), 4.2)).toBe(4);
+    expect(cardBest(respawn(), Number.NaN)).toBe(0);
+  });
+
+  it('says a new best or the best standing above, off the server', () => {
+    const lines = (bestBefore: number) => {
+      const r = respawn({ bestBefore });
+      return royaleEnd(r, { assists: 0, best: cardBest(r, 0) }).lines;
+    };
+    expect(lines(3)).toContain('A new best: 5 takedowns');
+    expect(lines(9)).toContain('Your best: 9 takedowns');
   });
 });

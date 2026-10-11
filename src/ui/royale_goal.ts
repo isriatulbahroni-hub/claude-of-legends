@@ -1,11 +1,15 @@
-// A goal across battle royales, on Respawn's end card: the points this
-// browser's seats have earned on the Wanderseed, climbed as levels, the bar
-// running from the last level reached to the next. Kept per browser
-// (game/settings.ts royaleGoal), so it names nobody: not a ladder entry,
-// not another player. Pure; ui/royale_goal_bar.ts draws it and ui/hud.ts
+// A goal across matches, on Respawn's end card: the points on this
+// browser's line of the ladder (ADR 0033), the 5v5's and the battle
+// royale's alike, climbed as levels, the bar running from the last level
+// reached to the next. The total is the line's: every points message
+// carries it and the count anchors to it, and the browser keeps the last
+// one read (game/settings.ts royaleGoal) as the cache a match reads before
+// its first points message. The card names nobody: not a ladder entry, not
+// another player. Pure; ui/royale_goal_bar.ts draws it and ui/hud.ts
 // counts the points as they come.
 //
-// The points are the ones a seat banks (server/royale_points.ts): a
+// The 5v5's points bank on the same line (server/points.ts). The battle
+// royale's are the ones a seat banks (server/royale_points.ts): a
 // champion taken down 10, an assist 5, a camp's last hit or a cache opened
 // 1, a big creature 15, Respawn's best score 50 at the end, each doubled
 // while another person plays the match. A few minutes' play earns a
@@ -91,24 +95,42 @@ export function goalModel(before: number, earned: number): GoalModel {
   };
 }
 
-// A match's count: the total kept before it, read once when it begins,
-// and the points its seat banks, written as they come so a tab closed
-// mid-match keeps them.
+// A total as the goal reads it: whole, 0 to the cap, junk as 0.
+function clampPoints(v: number): number {
+  return Number.isFinite(v) ? Math.max(0, Math.min(GOAL_MAX_POINTS, Math.floor(v))) : 0;
+}
+
+// A match's count: the total before it, and the points its seat banks,
+// written as they come so a tab closed mid-match keeps them. The total
+// before is the browser's cache, read once when the match begins, until a
+// points message carries the line's total: from then on it is that total
+// less this match's points, anchored again on every message, so the bar
+// is the line's whatever this browser last read.
 export class GoalTrack {
-  private readonly before: number;
+  private before: number;
   private earned = 0;
 
   constructor(
     read: () => number,
     private readonly write: (total: number) => void,
   ) {
-    this.before = Math.max(0, Math.min(GOAL_MAX_POINTS, Math.floor(read())));
+    this.before = clampPoints(read());
   }
 
-  earn(delta: number): void {
+  // One award: its points, and the line's total after it when the message
+  // carries one. An award of nothing changes nothing.
+  earn(delta: number, total?: number): void {
     if (!(delta > 0)) return;
     this.earned += Math.round(delta);
-    this.write(Math.min(GOAL_MAX_POINTS, this.before + this.earned));
+    if (typeof total === 'number' && Number.isFinite(total)) {
+      this.before = clampPoints(total - this.earned);
+    }
+    this.write(this.total());
+  }
+
+  // The total as it stands, this match's points in it.
+  total(): number {
+    return clampPoints(this.before + this.earned);
   }
 
   model(): GoalModel {

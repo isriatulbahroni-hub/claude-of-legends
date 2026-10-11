@@ -33,6 +33,7 @@ import {
   onScreen,
 } from '../ui/lane_guide';
 import { Minimap } from '../ui/minimap';
+import type { SeatLine } from '../ui/seat_lines';
 import { slotTap } from '../ui/slot_tap';
 import { buildThumbStickView } from '../ui/thumb_stick_view';
 import { buildTouchBar, drinkButton } from '../ui/touch_bar';
@@ -105,6 +106,9 @@ export interface Presentation {
   // Call once after every world tick (sim tick offline, snapshot online).
   onWorldTick(notes?: WorldNotes): void;
   pushChat(from: string, team: TeamId, text: string): void;
+  // A seat changing hands while the match plays (ui/seat_lines.ts): a line
+  // of the kill feed.
+  pushSeatLine(line: SeatLine): void;
   showPing(x: number, z: number, from: string, team: TeamId): void;
   setNetHooks(hooks: NetHooks): void;
   // The server's rating verdict for this player, shown on the end screen;
@@ -856,6 +860,7 @@ export function startPresentation(
   return {
     onWorldTick,
     pushChat: (from, team, text) => hud.pushChat(from, team, text),
+    pushSeatLine: (line) => hud.pushSeatLine(line),
     showPing,
     setNetHooks: (h) => {
       hooks = h;

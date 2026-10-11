@@ -1,13 +1,14 @@
 // The seatless presentation for watching a live match: renderer plus
 // minimap on one team's fog, a SPECTATOR bar (follow the next champion,
-// exit), no HUD and no order input. Reads IWorld only, like everything
-// presentational.
+// exit), the seats changing hands at the top left, no HUD and no order
+// input. Reads IWorld only, like everything presentational.
 
 import { Renderer } from '../render/renderer';
 import type { RenderTerrain } from '../render/terrain';
 import type { TeamId } from '../sim/types';
 import { DT } from '../sim/types';
 import { Minimap } from '../ui/minimap';
+import { SEAT_LINE_MS, type SeatLine } from '../ui/seat_lines';
 import type { IWorld } from '../world_api';
 import type { WorldNotes } from './boot';
 import { startMusic, stopMusic } from './music';
@@ -27,7 +28,19 @@ const CSS = `
   background: #1d2a14; color: #d8e6c0; font-size: 12px; font-weight: 600; cursor: pointer;
 }
 .spec-btn:hover { border-color: #7ca050; }
+.spec-feed {
+  position: absolute; top: 12px; left: 12px; display: flex; flex-direction: column; gap: 4px;
+  font: 12px system-ui, sans-serif; color: #d8e6c0; text-shadow: 0 1px 2px #000;
+  pointer-events: none; z-index: 11;
+}
+.spec-feed-entry {
+  background: rgba(14, 20, 9, 0.8); border: 1px solid #3a4f28; border-radius: 4px;
+  padding: 3px 8px;
+}
 `;
+
+// The two sides' name colors, the HUD's (ui/hud.ts TEAM_TEXT_COLORS).
+const SIDE_COLORS = ['#9dbcf5', '#f5a3a3'];
 
 let cssInstalled = false;
 function ensureCss(): void {
@@ -40,6 +53,8 @@ function ensureCss(): void {
 
 export interface SpectatorView {
   onWorldTick(notes?: WorldNotes): void;
+  // A seat changing hands (ui/seat_lines.ts): a line at the top left.
+  pushSeatLine(line: SeatLine): void;
   dispose(): void;
 }
 
@@ -94,6 +109,9 @@ export function startSpectator(
   exit.addEventListener('click', onExit);
   bar.append(badge, follow, exit);
   container.appendChild(bar);
+  const feed = document.createElement('div');
+  feed.className = 'spec-feed';
+  container.appendChild(feed);
 
   const onKeyDown = (e: KeyboardEvent): void => {
     if (e.key === 'Escape') onExit();
@@ -127,12 +145,24 @@ export function startSpectator(
       }
       if (world.winner !== null) stopMusic();
     },
+    pushSeatLine(line: SeatLine): void {
+      if (disposed) return;
+      const entry = document.createElement('div');
+      entry.className = 'spec-feed-entry';
+      const who = document.createElement('span');
+      who.textContent = line.name;
+      who.style.color = SIDE_COLORS[line.team] ?? '#c9d8ae';
+      entry.append(who, ` ${line.words}`);
+      feed.appendChild(entry);
+      window.setTimeout(() => entry.remove(), SEAT_LINE_MS);
+    },
     dispose(): void {
       if (disposed) return;
       disposed = true;
       cancelAnimationFrame(rafId);
       window.removeEventListener('keydown', onKeyDown);
       bar.remove();
+      feed.remove();
       minimap.dispose();
       renderer.dispose();
       stopMusic();

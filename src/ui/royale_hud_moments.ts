@@ -39,6 +39,7 @@ import { huntedCalls, huntedTargets, RisingWatch, risenCalls } from './royale_hu
 import {
   COMPACT_DONE_MAX_W_PX,
   COMPACT_NOTE_MAX_W_PX,
+  SEAT_WORDS_EM,
   SPOT_FADE_MS,
   spotCoverMs,
   THUMBS_NOTES_BOTTOM_PX,
@@ -75,6 +76,7 @@ import {
   wirePoint,
 } from './royale_moments';
 import { BUILD_COMPLETE, buildComplete, lootNotice, openingFraction } from './royale_text';
+import { type SeatLine, seatLineText } from './seat_lines';
 
 // How long a spotlight stays up, milliseconds (the feed's lines and its
 // fold keep ui/royale_moments.ts feedLife).
@@ -100,6 +102,16 @@ const CSS = `
    the mark's own color, cut short like a name rather than wrapped. */
 .br-feed-line.news { font-weight: 700; }
 .br-feed-line.news span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* A seat changing hands (ui/seat_lines.ts): the person's name, then what
+   happened (ui/royale_layout.ts seatLineWidth); past the line's room the
+   name is cut short, never the words. */
+.br-feed-line.seat .br-who > span:first-child { max-width: none; color: #f6ecd0; }
+.br-feed-line.seat .seat-words { flex: none; font-size: ${SEAT_WORDS_EM}em; }
+.hud.compact .br-feed-line.seat .seat-words { font-size: 1em; }
+.br-feed-line.seat.joined, .br-feed-line.seat.back { border-color: #5a8a3a; }
+.br-feed-line.seat.joined .seat-words, .br-feed-line.seat.back .seat-words { color: #bfe09a; }
+.br-feed-line.seat.left { border-color: #3d5a88; }
+.br-feed-line.seat.left .seat-words { color: #b8cbec; }
 .br-note.done { color: #fff1b8; border-color: #f0c860; box-shadow: 0 0 18px rgba(240, 200, 96, 0.55); }
 .br-note.whole { color: #241a08; border-color: #f0deae; padding-left: 14px;
   background: linear-gradient(180deg, #e8cc74 0%, #c9a84a 55%, #a07830 100%); text-shadow: none; }
@@ -460,6 +472,18 @@ export class RoyaleHudMoments {
       who(k.unitId, this.host.victimName(k), k.vb ?? this.host.botOf(k.unitId)),
     );
     this.pushLine(line, tier);
+  }
+
+  // A seat changing hands (a person joined, came back, or left to a bot):
+  // one line of the feed, kept the full time.
+  seatLine(line: SeatLine): void {
+    const row = el('div', `br-feed-line seat ${line.kind}`);
+    row.dataset.tier = 'seat';
+    row.title = seatLineText(line);
+    const who = el('span', 'br-who');
+    who.appendChild(el('span', '', line.name));
+    row.append(who, el('span', 'seat-words', line.words));
+    this.pushLine(row, 'seat');
   }
 
   // News from afar (a mark, a run snuffed out): one line of the feed in the

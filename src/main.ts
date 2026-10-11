@@ -119,6 +119,7 @@ import { buildReplayBar, type ReplayBar } from './ui/replay_bar';
 import { replayRefusal } from './ui/replay_notice';
 import { showRoyaleJoining, showRoyalePick } from './ui/royale_pick';
 import { FIRST_ROYALE_CHAMPION, initialPick, type RoyalePick } from './ui/royale_pick_rules';
+import { seatLine } from './ui/seat_lines';
 import { attachTurnAsk } from './ui/turn_ask';
 import type { IWorld } from './world_api';
 
@@ -824,6 +825,13 @@ async function runSpectate(matchId: number, team: TeamId): Promise<PostMatchActi
           }
           break;
         }
+        case 'player_joined':
+        case 'player_back':
+        case 'player_left': {
+          const line = seatLine(msg);
+          if (line) view?.pushSeatLine(line);
+          break;
+        }
         case 'match_end':
           finish('menu');
           break;
@@ -1169,21 +1177,20 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
         case 'chat':
           pres?.pushChat(msg.from, msg.team, msg.text);
           break;
+        // A seat changing hands: a line of the kill feed (ui/seat_lines.ts).
         case 'player_left':
-          pres?.pushChat('System', msg.team, `${msg.name} disconnected; a bot takes over.`);
+        case 'player_back':
+        case 'player_joined': {
+          const line = seatLine(msg);
+          if (line) pres?.pushSeatLine(line);
           break;
+        }
         // The server's round-trip probe (server/seat_report.ts): answered at
         // once, so the time to the echo is the round trip this page lives.
         case 'probe':
           if (ws.readyState === ws.OPEN) {
             ws.send(JSON.stringify({ t: 'probe', n: msg.n, fps: frameRate(), q: drawnQuality() }));
           }
-          break;
-        case 'player_back':
-          pres?.pushChat('System', msg.team, `${msg.name} reconnected.`);
-          break;
-        case 'player_joined':
-          pres?.pushChat('System', msg.team, `${msg.name} joined the match.`);
           break;
         case 'ping':
           pres?.showPing(msg.x, msg.z, msg.from, msg.team);
@@ -1577,9 +1584,15 @@ async function runRoyale(
         case 'probe':
           send({ t: 'probe', n: msg.n, fps: frameRate(), q: drawnQuality() });
           break;
+        // A seat changing hands: a line of the feed, and the scoreboard the
+        // server sends with it carries the seat's new name and bot mark.
         case 'player_joined':
-          pres?.pushChat('System', msg.team, `${msg.name} joined the match.`);
+        case 'player_back':
+        case 'player_left': {
+          const line = seatLine(msg);
+          if (line) pres?.pushSeatLine(line);
           break;
+        }
         case 'points':
           if (pres) pres.showPoints(msg.delta, msg.total, msg.reason);
           else pendingPoints = msg;

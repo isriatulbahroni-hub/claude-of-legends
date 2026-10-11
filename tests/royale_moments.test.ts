@@ -298,6 +298,17 @@ describe('the feed', () => {
     expect(foldsOut('own')).toBe(false);
   });
 
+  it('keeps a seat changing hands the full time, out of the near rows, never a death', () => {
+    expect(feedLife('seat')).toBe(FEED_MS);
+    // A fight's near lines do not push it out; only FEED_MAX lines do,
+    // a near one leaving before it.
+    expect(feedOverflow(['near', 'near', 'seat'])).toEqual([]);
+    expect(feedOverflow(['near', 'near', 'near', 'seat'])).toEqual([2]);
+    expect(feedOverflow(['own', 'near', 'own', 'seat', 'own'])).toEqual([1]);
+    expect(feedOverflow(['own', 'own', 'own', 'own', 'seat'])).toEqual([4]);
+    expect(foldsOut('seat')).toBe(false);
+  });
+
   it('folds a late Respawn of bots on bots instead of standing five rows deep', () => {
     // Newest first: a new near line over two near lines pushes the oldest
     // near one out.

@@ -365,8 +365,10 @@ export interface FeedContext {
 }
 
 // 'news' is a mark's news from afar (newsCall): a line of the near rows
-// that is no death.
-export type FeedTier = 'own' | 'lead' | 'near' | 'news' | 'fold';
+// that is no death. 'seat' is a seat changing hands (ui/seat_lines.ts: a
+// person joined, came back or left to a bot): no death either, kept the
+// full time like the own lines, never one of the near rows.
+export type FeedTier = 'own' | 'lead' | 'near' | 'news' | 'seat' | 'fold';
 
 export function feedTier(k: { unitId: number; killerId: number }, ctx: FeedContext): FeedTier {
   const ids = [k.unitId];
@@ -389,7 +391,7 @@ export const FEED_MAX = 4;
 export const FEED_NEAR_MAX = 2;
 
 export function feedLife(tier: FeedTier): number {
-  return tier === 'own' || tier === 'lead' ? FEED_MS : FEED_NEAR_MS;
+  return tier === 'own' || tier === 'lead' || tier === 'seat' ? FEED_MS : FEED_NEAR_MS;
 }
 
 // The lines a new one pushes out, by index into `tiers` (newest first, the

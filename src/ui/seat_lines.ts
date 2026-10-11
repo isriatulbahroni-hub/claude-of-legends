@@ -39,10 +39,12 @@ export function seatLinesPast<T>(standing: readonly T[]): T[] {
   return standing.slice(0, Math.max(0, standing.length - SEAT_LINES_MAX));
 }
 
+// Short enough that a Guest's line in the 5v5's feed on a phone stays
+// clear of the team score (tests/seat_lines.test.ts).
 export const SEAT_WORDS = {
   joined: 'joined the match',
   back: 'is back in the match',
-  left: 'left, a house bot plays on',
+  left: 'left, a bot plays on',
   // A coach's seat (ADR 0013): their own bot was playing it already.
   leftOwn: 'left, their bot plays on',
 } as const;

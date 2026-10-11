@@ -11,9 +11,11 @@ import {
   announceBox,
   FEED_MAX_W_PX,
   feedBox,
+  NAME_EM_PER_CHAR,
   overlaps,
   seatLineWidth,
   topLineBox,
+  WORDS_EM_PER_CHAR,
 } from '../src/ui/royale_layout';
 import {
   SEAT_LINES_MAX,
@@ -35,7 +37,7 @@ describe('the line a seat change makes', () => {
     const back = seatLine({ t: 'player_back', name: 'Thornwick', team: 1 })!;
     expect(seatLineText(back)).toBe('Thornwick is back in the match');
     const left = seatLine({ t: 'player_left', name: 'Thornwick', team: 1 })!;
-    expect(seatLineText(left)).toBe('Thornwick left, a house bot plays on');
+    expect(seatLineText(left)).toBe('Thornwick left, a bot plays on');
     const coach = seatLine({ t: 'player_left', name: 'Thornwick', team: 1, own: 1 })!;
     expect(seatLineText(coach)).toBe('Thornwick left, their bot plays on');
   });
@@ -103,6 +105,29 @@ describe('the line on the screen', () => {
       const feed = feedBox(width);
       expect(overlaps(feed, topLineBox(width, false))).toBe(false);
       expect(overlaps(feed, announceBox(width))).toBe(false);
+    }
+  });
+});
+
+describe("the 5v5's feed on a phone", () => {
+  // Measured in a live 5v5 at 844x390 with the thumbs (src/ui/hud.ts): the
+  // feed's lines start at x 84 in 11 px with 8 px of padding and a border a
+  // side, and the team score above the middle spans x 324 to 520 from
+  // y 8, beside the feed's first line once the controls hint has faded.
+  const FEED_LEFT_PX = 84;
+  const FONT_PX = 11;
+  const CHROME_PX = 8 * 2 + 2;
+  const TEAM_SCORE_LEFT_PX = 324;
+  const width = (name: string, words: string): number =>
+    CHROME_PX +
+    name.length * FONT_PX * NAME_EM_PER_CHAR +
+    (words.length + 1) * FONT_PX * WORDS_EM_PER_CHAR;
+
+  it("keeps a Guest's line clear of the team score", () => {
+    // A Guest joins, comes back or leaves to a house bot; the coach's words
+    // are an account's, a Guest having no bot of its own.
+    for (const w of [SEAT_WORDS.joined, SEAT_WORDS.back, SEAT_WORDS.left]) {
+      expect(FEED_LEFT_PX + width('Wanderer 0000', w)).toBeLessThan(TEAM_SCORE_LEFT_PX);
     }
   });
 });

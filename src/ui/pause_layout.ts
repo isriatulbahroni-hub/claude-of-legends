@@ -53,9 +53,10 @@ export interface PauseMetrics {
   // The width of a settings row's label.
   rowLabelW: number;
   // The ladder box and the feedback box at their tallest, border included:
-  // the ladder's line on two lines and a refusal under the name field, the
-  // feedback field at its least. Measured in a browser at the narrowest
-  // column (169 and 149 on a desktop, 150 and 103 on a phone).
+  // the ladder's line on two lines, its level line and a refusal under the
+  // name field, the feedback field at its least. Measured in a browser at
+  // the narrowest column (169 and 149 on a desktop, 150 and 103 on a
+  // phone), the ladder's then grown by its level line.
   ladderH: number;
   feedbackH: number;
 }
@@ -79,7 +80,7 @@ export const DESKTOP_PAUSE: PauseMetrics = {
   rowGap: 10,
   settingsMinH: 144,
   rowLabelW: 112,
-  ladderH: 178,
+  ladderH: 198,
   feedbackH: 156,
 };
 
@@ -103,7 +104,7 @@ export const PHONE_PAUSE: PauseMetrics = {
   rowGap: 6,
   settingsMinH: 128,
   rowLabelW: 100,
-  ladderH: 156,
+  ladderH: 174,
   feedbackH: 112,
 };
 

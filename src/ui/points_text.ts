@@ -7,6 +7,7 @@
 // from server/.
 
 import type { PointsReason } from '../net/protocol';
+import { goalStep } from './royale_goal';
 
 // The word after the number in the pop. A last hit is the common case and
 // says only its number: the gold popping on the minion already says why.
@@ -67,6 +68,15 @@ export const UNPLACED_LINE = 'Your first points put your name on the ladder.';
 export function placeText(place: LadderPlace): string {
   if (place.rank === null) return UNPLACED_LINE;
   return `You are #${place.rank} on the ladder with ${pointsCount(place.points)}.`;
+}
+
+// Under the place: the level the line's points stand at and how far the
+// next one is, on the curve the own panel and the end card climb
+// (ui/royale_goal.ts goalStep).
+export function levelText(points: number): string {
+  const step = goalStep(points);
+  const left = Math.max(1, step.to - Math.floor(Math.max(0, points)));
+  return `Level ${step.level} · ${pointsCount(left)} to Level ${step.level + 1}`;
 }
 
 // Under the line: what the name box is for, for a Guest; what the name is,

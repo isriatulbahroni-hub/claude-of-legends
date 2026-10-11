@@ -100,6 +100,7 @@ import {
   TAKEDOWN_HEAL,
   TAKEDOWN_MANA,
 } from './types';
+import { beginUpstart, stepUpstarts, type Upstart, upstartOnDeath } from './upstart';
 
 export interface RoyaleOptions {
   variant: RoyaleVariant;
@@ -132,6 +133,9 @@ export interface RoyaleTally {
   fairArrivals: number;
   // Respawn returns set down at the seat's own pick (return_pick.ts).
   returnsPicked: number;
+  // Upstarts begun, and takedowns landed while carrying one (upstart.ts).
+  upstarts: number;
+  upstartTakedowns: number;
 }
 
 // The ground's answers as the mode's rules ask them.
@@ -179,6 +183,9 @@ export class RoyaleMode {
   // The fresh champions in their Grace (grace.ts), by unit id, in the
   // order they began; RoyaleState.arriving lists the same seats.
   graces = new Map<number, Grace>();
+  // The Respawn champions in their Upstart (upstart.ts), by unit id, in the
+  // order they began.
+  upstarts = new Map<number, Upstart>();
   // What each seat did toward its Graft offers (grafts.ts GraftTally).
   graftTally = new Map<number, GraftTally>();
   tally: RoyaleTally = {
@@ -197,6 +204,8 @@ export class RoyaleMode {
     burrTakedowns: 0,
     fairArrivals: 0,
     returnsPicked: 0,
+    upstarts: 0,
+    upstartTakedowns: 0,
   };
   private hpBefore = new Map<number, number>();
   private aliveBefore = 0;
@@ -324,15 +333,19 @@ export class RoyaleMode {
     this.state.respawnPicks.delete(unitId);
     const u = sim.units.get(unitId);
     if (!u || !arrive(this, sim, u)) return;
+    // Its tally from zero: in Respawn its Upstart begins (upstart.ts).
+    beginUpstart(this, u, sim.time);
     // It never fell and took nobody down: no Burr either way (burr.ts).
     clearBurrs(this.state, unitId);
     offerOnTrigger(this, sim, unitId, 'arrival');
   }
 
   // A champion back from a Respawn death (the sim's respawn loop, once its
-  // statuses are cleared): in its Grace.
+  // statuses are cleared): in its Grace, and with no takedown on its tally
+  // in its Upstart (upstart.ts).
   onRespawn(sim: Sim, u: Unit): void {
     beginGrace(this, u, sim.time);
+    beginUpstart(this, u, sim.time);
   }
 
   // Whether the bot driver runs a dead seat's policy on this decision slot:
@@ -418,6 +431,7 @@ export class RoyaleMode {
 
   beforeTick(sim: Sim): void {
     stepGraces(this, sim);
+    stepUpstarts(this, sim);
     this.hpBefore.clear();
     this.aliveBefore = 0;
     for (const u of sim.units.values()) {
@@ -545,6 +559,7 @@ export class RoyaleMode {
     if (victim.kind === 'champion') {
       if (this.duskHit.has(victim.id)) this.tally.duskDeaths++;
       const taker = champ && champ.team !== victim.team ? champ : null;
+      upstartOnDeath(this, victim, taker);
       noteClamor(this, sim, victim, taker);
       // The Wrath passes to a taker who dealt the fall, not the world.
       const world = this.duskHit.has(victim.id) || this.impactHit.has(victim.id);
@@ -852,6 +867,7 @@ export class RoyaleMode {
       skills: this.skills,
       lastActAt: this.lastActAt,
       graces: this.graces,
+      upstarts: this.upstarts,
       graftTally: this.graftTally,
       tally: this.tally,
     };
@@ -865,6 +881,7 @@ export class RoyaleMode {
     this.skills = s.skills;
     this.lastActAt = s.lastActAt;
     this.graces = s.graces;
+    this.upstarts = s.upstarts;
     this.graftTally = s.graftTally;
     this.tally = s.tally;
     this.obsTick = -1;

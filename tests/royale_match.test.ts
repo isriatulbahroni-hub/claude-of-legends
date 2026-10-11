@@ -134,8 +134,11 @@ describe('a whole battle royale of fifty house bots', () => {
     // and a crowd's takedowns are more often steals (about 40% with it).
     // The marks draw hunters onto the marked, and a hunt that lands on a
     // fight under way ends in a steal: this seed 45.3% with them (the
-    // report, seeds 1 to 4: 40 to 42%).
-    expect(a.steals).toBeLessThan(0.47);
+    // report, seeds 1 to 4: 40 to 42%). A champion back from a fall before
+    // its first takedown hits harder in its Upstart, and lands more last
+    // hits on fights under way: this seed 47.7% with it against 45.1% on
+    // the rules before (the report, seeds 1 to 24: 39.5% against 38.7%).
+    expect(a.steals).toBeLessThan(0.49);
   }, 300_000);
 
   it('plays One life to the last standing, the same match twice', () => {

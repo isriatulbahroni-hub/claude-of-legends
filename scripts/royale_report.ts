@@ -40,29 +40,38 @@
 // the first damage it dealt to a champion (an enemy's recentDamagers
 // naming it, read off the damage events) and to the first it took from
 // one, its first takedown and its takedowns in the first DROPIN_EARLY_S,
-// and its first life; then the shares by join time, and one compare line
-// (the stand-in median life, the fighting share, the steals, the final
-// level median) to hold a change against. --load 4 (seconds, default 0)
-// leaves each drop-in's seat without an order for that long after its
-// Arrival, the person behind a slow client's joining card (src/game/
-// first_frame.ts FIRST_FRAME_WAIT_MS) and taking a first look, before the
-// stand-in brain plays it.
+// and its first life (and who ended it); then the shares by join time
+// (with the share that took a champion down in that first life), and one
+// compare line (the stand-in median life, the fighting share, the steals,
+// the final level median) to hold a change against. --load 4 (seconds,
+// default 0) leaves each drop-in's seat without an order for that long
+// after its Arrival, the person behind a slow client's joining card
+// (src/game/first_frame.ts FIRST_FRAME_WAIT_MS) and taking a first look,
+// before the stand-in brain plays it. --dropin-skill gentle (default
+// normal) plays each drop-in with that skill's brain instead: a newcomer's
+// slower eye and looser aim (content/bots/royale_skills.ts); --dropin-lag
+// 0.25 (seconds, default 0) lands each of its orders that much later, in
+// whole decision slots: a person's round trip to the server, whose client
+// does not foresee its own champion on the planet.
 // Every seat's assists and level at the end are kept too: the compare
 // line gives the level median of the seats with at most FEW_TAKEDOWNS
 // takedowns (a person who helps and seldom lands the last hit) and their
-// assists.
+// assists, and the Upstarts a match begins (royale/upstart.ts) with the
+// takedowns landed while carrying one.
 // --dump out.json writes the matches played instead of only printing them,
 // and --merge a.json,b.json prints the summary of matches dumped before (a
 // run split over several processes, each its own --from and --seeds).
 // Bundled and run by scripts/royale_report.mjs:
 //   node scripts/royale_report.mjs [--seeds 4] [--from 1]
 //     [--variant both|respawn|one_life] [--passive 1] [--standin 1]
-//     [--dropin 60,180,300,420] [--load 0] [--dump out.json]
+//     [--dropin 60,180,300,420] [--load 0] [--dropin-skill normal]
+//     [--dropin-lag 0] [--dump out.json]
 //     [--merge a.json,b.json] [--quiet]
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { chooseBotSeat } from '../server/royale_join';
 import { buildRoyaleSim, type ReplayPick, type RoyalePlanet } from '../src/net/replay';
+import { POLICY_PERIOD_TICKS } from '../src/sim/bot_driver';
 import { ROYALE_SKILLS, type RoyaleSkillId } from '../src/sim/content/bots/royale_skills';
 import { GRAFT_LIST, GRAFTS } from '../src/sim/content/grafts';
 import { assemblePlanet } from '../src/sim/content/planet';
@@ -113,6 +122,15 @@ const dropinTimes = opt('--dropin', '')
   .filter((x) => Number.isFinite(x) && x >= 0)
   .sort((a, b) => a - b);
 const loadS = Math.max(0, Number(opt('--load', '0')) || 0);
+const dropinSkillArg = opt('--dropin-skill', 'normal');
+const dropinSkill: RoyaleSkillId =
+  dropinSkillArg in ROYALE_SKILLS ? (dropinSkillArg as RoyaleSkillId) : 'normal';
+// A drop-in's orders land this many decision slots after they were made:
+// a person's round trip to the server, whole slots of POLICY_PERIOD_TICKS.
+const dropinLagSlots = Math.max(
+  0,
+  Math.round(((Number(opt('--dropin-lag', '0')) || 0) * TICK_RATE) / POLICY_PERIOD_TICKS),
+);
 const dumpTo = opt('--dump', '');
 const mergeFrom = opt('--merge', '')
   .split(',')
@@ -191,6 +209,17 @@ function passivePolicy(layout: RoyaleLayout) {
   };
 }
 
+// A policy whose orders land `slots` decision slots after it made them,
+// nothing done meanwhile: what a round trip does to a person's orders.
+function lagged(policy: Policy, slots: number): Policy {
+  if (slots <= 0) return policy;
+  const queue: Action[] = [];
+  return (obs, rng) => {
+    queue.push(policy(obs, rng));
+    return queue.length > slots ? queue.shift()! : { kind: 'noop' };
+  };
+}
+
 type SeatKind = RoyaleSkillId | 'passive' | 'standin' | 'dropin';
 
 // One drop-in, seconds counted from its landing.
@@ -213,6 +242,12 @@ interface DropIn {
   // found), another champion, or the world (the Dusk, a Seedfall).
   firstLife: number;
   endedBy: 'nearest' | 'other' | 'world' | null;
+  // The enemy nearest at landing, while that first life lasted: taken down
+  // by the drop-in, by another champion or the world, or still standing
+  // (null); and the seconds to the first hit the drop-in took from any
+  // other champion.
+  nearestFate?: 'mine' | 'other' | null;
+  thirdHit?: number | null;
 }
 
 interface Seat {
@@ -317,6 +352,10 @@ interface Match {
   boughFallbacks: number;
   botTimeouts: number;
   dropIns: DropIn[];
+  // Respawn's Upstarts begun (Arrivals and returns), and the takedowns
+  // landed while carrying one (royale/upstart.ts).
+  upstarts?: number;
+  upstartTakedowns?: number;
 }
 
 const ENGAGE_M = 8;
@@ -497,7 +536,7 @@ function play(
     const fairBefore = mode.tally.fairArrivals ?? 0;
     sim.beginArrival(id);
     const fair = (mode.tally.fairArrivals ?? 0) > fairBefore;
-    if (loadS <= 0) sim.attachPolicy(id, traced('normal', false));
+    if (loadS <= 0) sim.attachPolicy(id, lagged(traced(dropinSkill, false), dropinLagSlots));
     seat.skill = 'dropin';
     const u = sim.units.get(id)!;
     let nearest: number | null = null;
@@ -530,6 +569,8 @@ function play(
         earlyTakedowns: 0,
         firstLife: 0,
         endedBy: null,
+        nearestFate: null,
+        thirdHit: null,
       },
     });
   };
@@ -545,7 +586,7 @@ function play(
     for (const d of dropIns) {
       if (d.playing || sim.time + 1e-9 < d.playsAt) continue;
       d.playing = true;
-      sim.attachPolicy(d.id, traced('normal', false));
+      sim.attachPolicy(d.id, lagged(traced(dropinSkill, false), dropinLagSlots));
     }
     for (const [id, q] of mode.state.offers) {
       const head = q[0];
@@ -622,10 +663,21 @@ function play(
             d.row.firstDealt ??= since;
           }
           if (e.targetId === d.id && seats.has(e.sourceId)) d.row.firstTaken ??= since;
+          if (
+            e.targetId === d.id &&
+            seats.has(e.sourceId) &&
+            e.sourceId !== d.nearestId &&
+            d.alive
+          ) {
+            d.row.thirdHit ??= since;
+          }
         } else if (e.type === 'death' && seats.has(e.unitId)) {
           if (e.killerId === d.id && e.unitId !== d.id) {
             d.row.firstTakedown ??= since;
             if (since <= DROPIN_EARLY_S) d.row.earlyTakedowns++;
+          }
+          if (e.unitId === d.nearestId && d.alive && d.row.nearestFate === null) {
+            d.row.nearestFate = e.killerId === d.id ? 'mine' : 'other';
           }
           if (e.unitId === d.id && d.alive) {
             d.alive = false;
@@ -862,6 +914,8 @@ function play(
     boughFallbacks,
     botTimeouts,
     dropIns: dropIns.map((d) => d.row),
+    upstarts: mode.tally.upstarts,
+    upstartTakedowns: mode.tally.upstartTakedowns,
   };
 }
 
@@ -1215,6 +1269,12 @@ function medianOrNever(xs: readonly (number | null)[]): string {
   return `${((lo + hi) / 2).toFixed(1)} s`;
 }
 
+// Whether a drop-in took a champion down before its first death (or the
+// end, standing).
+function firstLifeTakedown(d: DropIn): boolean {
+  return d.firstTakedown !== null && d.firstTakedown <= d.firstLife + 1e-9;
+}
+
 // The drop-ins by the time they joined, then all of them.
 function dropInSummary(all: readonly Match[]): void {
   for (const variant of ['respawn', 'one_life'] as const) {
@@ -1236,8 +1296,13 @@ function dropInSummary(all: readonly Match[]): void {
           `first hurt median ${medianOrNever(ds.map((d) => d.firstTaken))}, ` +
           `takedown within ${DROPIN_EARLY_S} s ${pct(ds.filter((d) => d.earlyTakedowns > 0).length, ds.length)}, ` +
           `takedowns in ${DROPIN_EARLY_S} s mean ${mean(ds.map((d) => d.earlyTakedowns)).toFixed(2)}, ` +
+          `a takedown in its first life ${pct(ds.filter(firstLifeTakedown).length, ds.length)}, ` +
           `first life median ${life === null ? '-' : life.toFixed(0)} s, ` +
-          `ended by the enemy nearest at landing ${pct(ds.filter((d) => d.endedBy === 'nearest').length, ds.length)}`,
+          `ended by the enemy nearest at landing ${pct(ds.filter((d) => d.endedBy === 'nearest').length, ds.length)}, ` +
+          `by another champion ${pct(ds.filter((d) => d.endedBy === 'other').length, ds.length)}; ` +
+          `in that life the enemy nearest at landing fell to the drop-in ${pct(ds.filter((d) => d.nearestFate === 'mine').length, ds.length)}, ` +
+          `to another ${pct(ds.filter((d) => d.nearestFate === 'other').length, ds.length)}, ` +
+          `another champion's first hit median ${medianOrNever(ds.map((d) => d.thirdHit ?? null))}`,
       );
     };
     for (const t of times) {
@@ -1267,13 +1332,16 @@ function compareLine(all: readonly Match[]): void {
     const fewLevel = median(few.map((x) => x.level));
     const fewAssists = median(few.map((x) => x.assists));
     const dropLife = median(ms.flatMap((m) => m.dropIns.map((d) => d.firstLife)));
+    const upstarts = ms.reduce((a, m) => a + (m.upstarts ?? 0), 0) / ms.length;
+    const upstartTds = ms.reduce((a, m) => a + (m.upstartTakedowns ?? 0), 0) / ms.length;
     console.log(
       `\ncompare ${variant}: stand-in median life ${life === null ? '-' : life.toFixed(1)} s, ` +
         `fighting ${near > 0 ? ((100 * engaged) / near).toFixed(1) : '-'}%, ` +
         `steals ${tds > 0 ? ((100 * steals) / tds).toFixed(1) : '-'}%, final level median ${level ?? '-'}, ` +
         `level median ${fewLevel ?? '-'} for the ${few.length} seats with at most ${FEW_TAKEDOWNS} takedowns ` +
         `(assists median ${fewAssists ?? '-'}), ` +
-        `drop-in first life median ${dropLife === null ? '-' : dropLife.toFixed(1)} s`,
+        `drop-in first life median ${dropLife === null ? '-' : dropLife.toFixed(1)} s, ` +
+        `Upstarts a match ${upstarts.toFixed(1)} (${upstartTds.toFixed(1)} took a champion down)`,
     );
   }
 }

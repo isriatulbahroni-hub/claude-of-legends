@@ -4,8 +4,9 @@
 // - The kill feed stands under the row: at the top right, the row ran
 //   36 px into the feed's column at 1280x720, most of it at 960x540, and
 //   on a phone the feed's first line reached the row's foot.
-// - On a desktop the mark's badge and the Dusk's pill stand side by side
-//   under the count: stacked they reached the cards' title.
+// - On a desktop the mark's badge stands beside the Dusk's line, in its
+//   short word, and the win line and the Dusk's pill share their row under
+//   the count: stacked they reached the cards' title.
 // - An announcement takes the title's line, smaller, and the title steps
 //   aside while it shows: at 112 px (70 px on a phone) it passed over the
 //   title and the row. A spotlight's call (ABLAZE, LAST LIGHT) is said
@@ -80,8 +81,9 @@ export function openFeedBox(
 }
 
 // The top line at its fullest while the cards are open: on a desktop the
-// head, then the badge and the pill on one line of OPEN_MARKS_H_PX; a
-// phone's is the same as ever (its row, the pill under it), the cards
+// head (the badge beside the Dusk's line, no taller than it), then the win
+// line and the pill on one line of OPEN_MARKS_H_PX; a phone's is the same
+// as ever (its row, the win line and the pill under it), the cards
 // standing under it (ui/royale_grafts.ts PHONE_TOP_PX).
 export const OPEN_MARKS_H_PX = 26;
 export const TOP_LINE_GAP_PX = 4;
@@ -183,8 +185,9 @@ export function cardsRoomCss(): string {
     `${thumbs} .br-feed { top: calc(${phoneUnder}px + ${SAFE_TOP}); }`,
     `${desk} .br-feed-line:not(.fold):nth-child(n + ${FEED_OPEN_LINES}) { display: none; }`,
     `${phone} .br-feed-line:nth-child(n + ${COMPACT_FEED_OPEN_LINES + 1}) { display: none; }`,
-    // A desktop's top line: the head's two lines, then the badge and the
-    // pill on one (two empty breaks between them, half the gap each side).
+    // A desktop's top line: the Dusk's line with the badge beside it, the
+    // count, then the win line and the pill in their row (two empty breaks
+    // between them, half the gap each side).
     `${desk} .br-top { flex-flow: row wrap; justify-content: center; ` +
       `gap: ${TOP_LINE_GAP_PX / 2}px 6px; }`,
     `${desk} .br-head { display: contents; }`,
@@ -192,7 +195,8 @@ export function cardsRoomCss(): string {
     `${desk} .br-top::before { order: 1; }`,
     `${desk} .br-count { order: 2; }`,
     `${desk} .br-top::after { order: 3; }`,
-    `${desk} .br-leader, ${desk} .br-burn { order: 4; }`,
+    `${desk} .br-leader { order: 0; }`,
+    `${desk} .br-sub { order: 4; flex-direction: row; gap: 6px; }`,
     // The announcement on the title's line, the title aside while it
     // shows and back once it has faded.
     `${royaleDesk} .hud-announce, ${royalePhone} .hud-announce { ` +

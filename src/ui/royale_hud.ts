@@ -1,11 +1,12 @@
 // The battle royale's layer of the HUD (ADR 0031), drawn inside the HUD's
 // own root (ui/hud.ts) so it scales and turns with it: the Dusk line and
 // the count at the top center, the score leader's badge under them, the
-// warning while the champion stands in the Dusk, the drop's banner, the
-// kill feed at the top right with a bot mark on every bot, the ring of the
-// cache being opened, the loot and level notices, the Graft cards (ui/
-// royale_hud_grafts.ts), and the end screen built from the result the
-// server sends. What any of it says is decided in
+// warning while the champion stands in the Dusk, the win line under them
+// and the win card on the landing (ui/royale_win_view.ts), the drop's
+// banner, the kill feed at the top right with a bot mark on every bot,
+// the ring of the cache being opened, the loot and level notices, the
+// Graft cards (ui/royale_hud_grafts.ts), and the end screen built from the
+// result the server sends. What any of it says is decided in
 // ui/royale_text.ts and ui/royale_result.ts; this module only draws.
 
 import type { PostMatchAction } from '../game/flow';
@@ -72,6 +73,7 @@ import {
   placeText,
   seatName,
 } from './royale_text';
+import { RoyaleWinView } from './royale_win_view';
 import type { SeatLine } from './seat_lines';
 
 // An enemy champion this close counts as near, for the fight and takedown
@@ -304,6 +306,9 @@ export interface RoyaleHudHost {
   selfTeam: TeamId;
   variant: RoyaleVariant;
   touch: boolean;
+  // A person plays the seat (not a replay's viewer, not a coach): the win
+  // card on the landing is theirs.
+  playing?: boolean;
   onExit: (action: PostMatchAction) => void;
 }
 
@@ -361,6 +366,8 @@ export class RoyaleHud {
   private crackUntil = 0;
   // The Graft cards and their chip (ui/royale_hud_grafts.ts).
   private readonly grafts: RoyaleHudGrafts;
+  // The win card and the win line (ui/royale_win_view.ts).
+  private readonly win: RoyaleWinView;
 
   constructor(host: RoyaleHudHost) {
     this.host = host;
@@ -385,7 +392,10 @@ export class RoyaleHud {
     this.burnEl.hidden = true;
     const head = el('div', 'br-head');
     head.append(this.duskEl, this.countEl, this.leaderEl);
-    top.append(head, this.burnEl);
+    // The win line and the Dusk's pill share the row under the head.
+    const sub = el('div', 'br-sub');
+    sub.append(this.burnEl);
+    top.append(head, sub);
     this.dropEl = el('div', 'br-drop');
     this.dropText = el('b', '');
     this.dropLeft = el('span', '');
@@ -399,6 +409,13 @@ export class RoyaleHud {
     this.notes = el('div', 'br-notes');
     this.layer.append(top, this.dropEl, this.feed, this.openEl, this.notes);
     host.root.appendChild(this.layer);
+    this.win = new RoyaleWinView({
+      layer: this.layer,
+      root: host.root,
+      variant: host.variant,
+      playing: host.playing ?? true,
+    });
+    sub.prepend(this.win.line);
     this.moments = new RoyaleHudMoments({
       root: host.root,
       world: host.world,
@@ -436,8 +453,9 @@ export class RoyaleHud {
     return this.host.world.royaleView?.() ?? null;
   }
 
-  // Once per world tick.
-  update(): void {
+  // Once per world tick; `covered` while a menu, an end screen or the turn
+  // wall stands over the match.
+  update(covered = false): void {
     const r = this.state();
     const { world, selfId, root, touch } = this.host;
     this.stepNotices();
@@ -448,6 +466,7 @@ export class RoyaleHud {
     this.landing = noteLanding(this.landing, r.st, r.de, time);
     this.moments.step(r);
     const own = world.units.get(selfId);
+    this.win.update(r, time, sinceLanding(this.landing, r.st, time), covered || own?.dead === true);
     if (own && this.landing.at !== null && !this.fought) this.noteFight(r, own);
     this.grafts.update(
       r,
@@ -472,8 +491,11 @@ export class RoyaleHud {
     this.lastDusk = r.dusk;
 
     // The mark the viewer carries (the Lodestar, the Wrath, a run): every
-    // globe shows them, and the badge pulses while it does.
-    const badge = markBadge(r, selfId, time, compact);
+    // globe shows them, and the badge pulses while it does. Its short word
+    // while the Graft cards are open, beside the Dusk's line
+    // (ui/royale_cards_room.ts).
+    const short = compact || root.classList.contains('br-cards-open');
+    const badge = markBadge(r, selfId, time, short);
     setHidden(this.leaderEl, badge === null);
     if (badge) {
       if (this.leaderText.textContent !== badge.text) this.leaderText.textContent = badge.text;
@@ -645,9 +667,11 @@ export class RoyaleHud {
     );
     return {
       time,
-      covered: covered || this.endEl !== null || fight,
+      // The win card says what wins first: the steps wait while it is to
+      // come or up, and count their landing from its going.
+      covered: covered || this.endEl !== null || fight || this.win.holdsSteps(),
       dead: u.dead,
-      sinceLanding: r ? sinceLanding(this.landing, r.st, time) : null,
+      sinceLanding: r ? this.win.stepsLanding(sinceLanding(this.landing, r.st, time), time) : null,
       fought: this.fought,
       openedCache: this.openedCache,
       padUsed: this.padUsed,
@@ -788,6 +812,7 @@ export class RoyaleHud {
   }
 
   dispose(): void {
+    this.win.dispose();
     this.grafts.dispose();
     this.moments.dispose();
     this.layer.remove();

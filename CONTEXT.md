@@ -605,8 +605,18 @@ next step of the build a house bot of that champion follows, is lit for everyone
 royale has a list of its own, under the same rules and the same Hide guide: attack and cast at an
 enemy champion, open a cache, stay in the light (standing in the Dusk, or about to be overtaken by
 it, takes the card from any other step), what a takedown gives, fly a launch pad, and the ultimate
-ready at level 6.
+ready at level 6. They wait while the win card shows.
 _Avoid_: tutorial (that is a scripted match), tips, coach (the bot seat's)
+
+**Win card**:
+What a battle royale says wins it, to the person on the seat when their champion lands (the drop's
+end, or a drop-in's Arrival): a card at the left for a few seconds, gone sooner with its close
+button, at most four short lines. Respawn: most takedowns when the light goes out wins, then fight
+champions for takedowns, open caches for your build, stay in the light. One life: last one standing
+wins, with its own lines. The **win line** under the top line keeps it said all match, small:
+"Most takedowns wins · 4:12 left · you are 11th", "Last one standing wins · 23 left".
+_Avoid_: objective (the Warden is the 5v5's), mission, goal (the goal across matches is the levels
+of the points' line), tutorial
 
 **Quick pick**:
 The battle royale's one card between Play and the drop: the ten champions with no lanes, no bans

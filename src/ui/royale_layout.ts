@@ -234,13 +234,14 @@ export function compactNoteWidth(text: string): number {
 
 // The top line (ui/royale_hud.ts .br-top) at its fullest, a test's
 // worst case: the Dusk's line and the count (its head, all the drop
-// shows), the mark's badge and the Dusk's pill under them; on a phone the
-// line, the count and the badge share a row, the pill under it. As Chrome
-// drew them: the head 53 px, the badge 22, the pill 25; a phone's row 26,
-// its pill 21.
+// shows), the mark's badge, the win line (ui/royale_win_view.ts) and the
+// Dusk's pill under them; on a phone the line, the count and the badge
+// share a row, the win line and the pill the row under it. As Chrome drew
+// them: the head 53 px, the badge 22, the win line 18, the pill 25; a
+// phone's row 26, its pill 21 beside the win line's 17.
 export const TOP_LINE_TOP_PX = 8;
 export const TOP_LINE_HALF_W_PX = 170;
-export const TOP_LINE_H_PX = 108;
+export const TOP_LINE_H_PX = 130;
 export const TOP_HEAD_H_PX = 54;
 export const COMPACT_TOP_LINE_HALF_W_PX = 190;
 export const COMPACT_TOP_LINE_H_PX = 52;

@@ -186,16 +186,23 @@ describe('the top line while the cards are open', () => {
     });
   }
 
-  it('sets the badge and the pill side by side on a desktop, the head as it was', () => {
+  it('sets the badge beside the Dusk line and the win line beside the pill on a desktop', () => {
     const css = cardsRoomCss();
     const desk = '.hud.br-cards-open:not(.compact)';
     expect(css).toContain(`${desk} .br-top { flex-flow: row wrap;`);
     expect(css).toContain(`${desk} .br-head { display: contents; }`);
-    // The Dusk's line, a break, the count, a break, the badge and the pill.
+    // The Dusk's line and the badge, a break, the count, a break, the win
+    // line and the pill in their own row (src/ui/royale_win_view.ts).
+    expect(css).toContain(`${desk} .br-leader { order: 0; }`);
     expect(css).toContain(`${desk} .br-top::before { order: 1; }`);
     expect(css).toContain(`${desk} .br-count { order: 2; }`);
     expect(css).toContain(`${desk} .br-top::after { order: 3; }`);
-    expect(css).toContain(`${desk} .br-leader, ${desk} .br-burn { order: 4; }`);
+    expect(css).toContain(`${desk} .br-sub { order: 4; flex-direction: row; gap: 6px; }`);
+    // The badge says its short word there, so the Dusk's line and it hold
+    // one line at 960 wide.
+    const hud = source('src/ui/royale_hud.ts');
+    expect(hud).toContain("const short = compact || root.classList.contains('br-cards-open');");
+    expect(hud).toContain('markBadge(r, selfId, time, short)');
   });
 });
 

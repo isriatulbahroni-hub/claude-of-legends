@@ -11,8 +11,10 @@
 // and its wait's globe), end-one, end-respawn, moments (the loud
 // moments: the Seedfalls' edge arrows, the Clamors, the feed folding, the
 // run's spotlight, the cache's ritual and the loot's words, the Dusk's
-// pill, every new block faked), and end-teams: the 5v5's end screen over
-// the same match played as two teams of five, every build full.
+// pill, every new block faked), land and land-one (the drop, then the
+// landing in Respawn and in One life: the win card and the win line),
+// and end-teams: the 5v5's end screen over the same match played as two
+// teams of five, every build full.
 
 import { orchardSim } from '../net/replay';
 import type { RoyaleNote } from '../net/royale_client';
@@ -157,9 +159,25 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
   }
 
   const variant: RoyaleVariant =
-    scene === 'closing' || scene === 'out' || scene === 'end-one' || scene === 'moments'
+    scene === 'closing' ||
+    scene === 'out' ||
+    scene === 'end-one' ||
+    scene === 'moments' ||
+    scene === 'land-one'
       ? 'one_life'
       : 'respawn';
+  // The landing: the drop for LAND_AT seconds on the wall clock from the
+  // first look at the state (a software renderer steps the sim slower than
+  // real time), then play from the match time it came at.
+  const landing = scene === 'land' || scene === 'land-one';
+  const LAND_AT = 6;
+  let firstLook: number | null = null;
+  let landedAt: number | null = null;
+  const dropLeft = (): number => {
+    const now = performance.now();
+    firstLook ??= now;
+    return Math.max(0, LAND_AT - (now - firstLook) / 1000);
+  };
   const moments = scene === 'moments';
   // A Respawn death's wash, and its wait's globe a second in.
   const wash = scene === 'wash' || scene === 'wash-globe';
@@ -201,22 +219,27 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
       people: 2,
       caches: [] as [],
     };
-    if (scene === 'drop') {
+    const left = landing && landedAt === null ? dropLeft() : 0;
+    if (landing && landedAt === null && left <= 0) landedAt = t;
+    if (scene === 'drop' || (landing && landedAt === null)) {
       return {
         ...base,
         st: 'drop',
-        de: 9.5,
+        de: landing ? t + left : 9.5,
         alive: 50,
         dusk: { p: 0, c: [0, 80, 0], r: 160, pe: 99.5, sh: 0, b: 0 },
         ...offer('bough', ['second_breath', 'stoneblood', 'thornhide'], t),
       };
     }
-    if (scene === 'calm' || scene === 'end-respawn' || wash) {
+    if (scene === 'calm' || scene === 'end-respawn' || wash || landing) {
       return {
         ...base,
         st: 'play',
+        de: landedAt ?? 0,
         dusk: { p: 0, c: [0, 80, 0], r: 160, pe: 65, sh: 0, b: 0 },
         score: 4,
+        // Respawn's rank, for the count and the win line.
+        ...(variant === 'respawn' ? { rk: 11, gap: 2 } : {}),
         leader: { i: leader.id, s: 9, ...(Math.floor(t / 4) % 2 === 0 ? { at: [0, 80, 0] } : {}) },
         opening: { c: 3, since: Math.floor(t / 2.5) * 2.5 },
         gr: ['hunters_eye', 'keen_edge'],
@@ -328,7 +351,7 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
       const own = moments ? k % 2 === 0 : k % 4 === 0;
       kills.push(own ? { unitId: b.id, killerId: self.id } : { unitId: b.id, killerId: a.id });
     }
-    if ((scene === 'calm' || moments) && w >= nextLoot) {
+    if ((scene === 'calm' || moments || (landing && landedAt !== null)) && w >= nextLoot) {
       nextLoot = w + 2.4;
       const itemId = moments
         ? (['iron_blade', 'doombrand', 'heart_gem', 'warbrand'][k % 4] ?? 'iron_blade')

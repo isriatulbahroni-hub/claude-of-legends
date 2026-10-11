@@ -80,12 +80,15 @@ export interface EndMetrics {
   // The scoreboard's columns: the player's share of the names' room
   // beside the champion's, the K/D/A and the CS wide enough for the
   // widest a match gives them in the own row's bold ("22 / 18 / 31",
-  // "388"), and the width under which its item icons come down to a short
-  // row's size whatever the height, so the names keep their room.
+  // "388"). Under a width inside its box the scoreboard is narrow: the
+  // champion stands under the player's name in one column, on a row this
+  // tall, and the item icons come down to a short row's size, so a name
+  // keeps its room ("Wanderer 4821" whole from 960 wide).
   playerFr: number;
   kdaW: number;
   csW: number;
   tableTightW: number;
+  scoreRowTwoH: number;
   // The HUD's own boxes at their tallest, border included, in a third of
   // the sheet (the battle royale's columns) and in a quarter (the 5v5's
   // beside the scoreboard): the ladder box (ui/ladder_box.ts), the account
@@ -135,7 +138,8 @@ export const DESKTOP_END: EndMetrics = {
   playerFr: 1.15,
   kdaW: 84,
   csW: 30,
-  tableTightW: 600,
+  tableTightW: 560,
+  scoreRowTwoH: 34,
   ladderH: 180,
   ladderQH: 196,
   offerH: 200,
@@ -179,7 +183,8 @@ export const PHONE_END: EndMetrics = {
   playerFr: 1,
   kdaW: 74,
   csW: 26,
-  tableTightW: 600,
+  tableTightW: 560,
+  scoreRowTwoH: 30,
   ladderH: 150,
   ladderQH: 180,
   offerH: 170,
@@ -249,13 +254,19 @@ export function progressHeight(m: EndMetrics, c: EndContent): number {
   return frame(m) + (c.goal ? m.goalH : 0) + gap + (c.grafts ? m.graftsH : 0);
 }
 
-// The ranking or the scoreboard with every row, at the height's rows.
-export function tableHeight(m: EndMetrics, c: EndContent, tall: boolean): number {
+// The scoreboard is narrow in a box this wide (border included).
+export function narrowTable(m: EndMetrics, width: number): boolean {
+  return width - frame(m) < m.tableTightW;
+}
+
+// The ranking or the scoreboard with every row, at the height's rows, the
+// scoreboard's two lines high when it is narrow.
+export function tableHeight(m: EndMetrics, c: EndContent, tall: boolean, narrow = false): number {
   if (c.card === 'royale') {
     if (c.rows === 0) return 0;
     return frame(m) + m.rankHeadH + c.rows * (tall ? m.rankRowH : m.rankRowShortH);
   }
-  const row = tall ? m.scoreRowH : m.scoreRowShortH;
+  const row = narrow ? m.scoreRowTwoH : tall ? m.scoreRowH : m.scoreRowShortH;
   return frame(m) + 2 * m.teamHeadH + m.colsHeadH + c.rows * row + m.teamGap;
 }
 
@@ -343,10 +354,12 @@ export function endBoxes(width: number, height: number, compact: boolean, c: End
   const left = (width - sheetW) / 2;
   const royale = c.card === 'royale';
   const wide = kind === 'wide';
-  const tableN = tableHeight(m, c, tall);
-  const progressN = progressHeight(m, c);
   const half = (sheetW - m.gap) / 2;
   const unit = (sheetW - 2 * m.gap) / (royale ? 3 : 4);
+  // The 5v5's scoreboard: twice the unit when wide, across the sheet else.
+  const narrow = !royale && narrowTable(m, wide ? 2 * unit + m.gap : sheetW);
+  const tableN = tableHeight(m, c, tall, narrow);
+  const progressN = progressHeight(m, c);
   const leadW = wide ? unit : kind === 'two' ? half : sheetW;
   const sum = (list: readonly number[]): number =>
     list.reduce((s, h) => s + h, 0) + m.gap * Math.max(0, list.length - 1);
@@ -546,7 +559,19 @@ ${sheet} .end-table.hud-end-card { gap: ${m.teamGap}px; }
 }
 ${sheet} .end-table.hud-end-card { container: end-table / inline-size; }
 @container end-table (width < ${m.tableTightW}px) {
-  ${sheet} .hud-score-build { zoom: ${iconZoom(m.scoreRowShortH)}; }
+  ${sheet} .hud-score-row {
+    grid-template-columns: minmax(0, 1fr) ${m.kdaW}px ${m.csW}px max-content;
+    grid-template-areas: 'player kda cs build' 'champ kda cs build';
+    align-content: center; row-gap: 0;
+  }
+  ${sheet} .hud-score-row.head { grid-template-areas: 'player kda cs build'; }
+  ${sheet} .hud-score-row.head .hud-score-champ { display: none; }
+  ${sheet} .hud-score-row:not(.head) { height: ${m.scoreRowTwoH}px; }
+  ${sheet} .hud-score-player { grid-area: player; }
+  ${sheet} .hud-score-champ { grid-area: champ; }
+  ${sheet} .hud-score-kda { grid-area: kda; }
+  ${sheet} .hud-score-cs { grid-area: cs; }
+  ${sheet} .hud-score-build { grid-area: build; zoom: ${iconZoom(m.scoreRowShortH)}; }
 }
 @container end (min-width: ${m.twoFrom}px) {
   ${sheet} {

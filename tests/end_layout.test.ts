@@ -19,6 +19,7 @@ import {
   endLayoutCss,
   headHeight,
   iconZoom,
+  narrowTable,
   PHONE_END,
   tableHeight,
 } from '../src/ui/end_layout';
@@ -226,7 +227,8 @@ describe('the end screens', () => {
       for (const c of [RESPAWN, TEAMS]) {
         const b = endBoxes(s.w, s.h, false, c);
         const tall = s.h - 2 * DESKTOP_END.gutter >= DESKTOP_END.tallFrom;
-        expect(height(b.table!)).toBeGreaterThanOrEqual(tableHeight(DESKTOP_END, c, tall));
+        const narrow = c.card === 'teams' && narrowTable(DESKTOP_END, width(b.table!));
+        expect(height(b.table!)).toBeGreaterThanOrEqual(tableHeight(DESKTOP_END, c, tall, narrow));
       }
     }
     expect(DESKTOP_END.rankRowShortH).toBeLessThan(DESKTOP_END.rankRowH);
@@ -331,15 +333,35 @@ describe('the end screens', () => {
       expect(css).toContain(
         `grid-template-columns: minmax(0, ${m.playerFr}fr) minmax(0, 1fr) ${m.kdaW}px ${m.csW}px max-content;`,
       );
-      // A narrow scoreboard draws its icons a short row's size, tall rows
-      // or not.
+      // A narrow scoreboard stands the champion under the player's name,
+      // on rows two lines high, and draws its icons a short row's size.
       expect(css).toContain(`@container end-table (width < ${m.tableTightW}px)`);
+      expect(css).toContain("grid-template-areas: 'player kda cs build' 'champ kda cs build';");
+      expect(css).toContain(`.hud-score-row:not(.head) { height: ${m.scoreRowTwoH}px; }`);
+      expect(m.scoreRowTwoH).toBeGreaterThanOrEqual(m.scoreRowShortH);
     }
     expect(css).toContain('container: end-table / inline-size;');
-    // The 5v5's scoreboard is narrow from 1024 wide down and wide at 1280.
-    const at = (w: number, h: number): number => width(endBoxes(w, h, false, TEAMS).table!);
-    expect(at(1024, 768)).toBeLessThan(DESKTOP_END.tableTightW);
-    expect(at(1280, 720)).toBeGreaterThanOrEqual(DESKTOP_END.tableTightW);
+    // The container query reads the box's inside: the model does too. The
+    // 5v5's scoreboard is narrow from 1024 wide down and wide from 1280,
+    // and always on a phone.
+    const frame = 2 * (DESKTOP_END.pad + DESKTOP_END.border);
+    expect(narrowTable(DESKTOP_END, DESKTOP_END.tableTightW + frame - 1)).toBe(true);
+    expect(narrowTable(DESKTOP_END, DESKTOP_END.tableTightW + frame)).toBe(false);
+    const at = (w: number, h: number, compact = false): number =>
+      width(endBoxes(w, h, compact, TEAMS).table!);
+    expect(narrowTable(DESKTOP_END, at(960, 540))).toBe(true);
+    expect(narrowTable(DESKTOP_END, at(1024, 768))).toBe(true);
+    for (const [w, h] of [
+      [1280, 720],
+      [1366, 768],
+      [1920, 1080],
+    ] as const) {
+      expect(narrowTable(DESKTOP_END, at(w, h)), `${w}x${h}`).toBe(false);
+    }
+    expect(narrowTable(PHONE_END, at(844, 390, true))).toBe(true);
+    // Narrow, its rows are two lines high, and every one still shows.
+    const b = endBoxes(960, 540, false, TEAMS);
+    expect(height(b.table!)).toBeGreaterThanOrEqual(tableHeight(DESKTOP_END, TEAMS, false, true));
   });
 
   it('lets the level bar box scroll inside past the content it was measured for', () => {

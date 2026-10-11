@@ -35,6 +35,22 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-10-11',
+    title: 'The Voidmaul rises in its own body',
+    body: [
+      'The creature of the top ring has its own body at last: some fourteen metres of stone ' +
+        'and void that climbs out of a rift in the ground when it rises, at six and a half ' +
+        'minutes into a match.',
+      'It strikes slowly and hard, and it alternates two blows: a slam of one forepaw, then the ' +
+        'Crush, where it rears and brings both paws down. Whoever stands in the disk under the ' +
+        'paw takes the hit; step out while the paw is still rising and it lands on nothing.',
+      'Each blow also throws a rain of stones across the ring. Every stone lands on its own ' +
+        'mark a couple of seconds later and hurts whoever is under it, so a fight with the ' +
+        'Voidmaul is a fight with the ground too.',
+    ],
+    link: { label: 'Play a match', to: 'play' },
+  },
+  {
     day: '2026-10-06',
     title: 'The Sapdraught: a drink for a rough lane',
     body: [

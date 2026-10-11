@@ -21,7 +21,10 @@ one place: the own panel (CONTEXT.md: Own panel).
   cookie again either way. It answers the ladder of every human as before, the own panel, and
   the week (the rotation, the starters, and when the week turns). A signed-in account reads its
   own and is handed no Guest. `POST /api/guest`, what Play asks, hands out the same Guest the
-  same way. The route changes state now, so it takes POST only.
+  same way. The route changes state now, so it takes POST only. Both routes refuse a request
+  the browser marks as made by another site (`Sec-Fetch-Site: cross-site`): Lax keeps the
+  cookie off such a POST, the route would hand out a new Guest, and the answer to a form
+  posted from elsewhere could replace the Guest the browser holds.
 - **The own panel.** Who the reader is and what they hold, before anything else: the name,
   changed in place under the account name rules and the word filter (`POST /api/ladder/name`,
   as before); the place on the ladder and the points; the level; the best; the next thing within

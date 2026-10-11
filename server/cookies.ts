@@ -67,3 +67,14 @@ export function serializeCookie(name: string, value: string, opts: CookieOptions
 export function clearCookie(name: string, opts: Pick<CookieOptions, 'secure'>): string {
   return serializeCookie(name, '', { maxAgeS: 0, secure: opts.secure });
 }
+
+// A request a browser says another site made (Sec-Fetch-Site: cross-site),
+// such as a form on someone else's page posted here. Lax keeps the cookies
+// off it, yet the answer to a top-level POST may still set one, so a route
+// that hands out a cookie refuses it rather than replace the one the
+// browser holds (ADR 0033). No header, from an older browser or a script,
+// is not one.
+export function crossSiteRequest(header: string | string[] | undefined): boolean {
+  const value = Array.isArray(header) ? header[0] : header;
+  return value === 'cross-site';
+}

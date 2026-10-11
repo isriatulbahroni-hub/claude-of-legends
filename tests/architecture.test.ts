@@ -488,4 +488,26 @@ describe('api methods', () => {
     const stale = [...READ_ONLY].filter((route) => !mainTs.includes(`'${route}'`));
     expect(stale).toEqual([]);
   });
+
+  // A route that hands out the Guest cookie is a POST, but the method alone
+  // does not keep another site from replacing that cookie: Lax keeps the
+  // browser's cookie off a cross-site form's POST, the route then issues a
+  // new Guest, and the answer to a top-level navigation is free to set it.
+  // So each one refuses a request the browser marks cross-site (ADR 0033,
+  // server/cookies.ts crossSiteRequest).
+  it('refuses another site on every route that hands out the Guest cookie', () => {
+    const lines = mainTs.split('\n');
+    const handing: string[] = [];
+    const open: string[] = [];
+    lines.forEach((line, i) => {
+      const m = /url === '(\/api\/[^']*)'/.exec(line);
+      if (!m?.[1]) return;
+      const block = blockAt(lines, i);
+      if (!/handGuest\(/.test(block)) return;
+      handing.push(m[1]);
+      if (!/crossSiteRequest\(/.test(block)) open.push(m[1]);
+    });
+    expect(handing).toEqual(expect.arrayContaining(['/api/guest', '/api/public/landing']));
+    expect(open).toEqual([]);
+  });
 });

@@ -75,7 +75,7 @@ import {
 import { buildId, buildInfo, deployStamp, readBuildId } from './build_info';
 import { withBuildTag } from './build_tag';
 import { ConnectionLimiter } from './conn_limit';
-import { clearCookie, parseCookies, serializeCookie } from './cookies';
+import { clearCookie, crossSiteRequest, parseCookies, serializeCookie } from './cookies';
 import { authorizeUrl, CALLBACK_PATH, DiscordOauth, discordConfigFromEnv } from './discord_oauth';
 import { DiscordFlows } from './discord_state';
 import { displayOf, forgedMatchAssets, modelPointers, setForgedDisplay } from './display';
@@ -1424,6 +1424,10 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 405, { error: 'use POST' });
         return;
       }
+      if (crossSiteRequest(req.headers['sec-fetch-site'])) {
+        sendJson(res, 403, { error: 'cross-site' });
+        return;
+      }
       sendJson(res, 200, { name: handGuest(req, res, Date.now()).name });
       return;
     }
@@ -1533,10 +1537,15 @@ const server = http.createServer(async (req, res) => {
     // hands a visitor with no account its Guest, the cookie set again, and
     // answers the ladder of every human (ADR 0027), names and numbers, the
     // own panel and the week. No ids. A POST, since it may issue a Guest;
-    // a signed-in account reads its own and is handed no Guest.
+    // a signed-in account reads its own and is handed no Guest. Another
+    // site's page is answered nothing (server/cookies.ts crossSiteRequest).
     if (url === '/api/public/landing') {
       if (req.method !== 'POST') {
         sendJson(res, 405, { error: 'use POST' });
+        return;
+      }
+      if (crossSiteRequest(req.headers['sec-fetch-site'])) {
+        sendJson(res, 403, { error: 'cross-site' });
         return;
       }
       const now = Date.now();

@@ -3,7 +3,7 @@
 // means "not logged in", not a 500.
 
 import { describe, expect, it } from 'vitest';
-import { clearCookie, parseCookies, serializeCookie } from '../server/cookies';
+import { clearCookie, crossSiteRequest, parseCookies, serializeCookie } from '../server/cookies';
 
 describe('cookie header parsing', () => {
   it('reads one cookie and several', () => {
@@ -70,5 +70,24 @@ describe('cookie header parsing', () => {
     expect(cleared).toContain('Max-Age=0');
     expect(cleared).toContain('HttpOnly');
     expect(cleared).toContain('Path=/');
+  });
+});
+
+describe('a request another site made', () => {
+  it('is one a browser marks cross-site', () => {
+    // A form on someone else's page posted here: Lax keeps the cookies off
+    // it, but the answer to a top-level POST may still set one, which would
+    // replace the Guest the browser holds (ADR 0033).
+    expect(crossSiteRequest('cross-site')).toBe(true);
+    expect(crossSiteRequest(['cross-site'])).toBe(true);
+  });
+
+  it('is not the page itself, the same site, a typed address, or no browser at all', () => {
+    expect(crossSiteRequest('same-origin')).toBe(false);
+    expect(crossSiteRequest('same-site')).toBe(false);
+    expect(crossSiteRequest('none')).toBe(false);
+    // An older browser, or a script, sends no such header.
+    expect(crossSiteRequest(undefined)).toBe(false);
+    expect(crossSiteRequest('')).toBe(false);
   });
 });

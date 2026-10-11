@@ -88,7 +88,14 @@ import {
   stepsFinished,
   stepsStart,
 } from './first_steps';
-import { feedTopUnderHints, type HintsClock, hintsHold, hintsStart, stepHints } from './hints_fade';
+import {
+  feedTopUnderHints,
+  type HintsClock,
+  hintsCovered,
+  hintsHold,
+  hintsStart,
+  stepHints,
+} from './hints_fade';
 import { buildLadderBox, type LadderBox } from './ladder_box';
 import {
   closeLaneCard,
@@ -830,8 +837,10 @@ const CSS = `
   text-align: center; text-wrap: balance; }
 .hud-overlay-hint { font-size: 15px; font-weight: 700; margin-top: 8px; color: #ffe3a0; }
 /* The thumb controls stand down meanwhile: their box under the right thumb
-   took the tap meant for the globe, and a dead champion casts nothing. */
-.hud.thumbs.wait-globe .hud-slots { visibility: hidden; }
+   took the tap meant for the globe, and a dead champion casts nothing. Their
+   hint too, whose corner the column's lines reach on a phone; its fade clock
+   stands still meanwhile (ui/hints_fade.ts hintsCovered). */
+.hud.thumbs.wait-globe .hud-slots, .hud.thumbs.wait-globe .hud-hints { visibility: hidden; }
 .hud-menu-btn {
   pointer-events: auto; margin-top: 10px; padding: 10px 26px; border-radius: 6px;
   border: 1px solid #466030; background: #1d2a14; color: #d8e6c0;
@@ -2423,7 +2432,11 @@ export class Hud {
     this.hintsClock = stepHints(
       this.hintsClock,
       this.world.time,
-      this.nudgeBlocked(),
+      hintsCovered(
+        this.nudgeBlocked(),
+        this.stepsInput === 'thumbs',
+        this.rootEl.classList.contains('wait-globe'),
+      ),
       this.hintsHold,
     );
     if (this.hintsClock.faded) this.hintsEl.classList.add('faded');

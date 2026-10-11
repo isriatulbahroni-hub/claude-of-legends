@@ -1,0 +1,328 @@
+// The end screens' boxes (src/ui/end_layout.ts, drawn by
+// src/ui/end_screen.ts): the battle royale's end card and the 5v5's, laid
+// over the screen in a grid instead of one column to scroll through, with
+// no box over another, the whole screen on one screen at the desktops
+// played, the result's buttons always on the first one, and the grid
+// across the width, on a phone in landscape too.
+
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+import {
+  buttonRows,
+  DESKTOP_END,
+  type EndBoxes,
+  type EndContent,
+  endBoxes,
+  endKind,
+  endLayoutCss,
+  headHeight,
+  iconZoom,
+  PHONE_END,
+  tableHeight,
+} from '../src/ui/end_layout';
+import { END_SCREEN_CSS } from '../src/ui/end_screen';
+import { overlaps, type ScreenBox } from '../src/ui/royale_layout';
+import { ONE_LIFE_TOP, RESPAWN_TOP } from '../src/ui/royale_result';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+// The desktops at interface size 1 (ui_scale: 1 up to 1080 rows) and a
+// phone in landscape, which plays on the compact HUD.
+const SCREENS: readonly { w: number; h: number; compact: boolean }[] = [
+  { w: 960, h: 540, compact: false },
+  { w: 1024, h: 768, compact: false },
+  { w: 1280, h: 720, compact: false },
+  { w: 1366, h: 768, compact: false },
+  { w: 1536, h: 864, compact: false },
+  { w: 1920, h: 1080, compact: false },
+  { w: 844, h: 390, compact: true },
+];
+
+// Every card at its fullest: a Guest's (the account offer, the ladder box
+// with its name field), Respawn's five lines and ten rows with the level
+// bar and the Grafts, One life's two lines and five rows, the 5v5's match
+// time and the line that says it was not rated (on three lines in a
+// narrow column), both teams.
+const RESPAWN: EndContent = {
+  card: 'royale',
+  lines: 5,
+  rows: RESPAWN_TOP,
+  goal: true,
+  grafts: true,
+  ladder: true,
+  offer: true,
+};
+const ONE_LIFE: EndContent = {
+  card: 'royale',
+  lines: 2,
+  rows: ONE_LIFE_TOP,
+  goal: false,
+  grafts: true,
+  ladder: true,
+  offer: true,
+};
+const TEAMS: EndContent = {
+  card: 'teams',
+  lines: 4,
+  rows: 10,
+  goal: false,
+  grafts: false,
+  ladder: true,
+  offer: true,
+};
+// And lighter: an account's (no offer), a match that banked nothing (no
+// ladder), a card with no Grafts.
+const CARDS: readonly [string, EndContent][] = [
+  ['Respawn', RESPAWN],
+  ['One life', ONE_LIFE],
+  ['the 5v5', TEAMS],
+  ["an account's Respawn", { ...RESPAWN, offer: false }],
+  ["an account's 5v5", { ...TEAMS, offer: false }],
+  ['a 5v5 that banked nothing', { ...TEAMS, ladder: false, offer: false }],
+  ['One life with no Grafts', { ...ONE_LIFE, grafts: false, offer: false }],
+];
+
+const inside = (outer: ScreenBox, inner: ScreenBox): boolean =>
+  inner.left >= outer.left - 1e-6 &&
+  inner.top >= outer.top - 1e-6 &&
+  inner.right <= outer.right + 1e-6 &&
+  inner.bottom <= outer.bottom + 1e-6;
+
+const screen = (w: number, h: number): ScreenBox => ({ left: 0, top: 0, right: w, bottom: h });
+
+const height = (b: ScreenBox): number => b.bottom - b.top;
+const width = (b: ScreenBox): number => b.right - b.left;
+
+const named = (b: EndBoxes): [string, ScreenBox][] => {
+  const out: [string, ScreenBox][] = [
+    ['result', b.head],
+    ['feedback', b.feedback],
+  ];
+  if (b.progress) out.push(['level bar', b.progress]);
+  if (b.table) out.push(['table', b.table]);
+  if (b.ladder) out.push(['ladder', b.ladder]);
+  if (b.offer) out.push(['offer', b.offer]);
+  if (b.join) out.push(['Discord line', b.join]);
+  return out;
+};
+
+const apart = (boxes: readonly [string, ScreenBox][]): void => {
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const [an, a] = boxes[i]!;
+      const [bn, bb] = boxes[j]!;
+      expect(overlaps(a, bb), `${an} over ${bn}`).toBe(false);
+    }
+  }
+};
+
+const label = (s: { w: number; h: number; compact: boolean }): string =>
+  `${s.w}x${s.h}${s.compact ? ' (touch)' : ''}`;
+
+describe('the end screens', () => {
+  for (const s of SCREENS) {
+    const m = s.compact ? PHONE_END : DESKTOP_END;
+    for (const [name, c] of CARDS) {
+      const b = endBoxes(s.w, s.h, s.compact, c);
+
+      it(`keeps every box of ${name} clear of every other at ${label(s)}`, () => {
+        expect(b.kind).toBe('wide');
+        apart(named(b));
+        apart(b.buttons.map((x, i) => [`button ${i + 1}`, x]));
+      });
+
+      it(`fits ${name} on one screen with no page scroll at ${label(s)}`, () => {
+        expect(b.sheetScrolls).toBe(false);
+        expect(inside(screen(s.w, s.h), b.sheet)).toBe(true);
+        for (const [box, x] of named(b)) expect(inside(b.sheet, x), box).toBe(true);
+        // Every row of the table in view on a desktop; on a phone only the
+        // table may scroll, inside its own box, and never below a few rows.
+        if (!s.compact) expect(b.tableScrolls).toBe(false);
+        else if (b.table)
+          expect(height(b.table)).toBeGreaterThanOrEqual(m.rankHeadH + 4 * m.rankRowH);
+      });
+
+      it(`keeps the buttons of ${name} on the first screen at ${label(s)}`, () => {
+        expect(b.buttons).toHaveLength(c.card === 'royale' ? 3 : 2);
+        for (const button of b.buttons) {
+          expect(inside(screen(s.w, s.h), button)).toBe(true);
+          expect(inside(b.head, button)).toBe(true);
+          // A finger wide on a touchscreen.
+          if (s.compact) expect(height(button)).toBeGreaterThanOrEqual(44);
+        }
+        // The first one leads: across the battle royale's box, on the left
+        // of the 5v5's pair or over it in a narrow box.
+        const [first, second] = b.buttons as [ScreenBox, ScreenBox];
+        if (c.card === 'royale' || buttonRows(m, c.card, width(b.head)) === 2) {
+          expect(first.bottom).toBeLessThanOrEqual(second.top);
+        } else expect(first.right).toBeLessThanOrEqual(second.left);
+      });
+
+      it(`spreads ${name} across the width at ${label(s)}`, () => {
+        expect(width(b.sheet)).toBe(Math.min(m.maxWidth, s.w - 2 * m.gutter));
+        expect(width(b.sheet) / s.w).toBeGreaterThanOrEqual(0.7);
+        // The columns stand side by side and start together.
+        const table = b.table!;
+        expect(b.head.right).toBeLessThanOrEqual(table.left);
+        expect(table.top).toBe(b.head.top);
+        if (c.card === 'royale') {
+          expect(table.right).toBeLessThanOrEqual(b.feedback.left);
+          expect(width(table)).toBeCloseTo(width(b.head));
+          expect(width(b.feedback)).toBeCloseTo(width(b.head));
+          expect((b.ladder ?? b.feedback).top).toBe(b.head.top);
+        } else {
+          // The scoreboard twice as wide as the columns beside it, the
+          // offer heading the right one.
+          expect(width(table)).toBeCloseTo(2 * width(b.head));
+          expect(table.right).toBeLessThanOrEqual(b.feedback.left);
+          expect(width(b.feedback)).toBeCloseTo(width(b.head));
+          if (b.offer) {
+            expect(b.offer.top).toBe(b.head.top);
+            expect(b.offer.left).toBe(b.feedback.left);
+          }
+        }
+        // Every column reaches the sheet's foot, so the grid has no hole.
+        expect(Math.max(...named(b).map(([, x]) => x.bottom))).toBeCloseTo(b.sheet.bottom);
+      });
+    }
+  }
+
+  it("lays the 5v5's ladder under the result, and under the scoreboard on a phone", () => {
+    const b = endBoxes(1280, 720, false, TEAMS);
+    expect(b.ladder!.left).toBe(b.head.left);
+    expect(b.ladder!.top).toBeGreaterThan(b.head.bottom);
+    expect(b.ladder!.bottom).toBeCloseTo(b.sheet.bottom);
+    // On a phone the scoreboard gives up its height to it and scrolls in
+    // its box, so the result has its column to itself.
+    const p = endBoxes(844, 390, true, TEAMS);
+    expect(p.ladder!.left).toBe(p.table!.left);
+    expect(p.ladder!.right).toBe(p.table!.right);
+    expect(p.ladder!.top).toBeGreaterThan(p.table!.bottom);
+    expect(p.tableScrolls).toBe(true);
+    expect(p.head.bottom).toBeCloseTo(p.sheet.bottom);
+    // Hidden, it takes no room: the scoreboard has the whole column.
+    const none = endBoxes(844, 390, true, { ...TEAMS, ladder: false });
+    expect(none.ladder).toBeNull();
+    expect(none.table!.bottom).toBeCloseTo(none.sheet.bottom);
+  });
+
+  it("lays the battle royale's offer under the ranking and the ladder on a desktop", () => {
+    const b = endBoxes(1280, 720, false, RESPAWN);
+    const offer = b.offer!;
+    expect(offer.left).toBe(b.table!.left);
+    expect(offer.right).toBe(b.feedback.right);
+    expect(offer.top).toBeGreaterThanOrEqual(Math.max(b.table!.bottom, b.feedback.bottom));
+    // On a phone under the ranking alone, which gives up its height.
+    const p = endBoxes(844, 390, true, RESPAWN);
+    expect(p.offer!.left).toBe(p.table!.left);
+    expect(p.offer!.right).toBe(p.table!.right);
+    expect(p.feedback.bottom).toBeCloseTo(p.sheet.bottom);
+  });
+
+  it('shows the whole ranking and both teams on every desktop, tightened on a short one', () => {
+    for (const s of SCREENS.filter((x) => !x.compact)) {
+      for (const c of [RESPAWN, TEAMS]) {
+        const b = endBoxes(s.w, s.h, false, c);
+        const tall = s.h - 2 * DESKTOP_END.gutter >= DESKTOP_END.tallFrom;
+        expect(height(b.table!)).toBeGreaterThanOrEqual(tableHeight(DESKTOP_END, c, tall));
+      }
+    }
+    expect(DESKTOP_END.rankRowShortH).toBeLessThan(DESKTOP_END.rankRowH);
+    expect(DESKTOP_END.scoreRowShortH).toBeLessThan(DESKTOP_END.scoreRowH);
+  });
+
+  it('lets the table give up its height before anything else on a short screen', () => {
+    // A phone with its browser's bars: the ranking scrolls in its box, the
+    // result and its buttons stay whole on the first screen.
+    for (const c of [RESPAWN, TEAMS]) {
+      const b = endBoxes(844, 340, true, c);
+      expect(b.kind).toBe('wide');
+      expect(b.tableScrolls).toBe(true);
+      expect(height(b.head)).toBeGreaterThanOrEqual(headHeight(PHONE_END, c, width(b.head)));
+      for (const button of b.buttons) expect(inside(screen(844, 340), button)).toBe(true);
+      apart(named(b));
+    }
+  });
+
+  it('falls back to two columns, then one, on a narrower screen', () => {
+    for (const c of [RESPAWN, ONE_LIFE, TEAMS]) {
+      // A small phone in landscape, and a desktop at 175% interface size.
+      for (const [w, h, compact] of [
+        [667, 375, true],
+        [1366 / 1.75, 768 / 1.75, false],
+      ] as const) {
+        const b = endBoxes(w, h, compact, c);
+        expect(b.kind).toBe('two');
+        apart(named(b));
+        for (const button of b.buttons) expect(inside(screen(w, h), button)).toBe(true);
+      }
+      // A narrow window: one column that scrolls, the result first.
+      const narrow = endBoxes(460, 800, false, c);
+      expect(narrow.kind).toBe('one');
+      apart(named(narrow));
+      expect(narrow.head.top).toBe(DESKTOP_END.gutter);
+      for (const button of narrow.buttons) expect(inside(screen(460, 800), button)).toBe(true);
+    }
+  });
+
+  it('chooses the columns from the width inside the gutters', () => {
+    for (const m of [DESKTOP_END, PHONE_END]) {
+      expect(endKind(m.wideFrom, m)).toBe('wide');
+      expect(endKind(m.wideFrom - 1, m)).toBe('two');
+      expect(endKind(m.twoFrom - 1, m)).toBe('one');
+      // Three columns only where a third holds the ranking's row and the
+      // ladder's name field with its button, and the 5v5's middle one, on
+      // half the width, the scoreboard's five columns.
+      const inside = 2 * (m.pad + m.border);
+      expect((m.wideFrom - 2 * m.gap) / 3 - inside).toBeGreaterThanOrEqual(190);
+      expect((m.wideFrom - 2 * m.gap) / 2 - inside).toBeGreaterThanOrEqual(300);
+    }
+  });
+
+  it('draws the grid from the same numbers', () => {
+    const css = endLayoutCss();
+    for (const [hud, m] of [
+      ['.hud:not(.compact)', DESKTOP_END],
+      ['.hud.compact', PHONE_END],
+    ] as const) {
+      const sheet = `${hud} .end-screen .end-sheet`;
+      expect(css).toContain(`@container end (min-width: ${m.wideFrom}px)`);
+      expect(css).toContain(`@container end (min-width: ${m.twoFrom}px)`);
+      expect(css).toContain(`${sheet} { max-width: ${m.maxWidth}px; gap: ${m.gap}px; }`);
+      expect(css).toContain(
+        `${sheet} .end-box { padding: ${m.pad}px; border-width: ${m.border}px; }`,
+      );
+      expect(css).toContain(
+        `${sheet} :is(.end-btns, .br-end-btns) button { min-height: ${m.buttonH}px; }`,
+      );
+      expect(css).toContain(`${sheet} .br-end-row { height: ${m.rankRowH}px; }`);
+      expect(css).toContain(`${sheet} .hud-score-row:not(.head) { height: ${m.scoreRowH}px; }`);
+      expect(css).toContain(`${sheet} .hud-score-build { zoom: ${iconZoom(m.scoreRowH)}; }`);
+    }
+    expect(css).toContain(`@container end (height < ${DESKTOP_END.tallFrom}px)`);
+    // The 5v5's scoreboard twice as wide as the columns beside it; the
+    // battle royale's offer under the ranking and the side column on a
+    // desktop, under the ranking alone on a phone.
+    expect(css).toContain(
+      `.teams {\n    grid-template-areas: 'lead table side';\n    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);`,
+    );
+    expect(css).toContain(`grid-template-areas: 'lead table side' 'lead offer offer';`);
+    expect(css).toContain(`grid-template-areas: 'lead table side' 'lead offer side';`);
+    expect(css).toContain('container: end / size');
+    expect(END_SCREEN_CSS).toContain(css);
+    // The icons never drawn larger than they are.
+    expect(iconZoom(400)).toBe(1);
+  });
+
+  it('is what both end cards open on', () => {
+    const hud = readFileSync(path.join(ROOT, 'src/ui/hud.ts'), 'utf8');
+    const royale = readFileSync(path.join(ROOT, 'src/ui/royale_hud.ts'), 'utf8');
+    expect(hud).toContain("fillEndScreen(this.endOverlay, 'teams', {");
+    expect(royale).toContain("fillEndScreen(end, 'royale', {");
+    // The words stay the cards' own.
+    expect(hud).toContain("'Play again'");
+    expect(hud).toContain("'Return to menu'");
+  });
+});

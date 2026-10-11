@@ -65,6 +65,7 @@ import {
 } from './chip_text';
 import { COMPACT_ROW_GAP, COMPACT_SCALE, compactTapsCss } from './compact_taps';
 import { setText } from './dom_write';
+import { END_OFFER_CLASS, fillEndScreen } from './end_screen';
 import {
   buildFeedbackBox,
   FEEDBACK_ASK,
@@ -829,31 +830,19 @@ const CSS = `
   font-size: 14px; font-weight: 600; cursor: pointer;
 }
 .hud-menu-btn:hover { border-color: #7ca050; }
-/* The end card holds the scoreboard table itself, so it takes the panel's
-   width and stacks the two teams the same way the Tab panel does. */
-.hud-end-card {
-  margin-top: 14px; padding: 14px 20px; border-radius: 10px;
-  background: rgba(14, 20, 9, 0.92); border: 1px solid #466030;
-  width: min(1020px, calc(96 * var(--vw, 1vw))); max-height: calc(58 * var(--vh, 1vh));
-  overflow-y: auto;
-  display: flex; flex-direction: column; gap: 14px; pointer-events: auto;
-  text-shadow: none;
-  scrollbar-width: thin; scrollbar-color: #6e5a24 #10160c;
-}
-.hud-end-btns { display: flex; gap: 12px; }
+/* The end card holds the scoreboard table itself and stacks the two teams
+   the same way the Tab panel does (its box: ui/end_screen.ts). */
+.hud-end-card { display: flex; flex-direction: column; pointer-events: auto; }
 /* The moment right after a match is the one moment a player is most likely
    to want the next one, so this is where the server is offered. Muted, so
    it never competes with Play again. */
 .hud-end-join { pointer-events: auto; margin-top: 12px; font-size: 13px; color: #9fb089; }
-/* A phone is 390 tall in the landscape the game puts it in, and the end
-   screen carries a title, a result, the account offer, the whole
-   scoreboard, two buttons and the feedback box. It never fitted; adding
-   the box made it obvious, with the field and its button hanging off the
-   bottom edge where no finger could reach them. So on a touchscreen the
-   end screen starts at the top and scrolls, everything in it comes down a
-   size, and the touch bar on the edge stands down while a modal overlay
-   is up, the way it does for the shop. The pause menu lays its boxes over
-   the screen instead (ui/pause_menu.ts) and sets its own rules over these. */
+/* A phone is 390 tall in the landscape the game puts it in: on a
+   touchscreen a modal overlay starts at the top and scrolls, everything in
+   it comes down a size, and the touch bar on the edge stands down while
+   one is up, the way it does for the shop. The pause menu and the end
+   screens lay their boxes over the screen (ui/pause_menu.ts,
+   ui/end_screen.ts) and set their own rules over these. */
 .hud.compact .hud-overlay.modal {
   justify-content: flex-start; overflow-y: auto; pointer-events: auto;
   padding: 8px 10px 14px; gap: 2px;
@@ -862,7 +851,6 @@ const CSS = `
    scoreboard, which is a flex child that may shrink, was crushed to its
    first heading while the overlay reported nothing to scroll. */
 .hud.compact .hud-overlay.modal > * { flex: none; }
-.hud.compact .hud-end-card { max-height: none; margin-top: 8px; padding: 8px 10px; gap: 8px; }
 .hud.compact .hud-overlay-title { font-size: 26px; letter-spacing: 1px; }
 .hud.compact .hud-overlay-sub { font-size: 12.5px; margin-top: 2px; }
 .hud.compact .hud-overlay-life { font-size: 11.5px; margin-top: 3px; }
@@ -876,12 +864,7 @@ const CSS = `
 .hud.compact .hud-overlay.returning { justify-content: flex-end;
   padding-bottom: ${RETURN_WASH_PHONE_BOTTOM_PX}px; }
 .hud.compact .hud-overlay.returning .hud-overlay-title { font-size: 20px; }
-.hud.compact .hud-end-rating { font-size: 13px; margin-top: 2px; min-height: 0; }
-.hud.compact .hud-end-join { margin-top: 8px; font-size: 11.5px; }
 .hud.compact .hud-menu-btn { margin-top: 6px; padding: 8px 18px; font-size: 13px; }
-.hud.compact .hud-end-offer { padding: 8px 10px; gap: 8px; }
-.hud.compact .hud-end-offer b { font-size: 13px; }
-.hud.compact .hud-end-offer span { font-size: 11.5px; }
 .hud.overlay-open ~ .touchbar { display: none; }
 
 /* The feedback box (ui/feedback_box.ts), on the end screen and in the
@@ -923,7 +906,6 @@ const CSS = `
 .hud.compact .hud-feedback-row .hud-menu-btn { margin-top: 0; padding: 8px 14px; font-size: 12.5px; }
 .hud.compact .hud-feedback-thanks { font-size: 12px; }
 .hud-end-join a { color: #cbd9b4; }
-.hud-end-rating { font-size: 15px; font-weight: 700; margin-top: 4px; min-height: 18px; }
 /* The ladder box (ui/ladder_box.ts), on the end screen and in the pause
    menu of a match that scores: where the player stands on the ladder of
    every human, in gold like the account offer, and a Guest's name. */
@@ -959,24 +941,6 @@ const CSS = `
 .hud.compact .hud-ladder-row { margin-top: 6px; gap: 6px; }
 .hud.compact .hud-ladder-field { font-size: 12px; padding: 6px 8px; }
 .hud.compact .hud-ladder-row .hud-menu-btn { padding: 7px 14px; font-size: 12.5px; }
-/* The account offer (ui/account_offer.ts), above the table and in gold:
-   the one thing on this screen that asks for a decision, made in the
-   visitor's own numbers. Absent for an account. */
-.hud-end-offer {
-  pointer-events: auto; margin-top: 12px; padding: 10px 16px; border-radius: 8px;
-  border: 1px solid #8a7430; background: rgba(30, 26, 12, 0.92); text-shadow: none;
-  display: none; align-items: center; gap: 16px;
-  width: min(1020px, calc(96 * var(--vw, 1vw)));
-  box-sizing: border-box; color: #e6dcb8;
-}
-.hud-end-offer.open { display: flex; }
-.hud-end-offer-words { flex: 1; min-width: 0; }
-.hud-end-offer b { display: block; font-size: 15px; color: #f2e6c0; }
-.hud-end-offer span { display: block; margin-top: 2px; font-size: 12.5px; line-height: 1.35; color: #c9bd93; }
-.hud-end-offer .hud-menu-btn {
-  margin: 0; border-color: #8a7430; background: #3a3014; color: #f2e6c0; white-space: nowrap;
-}
-.hud-end-offer .hud-menu-btn:hover { border-color: #c9a84a; }
 /* The battle royale (ADR 0031, ui/royale_hud.ts) has no gold, no shop,
    no recall, no lanes, no towers and no teams: what would say so stands
    down, and its own layer takes the top of the screen. */
@@ -1269,6 +1233,7 @@ export class Hud {
   private readonly deathTitle: HTMLElement;
   private readonly deathSub: HTMLElement;
   private readonly endOverlay: HTMLElement;
+  private readonly endHead: HTMLElement;
   private readonly endTitle: HTMLElement;
   private readonly endSub: HTMLElement;
   private readonly endRating: HTMLElement;
@@ -2034,13 +1999,13 @@ export class Hud {
     );
 
     this.endOverlay = el('div', 'hud-overlay modal');
-    this.endTitle = el('div', 'hud-overlay-title');
-    this.endSub = el('div', 'hud-overlay-sub');
+    this.endTitle = el('div', 'end-title');
+    this.endSub = el('div', 'hud-end-sub');
     this.endRating = el('div', 'hud-end-rating');
     this.endStats = el('div', 'hud-end-card');
     // The account offer (ui/account_offer.ts): filled at the end of a
     // visitor's practice match, never opened for an account.
-    this.endOffer = el('div', 'hud-end-offer');
+    this.endOffer = el('div', END_OFFER_CLASS);
     const offerWords = el('div', 'hud-end-offer-words');
     this.endOfferLine = el('b', '');
     this.endOfferReason = el('span', '');
@@ -2052,7 +2017,7 @@ export class Hud {
       onExit('account');
     });
     this.endOffer.append(offerWords, offerBtn);
-    const endAgain = el('button', 'hud-menu-btn', 'Play again');
+    const endAgain = el('button', 'hud-menu-btn primary', 'Play again');
     endAgain.addEventListener('click', () => {
       // The rematch may reuse the last pick and skip the lock-in click, so
       // this click is the gesture that takes the next match fullscreen.
@@ -2061,8 +2026,13 @@ export class Hud {
     });
     const endReturn = el('button', 'hud-menu-btn', 'Return to menu');
     endReturn.addEventListener('click', () => onExit('menu'));
-    const endBtns = el('div', 'hud-end-btns');
+    const endBtns = el('div', 'end-btns');
     endBtns.append(endAgain, endReturn);
+    // The result: VICTORY or DEFEAT, the match time, the rating, the ways on.
+    this.endHead = el('div', 'hud-end-head');
+    const endLines = el('div', 'end-lines');
+    endLines.append(this.endSub, this.endRating);
+    this.endHead.append(this.endTitle, endLines, endBtns);
     const endJoin = el('div', 'hud-end-join');
     const joinLink = document.createElement('a');
     joinLink.href = DISCORD;
@@ -2079,17 +2049,18 @@ export class Hud {
     // result, since it is the result that stays.
     this.endLadder = buildLadderBox(el);
     this.pauseLadder = buildLadderBox(el);
-    this.endOverlay.append(
-      this.endTitle,
-      this.endSub,
-      this.endRating,
-      this.endLadder.root,
-      this.endOffer,
-      this.endStats,
-      endBtns,
-      this.endFeedback.root,
-      endJoin,
-    );
+    // Its boxes laid over the screen (ui/end_screen.ts): the result over
+    // the ladder, the scoreboard, the offer over the feedback box over the
+    // Discord line.
+    fillEndScreen(this.endOverlay, 'teams', {
+      head: this.endHead,
+      lead: [],
+      table: this.endStats,
+      side: [this.endOffer, this.endFeedback.root],
+      foot: endJoin,
+      offer: null,
+      ladder: this.endLadder.root,
+    });
 
     this.escapeOverlay = el('div', 'hud-overlay modal');
     // And in the pause menu, which is the other door out: whoever is
@@ -2388,9 +2359,14 @@ export class Hud {
         this.endOverlay.classList.contains('open') ||
         this.royale?.resultShown() === true,
     );
-    // The pause menu alone: what the HUD draws stands down behind it
+    // The pause menu: what the HUD draws stands down behind it
     // (ui/pause_menu.ts), so only the dimmed match shows between its boxes.
     this.rootEl.classList.toggle('paused', this.escapeOverlay.classList.contains('open'));
+    // And behind an end screen, the same way (ui/end_screen.ts).
+    this.rootEl.classList.toggle(
+      'ended',
+      this.endOverlay.classList.contains('open') || this.royale?.resultShown() === true,
+    );
   }
 
   // Something covers the HUD: the shop, the pause menu, the end screen or
@@ -3709,6 +3685,7 @@ export class Hud {
       playSfx(winner === this.selfTeam ? 'victory' : 'defeat');
       announceVoice(winner === this.selfTeam ? 'victory' : 'defeat', true);
       this.endTitle.textContent = winner === this.selfTeam ? 'VICTORY' : 'DEFEAT';
+      this.endHead.classList.toggle('won', winner === this.selfTeam);
       this.endTitle.style.color = winner === this.selfTeam ? '#8fd06a' : '#d06a6a';
       const total = Math.max(0, Math.floor(this.world.time));
       this.endSub.textContent = `Match time ${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;

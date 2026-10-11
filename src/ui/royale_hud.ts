@@ -22,6 +22,7 @@ import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
 import { setPortrait } from './champion_art';
 import { setClassName, setData, setHidden } from './dom_write';
+import { fillEndScreen, isEndOffer } from './end_screen';
 import { goalBar } from './royale_goal_bar';
 import { RoyaleHudGrafts } from './royale_hud_grafts';
 import { type MomentDeath, RoyaleHudMoments } from './royale_hud_moments';
@@ -210,45 +211,21 @@ const CSS = `
 .hud.br-dropping .hud-hints, .hud.br-dropping .hud-statuses { visibility: hidden; }
 .hud.br-dropping ~ .touchbar { display: none; }
 
-/* The end screen: the landing's card over the match, which plays on
-   behind it in One life. */
-.br-end { position: absolute; inset: 0; z-index: 41; display: flex; align-items: center;
-  justify-content: flex-start; flex-direction: column; pointer-events: auto; overflow-y: auto;
-  padding: 24px 16px; background: rgba(2, 4, 10, 0.62); }
-/* Centered while it fits, from the top once it does not: a centered
-   column taller than the screen put its title and the ranking's head
-   above the scroll's reach (960x540), and a shrunk card let the ladder's
-   name card ride over it. The two spacers take the slack, never the
-   card's own height. */
-.br-end::before, .br-end::after { content: ''; flex: 1 0 0; }
-.br-end > * { flex: none; }
-.br-end-card { width: min(620px, 94%); padding: 22px 26px 20px; border-radius: 14px;
-  border: 1px solid #6b5a2e; background: rgba(6, 10, 20, 0.9); color: #e6dcb8;
-  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55), 0 0 34px rgba(232, 196, 108, 0.1);
-  text-align: center; text-shadow: none; animation: br-card 0.45s ease-out; }
-@keyframes br-card { from { opacity: 0; transform: translateY(14px); } }
-.br-end-kicker { font-size: 11px; font-weight: 800; letter-spacing: 1.8px; text-transform: uppercase;
-  color: #c9a84a; }
-.br-end h2 { margin: 6px 0 4px; font-family: Cinzel, Georgia, serif; font-size: 30px;
-  font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #f0dca0;
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7); }
-.br-end-card.won h2 { color: #ffe08a; text-shadow: 0 0 24px rgba(240, 206, 120, 0.55); }
-.br-end-line { margin: 2px 0 0; font-size: 14px; color: #c9bd93; }
-.br-end-line:first-of-type { color: #f2e6c0; font-weight: 700; font-size: 15px; }
-.br-end-rank { margin: 14px 0 4px; text-align: left; }
-.br-end-rank h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-size: 11px;
-  font-weight: 800; letter-spacing: 1.8px; text-transform: uppercase; color: #c9a84a; }
-.br-end-rank h3::after { content: ''; flex: 1; height: 1px; background: rgba(201, 168, 74, 0.35); }
-.br-end-row { display: grid; grid-template-columns: 30px 30px minmax(0, 1fr) auto; gap: 10px;
-  align-items: center; padding: 4px 8px; border-radius: 8px; font-size: 13.5px; }
+/* The end screen: its boxes laid over the screen (ui/end_screen.ts), over
+   the match, which plays on behind it in One life. */
+.br-end { position: absolute; inset: 0; z-index: 41; display: flex; flex-direction: column;
+  pointer-events: auto; }
+/* The ranking: the place, the portrait, who (with a bot mark and the
+   champion), the score; the viewer's own row lit. */
+.br-end-row { display: grid; grid-template-columns: 22px auto minmax(0, 1fr) auto;
+  align-items: center; border-radius: 8px; }
 .br-end-row:nth-child(odd) { background: rgba(255, 255, 255, 0.03); }
 .br-end-row.self { background: rgba(232, 196, 108, 0.14); box-shadow: inset 0 0 0 1px rgba(232, 196, 108, 0.45); }
 .br-end-row .place { font-weight: 800; color: #c9a84a; font-variant-numeric: tabular-nums; }
-.br-end-row img { width: 30px; height: 30px; border-radius: 6px; object-fit: cover;
-  border: 1px solid #4a3f22; background: #0d1220; }
+.br-end-row img { display: block; border-radius: 6px; object-fit: cover; border: 1px solid #4a3f22; }
 .br-end-row .who { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .br-end-row .who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #f6ecd0; }
-.br-end-row .who small { color: #8f8f9e; font-size: 11px; white-space: nowrap; }
+.br-end-row .who small { color: #93a87c; font-size: 11px; white-space: nowrap; }
 .br-end-row .score { font-weight: 800; color: #ffe08a; font-variant-numeric: tabular-nums; }
 .br-end-btns { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
 .br-end-btns button { flex: 1 1 0; min-width: 120px; min-height: 44px; padding: 10px 14px;
@@ -259,29 +236,11 @@ const CSS = `
 .br-end-btns button.primary { flex-grow: 1.4; font-weight: 800; letter-spacing: 0.6px; color: #241a08;
   border-color: #f0deae; background: linear-gradient(180deg, #e8cc74 0%, #c9a84a 55%, #a07830 100%);
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25); }
-.br-end-extras { display: flex; flex-direction: column; align-items: center; gap: 4px;
-  margin-top: 6px; width: min(620px, 94%); }
-.br-end-extras > * { margin-left: auto; margin-right: auto; }
-.br-end-extras .hud-end-offer { width: 100%; }
-/* A short desktop (960x540, a laptop's 720): the buttons climb over the
-   ranking as on a phone, and the rows tighten, so the first screen holds
-   the title, the lines, the buttons and the ranking's head. */
-@media (max-height: 760px) {
-  .hud:not(.compact) .br-end { padding: 12px 16px; }
-  .hud:not(.compact) .br-end-card { padding: 14px 20px; display: flex; flex-direction: column; }
-  .hud:not(.compact) .br-end-btns { order: 1; margin-top: 10px; }
-  .hud:not(.compact) .br-end-rank { order: 2; margin-top: 10px; }
-  .hud:not(.compact) .br-end h2 { font-size: 24px; margin: 2px 0 2px; }
-  .hud:not(.compact) .br-end-row { padding: 2px 8px; font-size: 13px;
-    grid-template-columns: 26px 26px minmax(0, 1fr) auto; }
-  .hud:not(.compact) .br-end-row img { width: 26px; height: 26px; }
-}
 
 /* A phone: the top is one row, the 5v5's team score's height, so the
    announcements and the first steps keep their places; the feed keeps
    clear of the map in the corner and of the touch bar; the notices and
-   the ring keep off the middle, where the champion stands; the end card
-   starts at the top and scrolls. */
+   the ring keep off the middle, where the champion stands. */
 .hud.compact .br-head { flex-direction: row; gap: 8px; }
 .hud.compact .br-dusk { font-size: 13px; padding: 3px 12px 3px 9px; gap: 7px; }
 .hud.compact .br-dusk i { width: 10px; height: 10px; }
@@ -310,20 +269,6 @@ const CSS = `
 .hud.compact .br-note { font-size: ${COMPACT_NOTE_FONT_PX}px; padding: 3px 10px 3px 4px; }
 .hud.compact .br-note img { width: 22px; height: 22px; }
 .hud.compact .br-note.level { padding-left: 10px; }
-.hud.compact .br-end { justify-content: flex-start; padding: 8px 10px 14px; }
-.hud.compact .br-end::before, .hud.compact .br-end::after { display: none; }
-/* The buttons climb over the ranking: a phone held sideways shows the
-   title, the lines and the three buttons on its first screen, and the
-   ranking scrolls under them. */
-.hud.compact .br-end-card { padding: 12px 14px 12px; display: flex; flex-direction: column; flex: none; }
-.hud.compact .br-end-btns { order: 1; margin-top: 8px; }
-.hud.compact .br-end-rank { order: 2; }
-.hud.compact .br-end h2 { font-size: 21px; margin: 2px 0 2px; letter-spacing: 1.2px; }
-.hud.compact .br-end-line { font-size: 12px; }
-.hud.compact .br-end-line:first-of-type { font-size: 12.5px; }
-.hud.compact .br-end-rank { margin-top: 8px; }
-.hud.compact .br-end-row { font-size: 12px; padding: 2px 6px; grid-template-columns: 24px 24px minmax(0, 1fr) auto; }
-.hud.compact .br-end-row img { width: 24px; height: 24px; }
 .hud.compact .br-end-btns button { min-height: 44px; padding: 6px 10px; font-size: 13px; min-width: 100px; }
 `;
 
@@ -722,10 +667,10 @@ export class RoyaleHud {
     return this.endEl !== null;
   }
 
-  // The end screen, from the result the server sent; `extras` are the
-  // HUD's own boxes that belong under it (the ladder, the account offer,
-  // the feedback box); `mine`, what the card reads off this screen (the
-  // own assists, the best kept).
+  // The end screen, from the result the server sent, its boxes laid over
+  // the screen (ui/end_screen.ts); `extras` are the HUD's own boxes that
+  // belong on it (the ladder, the account offer, the feedback box); `mine`,
+  // what the card reads off this screen (the own assists, the best kept).
   showResult(
     result: RoyaleResult,
     extras: readonly HTMLElement[] = [],
@@ -734,47 +679,70 @@ export class RoyaleHud {
     this.endEl?.remove();
     const model = royaleEnd(result, mine);
     const end = el('div', 'br-end');
-    end.appendChild(this.endCard(model, result));
-    const more = el('div', 'br-end-extras');
-    for (const x of extras) more.appendChild(x);
-    if (extras.length > 0) end.appendChild(more);
+    const offer = extras.find(isEndOffer) ?? null;
+    const progress = this.endProgress(model);
+    fillEndScreen(end, 'royale', {
+      head: this.endCard(model, result),
+      lead: progress ? [progress] : [],
+      table: this.endRank(model),
+      side: extras.filter((x) => x !== offer),
+      foot: null,
+      offer,
+      ladder: null,
+    });
     this.host.root.appendChild(end);
     this.endEl = end;
     this.host.root.classList.add('overlay-open');
   }
 
+  // The level bar and the Grafts taken, in the box under the result; null
+  // for neither.
+  private endProgress(model: RoyaleEndModel): HTMLElement | null {
+    if (!model.goal && !model.grafts) return null;
+    const box = el('div', 'end-progress');
+    if (model.goal) box.appendChild(goalBar(model.goal));
+    if (model.grafts) box.appendChild(el('p', 'br-end-grafts', model.grafts));
+    return box;
+  }
+
+  // The ranking in its own box, its rows scrolling under the heading when
+  // the screen is short; null for no rows.
+  private endRank(model: RoyaleEndModel): HTMLElement | null {
+    if (model.rows.length === 0) return null;
+    const rank = el('div', 'br-end-rank');
+    const rows = el('div', 'end-rows');
+    for (const row of model.rows) {
+      const line = el('div', `br-end-row${row.self ? ' self' : ''}`);
+      const img = el('img', '');
+      img.alt = '';
+      setPortrait(img, row.championId, 0x6b5a2e);
+      const who = el('span', 'who');
+      who.appendChild(el('b', '', row.name));
+      if (row.bot) who.appendChild(el('span', 'br-bot', 'BOT'));
+      const champ = CHAMPIONS[row.championId]?.name.split(',')[0];
+      if (champ) who.appendChild(el('small', '', champ));
+      line.append(
+        el('span', 'place', String(row.place)),
+        img,
+        who,
+        el('span', 'score', String(row.score)),
+      );
+      rows.appendChild(line);
+    }
+    rank.append(el('h3', 'end-label end-rank-head', model.heading), rows);
+    return rank;
+  }
+
+  // The result: the mode, the title, the lines and the ways on.
   private endCard(model: RoyaleEndModel, result: RoyaleResult): HTMLElement {
     const card = el('div', `br-end-card${model.won ? ' won' : ''}`);
+    const lines = el('div', 'end-lines');
+    for (const line of model.lines) lines.appendChild(el('p', 'br-end-line', line));
     card.append(
       el('div', 'br-end-kicker', `Battle royale · ${royaleMode(result.v).title}`),
       el('h2', '', model.title),
+      lines,
     );
-    for (const line of model.lines) card.appendChild(el('p', 'br-end-line', line));
-    if (model.grafts) card.appendChild(el('p', 'br-end-grafts', model.grafts));
-    if (model.goal) card.appendChild(goalBar(model.goal));
-    if (model.rows.length > 0) {
-      const rank = el('div', 'br-end-rank');
-      rank.appendChild(el('h3', '', model.heading));
-      for (const row of model.rows) {
-        const line = el('div', `br-end-row${row.self ? ' self' : ''}`);
-        const img = el('img', '');
-        img.alt = '';
-        setPortrait(img, row.championId, 0x6b5a2e);
-        const who = el('span', 'who');
-        who.appendChild(el('b', '', row.name));
-        if (row.bot) who.appendChild(el('span', 'br-bot', 'BOT'));
-        const champ = CHAMPIONS[row.championId]?.name.split(',')[0];
-        if (champ) who.appendChild(el('small', '', champ));
-        line.append(
-          el('span', 'place', String(row.place)),
-          img,
-          who,
-          el('span', 'score', String(row.score)),
-        );
-        rank.appendChild(line);
-      }
-      card.appendChild(rank);
-    }
     const btns = el('div', 'br-end-btns');
     const button = (text: string, action: PostMatchAction, primary = false): HTMLButtonElement => {
       const b = el('button', primary ? 'primary' : '', text);

@@ -27,8 +27,12 @@ export const PAUSE_MENU_CSS = `
    down: between the boxes only the dimmed match shows, and nothing stands
    over them. Hidden rather than removed, so nothing moves under the menu.
    The turn wall keeps its dark ground under the menu, its words already
-   let go (ui/hud.ts). */
-.hud.paused > :not(.hud-pause):not(.hud-turn), .hud.paused ~ * { visibility: hidden; }
+   let go (ui/hud.ts). At once, not at the end of a block's own fade (the
+   first steps' card fades out over 0.4 s): fading, it still showed and
+   its button still took the keyboard's Tab. */
+.hud.paused > :not(.hud-pause):not(.hud-turn), .hud.paused ~ * {
+  visibility: hidden; transition: none;
+}
 ${M} {
   justify-content: flex-start; align-items: stretch; gap: 0; overflow-y: auto;
   background: radial-gradient(ellipse at 50% 45%, rgba(6, 10, 4, 0.58), rgba(2, 4, 1, 0.8));

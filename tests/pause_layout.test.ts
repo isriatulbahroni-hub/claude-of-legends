@@ -284,8 +284,10 @@ describe('the pause menu', () => {
     expect(hud).toContain(
       "this.rootEl.classList.toggle('paused', this.escapeOverlay.classList.contains('open'));",
     );
+    // At once, not at the end of a block's own fade, during which it
+    // showed and its buttons took the keyboard's Tab.
     expect(PAUSE_MENU_CSS).toContain(
-      '.hud.paused > :not(.hud-pause):not(.hud-turn), .hud.paused ~ * { visibility: hidden; }',
+      '.hud.paused > :not(.hud-pause):not(.hud-turn), .hud.paused ~ * {\n  visibility: hidden; transition: none;\n}',
     );
     expect(hud).toContain('.hud.overlay-open .hud-turn > * { visibility: hidden; }');
     expect(PAUSE_MENU_CSS).toContain(pauseLayoutCss());

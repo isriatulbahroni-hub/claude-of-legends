@@ -196,9 +196,9 @@ function materializeUnit(s: SnapUnit): Unit {
 }
 
 // The planet as the own champion's prediction walks it (ADR 0029): the
-// ground the server's sim walks (its grid, without the walls a match
-// raises), and the launch pads, which throw a champion whose walk ends on
-// one (src/sim/royale/pads.ts).
+// ground the server's sim walks (its grid, the walls a match raises
+// blocked on it as the snapshots tell them), and the launch pads, which
+// throw a champion whose walk ends on one (src/sim/royale/pads.ts).
 export interface PlanetWalk {
   ground: Ground;
   pads: readonly { at: Vec3; to: Vec3 }[];
@@ -815,6 +815,9 @@ export class ClientWorld implements IWorld {
     for (const id of [...this.walls.keys()]) {
       if (!seenW.has(id)) this.walls.delete(id);
     }
+    // The planet's prediction walks round the walls standing, as its sim
+    // does (src/net/self_predict.ts).
+    if (this.predictsOnSphere) this.predictor?.standWalls(this.walls.values());
 
     if (msg.royale) this.applyRoyale(msg.royale);
     if (this.royaleMatch) this.applyWatch(msg.royale?.wa, new Set(msg.units.map((s) => s.i)));

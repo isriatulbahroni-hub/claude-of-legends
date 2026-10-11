@@ -20,8 +20,10 @@ import { dirTo, dist, offset, type Vec3 } from '../src/sim/geo';
 import { planetGameMap } from '../src/sim/royale/planet_map';
 import { DROP_S, PAD_FLIGHT_S, PAD_REACH_M, PAD_THROW_M } from '../src/sim/royale/types';
 import type { Sim } from '../src/sim/sim';
+import type { CombatCtx } from '../src/sim/sim_context';
 import { DT, type Vec2 } from '../src/sim/types';
 import type { Unit } from '../src/sim/unit';
+import { raiseWall } from '../src/sim/walls';
 import { loadPlanet } from './royale_planet';
 
 const FRAME_MS = 16;
@@ -250,6 +252,13 @@ function foeWalkingAway(h: Served, ahead: number, speed: number): Unit {
   return foe;
 }
 
+// A wall raised on the server as a cast raises one (src/sim/walls.ts):
+// `ahead` meters along `way` from `from`, across it, `length` long.
+function wallAcross(h: Served, from: Vec2, way: Vec2, ahead: number, length: number, s: number) {
+  const ctx = (h.sim as unknown as { ctx(): CombatCtx }).ctx();
+  raiseWall(ctx, 0, 1, offset(from, way, ahead), way, length, s);
+}
+
 // The drawn champion settled where the server's champion stands.
 function endsWithServer(h: Served): void {
   const end = lastFrame(h.frames);
@@ -403,6 +412,61 @@ describe('the own champion on the planet, drawn where it is going', () => {
       u.path = [];
     });
     h.run(4000);
+    endsWithServer(h);
+    staysSettled(h);
+  });
+
+  it('walks round a wall standing across the way as the server does, without a jump', () => {
+    const h = served();
+    const goal = straightFrom(h.champ.pos, 15, 30);
+    const way = dirTo(h.champ.pos, goal)!;
+    h.meddle((u) => wallAcross(h, u.pos, way, 4, 8, 20));
+    h.run(1000);
+    expect(h.world.walls.size).toBe(1);
+    h.order(goal);
+    const clickAt = h.now();
+    const orderedAt = h.sim.time * 1000;
+    // The way round may be long: the wall can close a gap between rocks.
+    h.run(30_000);
+    const speed = pace(h, orderedAt);
+    expect(worstStep(h.frames, clickAt)).toBeLessThan(frameStep(speed));
+    // The way round the wall searched as the server searches it: drawn a
+    // trip ahead all along.
+    expect(worstLead(h, clickAt + 2 * ONE_WAY_MS + 200)).toBeLessThan(speed * DT * 2 + 0.05);
+    expect(dist(h.champ.pos, goal)).toBeLessThan(0.1);
+    endsWithServer(h);
+  });
+
+  it('stops at a wall raised across its walk where the server stops, never through it', () => {
+    const h = served();
+    const goal = straightFrom(h.champ.pos, 20, 40);
+    h.order(goal);
+    h.run(1500);
+    // Where the server's champion stood as the wall rose.
+    const rose: { at: Vec2 | null } = { at: null };
+    h.meddle((u) => {
+      rose.at = { ...u.pos };
+      wallAcross(h, u.pos, dirTo(u.pos, goal)!, 4, 12, 6);
+    });
+    h.run(DT * 1000);
+    const raisedAt = h.now();
+    h.run(3000);
+    // The sim's walk stopped at the wall's face, its path dropped.
+    expect(h.champ.path).toHaveLength(0);
+    const from = rose.at!;
+    const face = dist(from, h.champ.pos);
+    expect(face).toBeGreaterThan(2);
+    expect(face).toBeLessThan(4);
+    // The drawing, a trip ahead when the wall rose, stopped there too
+    // once told of it, never walked on through it.
+    for (const f of h.frames) {
+      if (f.at > raisedAt) expect(dist(from, f.drawn)).toBeLessThan(face + 0.1);
+    }
+    expect(worstStep(h.frames, raisedAt)).toBeLessThan(frameStep(h.champ.moveSpeed));
+    endsWithServer(h);
+    // The wall falls: the walk the sim dropped is not taken up again.
+    h.run(4000);
+    expect(h.world.walls.size).toBe(0);
     endsWithServer(h);
     staysSettled(h);
   });

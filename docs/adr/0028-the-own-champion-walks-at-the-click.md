@@ -76,8 +76,10 @@ as on the plane, with the same predictor, and still nothing on the wire or in th
   grid the browser already fetched for the match (`planetWalk`, `src/game/planet_records.ts`),
   with the sim's own path search and step along great circles. A step that ends on a launch pad
   with the walk ending there stops the walk where the pad throws it; the throw and the flight are
-  drawn as the server tells them, and the drop too. The walls an ability raises are not on the
-  client's grid: a walk that runs into one ends as the snapshots show it.
+  drawn as the server tells them, and the drop too. The walls an ability raises, which every
+  snapshot lists, are blocked on the client's grid as the sim blocks them (`blockWall`,
+  `src/sim/walls.ts`): a way searched at the click goes round one as the server's search does,
+  and a walk a wall rises across stops at its face as the sim's does.
 - **The walk is remembered, not told.** A battle royale's snapshot does not carry the path (it
   never did, and the wire stays as it is), so the client remembers the path it searched for each
   order the server answered (`src/net/walk_memory.ts`), wears it down as the server's champion
@@ -101,4 +103,5 @@ as on the plane, with the same predictor, and still nothing on the wire or in th
 through a connection of 50 to 250 ms each way, ragged or not, and pins the same promises as the
 plane's: the next frame answers the click, no frame jumps, the drawing is a trip ahead of the
 server's champion, and it ends where the server's champion ends, through a stop, a knock-up, a
-blink, a chase and its end, an attack that did not take and a launch pad.
+blink, a chase and its end, an attack that did not take, a wall standing across the way, a wall
+raised across the walk, and a launch pad.

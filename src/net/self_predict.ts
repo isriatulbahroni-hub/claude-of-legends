@@ -24,6 +24,7 @@ import { copy, dist, norm, scale, settle, sub } from '../sim/geo';
 import type { Ground } from '../sim/ground';
 import { stepMovement } from '../sim/movement';
 import { DT, type Vec2 } from '../sim/types';
+import { blockWall, clampThroughWalls, unblockWall } from '../sim/walls';
 import { WalkMemory } from './walk_memory';
 
 // What the newest snapshot says of the own champion's walk.
@@ -75,8 +76,19 @@ export interface DrawnSelf {
   heading: Vec2 | null;
 }
 
-// What the prediction walks on: the ground's path search and line of walk.
-export type WalkGround = Pick<Ground, 'findPath' | 'lineOfWalk'>;
+// What the prediction walks on: the ground's path search, line of walk,
+// and the cells a wall blocks.
+export type WalkGround = Pick<
+  Ground,
+  'findPath' | 'lineOfWalk' | 'isWalkableAt' | 'blockCircle' | 'unblockCircle'
+>;
+
+// A wall a snapshot tells: its id and its two ends (src/sim/walls.ts).
+export interface StandingWall {
+  id: number;
+  a: Vec2;
+  b: Vec2;
+}
 
 // What an order does to the walk, as the sim would do it. A walk and a
 // chase keep where their path was searched from, which the memory starts
@@ -184,6 +196,9 @@ export class SelfPredictor {
   private easedAt = 0;
   private drawing = false;
   private readonly memory: WalkMemory;
+  // The walls standing on the ground walked, by id, with the points each
+  // blocked (standWalls).
+  private readonly walls = new Map<number, readonly Vec2[]>();
 
   constructor(
     private readonly ground: WalkGround,
@@ -262,6 +277,23 @@ export class SelfPredictor {
   // the units, since a chased unit's new position moves the walk too.
   walkedAt(now: number): Vec2 | null {
     return this.drawing ? (this.raw(now)?.pos ?? null) : null;
+  }
+
+  // The walls the newest snapshot tells: their ground blocked as the sim
+  // blocks it (src/sim/walls.ts), so a way searched here goes round one as
+  // the server's search does, and a walk runs into one where the sim's
+  // stops; a wall gone frees its ground.
+  standWalls(walls: Iterable<StandingWall>): void {
+    const seen = new Set<number>();
+    for (const w of walls) {
+      seen.add(w.id);
+      if (!this.walls.has(w.id)) this.walls.set(w.id, blockWall(this.ground, w.a, w.b));
+    }
+    for (const [id, samples] of this.walls) {
+      if (seen.has(id)) continue;
+      unblockWall(this.ground, samples);
+      this.walls.delete(id);
+    }
   }
 
   // A snapshot arrived. The drawn champion does not jump with it: what
@@ -444,7 +476,8 @@ export class SelfPredictor {
 
   // The sim's walk from `from` to `to`, tick-sized steps: nothing while
   // held in place, into range of the attacked unit and no further, along
-  // the path otherwise, stopped where a step would cross what cannot be
+  // the path otherwise, stopped at the face of a wall a path searched
+  // before it rose runs into, and where a step would cross what cannot be
   // walked when the ground's navigation is strict, and where a launch pad
   // throws it.
   private walk(w: Walker, s: SelfState, from: number, to: number): void {
@@ -479,6 +512,7 @@ export class SelfPredictor {
       }
       const before = copy(w.pos);
       stepMovement(w, dt, s.speed);
+      if (this.walls.size > 0) clampThroughWalls(this.ground, before, w);
       if (this.rules.strict && !this.ground.lineOfWalk(before, w.pos)) {
         w.pos = before;
         w.path = [];

@@ -6,7 +6,9 @@
 // and the planet exist. Nothing here is reachable from the production UI.
 //
 // ?royale-ui-demo=<scene>: pick, pick-one, home, drop (with a Graft
-// offer), calm (with the status chips and a Heartwood offer), closing, out, end-one, end-respawn, moments (the loud
+// offer), calm (with the status chips and a Heartwood offer), closing,
+// out, wash and wash-globe (a Respawn death's wash with the goal's line,
+// and its wait's globe), end-one, end-respawn, moments (the loud
 // moments: the Seedfalls' edge arrows, the Clamors, the feed folding, the
 // run's spotlight, the cache's ritual and the loot's words, the Dusk's
 // pill, every new block faked).
@@ -136,6 +138,8 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
       ? 'one_life'
       : 'respawn';
   const moments = scene === 'moments';
+  // A Respawn death's wash, and its wait's globe a second in.
+  const wash = scene === 'wash' || scene === 'wash-globe';
   // The loud moments' blocks, faked: two Seedfalls (one called and one
   // landed), a Clamor every two seconds, a Lodestar's mark.
   const seedfalls = (t: number): SnapSeedfall[] => [
@@ -184,7 +188,7 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
         ...offer('bough', ['second_breath', 'stoneblood', 'thornhide'], t),
       };
     }
-    if (scene === 'calm' || scene === 'end-respawn') {
+    if (scene === 'calm' || scene === 'end-respawn' || wash) {
       return {
         ...base,
         st: 'play',
@@ -252,6 +256,11 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
       for (let i = 0; i < 3; i++) pres.showPoints(1, line + 110 + i + 1, 'cache');
       pres.showRoyaleResult(result('respawn', 3, 9));
     }, 600);
+  } else if (wash) {
+    // Two takedowns banked before the death, for the goal's line on it.
+    window.setTimeout(() => {
+      for (let i = 0; i < 2; i++) pres.showPoints(10, 10 * (i + 1), 'kill');
+    }, 600);
   }
   const items = ITEM_LIST.filter((i) => i.tier === 2);
   // The notices run on the wall clock: a software renderer steps the sim
@@ -268,10 +277,10 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
     const w = wall();
     if (scene === 'closing' || moments) (self.pos as { y?: number }).y = -80;
     if (moments && Math.floor(t * 10) % 40 === 0) clamors = [[3, 79, 4, t]];
-    if (scene === 'out') {
+    if (scene === 'out' || wash) {
       self.dead = true;
       self.hp = 0;
-      self.respawnAt = t + 999;
+      self.respawnAt = t + (scene === 'wash-globe' ? 2 : 999);
     }
     const kills: { unitId: number; killerId: number }[] = [];
     for (const ev of events) {

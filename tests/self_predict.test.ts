@@ -139,6 +139,29 @@ describe('the own champion, drawn where it is going', () => {
     expect(dist(end.drawn, end.server)).toBeLessThan(0.01);
   });
 
+  it("walks a far connection's first click at its pace, and catches nothing up once answered", () => {
+    // Before the first answer, when an order lands is guessed short of a
+    // far trip; every snapshot that has not answered it says it lands
+    // later, so the walk keeps its pace from the click.
+    const h = served(250);
+    h.run(1000);
+    h.world.orderMove(h.champ.id, 50, 50);
+    const clickAt = h.now();
+    h.run(4000);
+    const speed = h.champ.moveSpeed;
+    let worst = 0;
+    for (let i = 1; i < h.frames.length; i++) {
+      if (h.frames[i]!.at <= clickAt) continue;
+      worst = Math.max(worst, dist(h.frames[i]!.drawn, h.frames[i - 1]!.drawn));
+    }
+    expect(worst).toBeLessThan(frameStep(speed));
+    for (const f of h.frames) {
+      if (f.at < clickAt + 1500) continue;
+      const there = h.serverAt(f.at + 250);
+      if (there) expect(dist(f.drawn, there)).toBeLessThan(speed * DT * 2 + 0.05);
+    }
+  });
+
   it('stops on the next frame at a stop, where the server stops', () => {
     const h = served(150);
     h.run(1000);

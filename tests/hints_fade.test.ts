@@ -9,6 +9,7 @@ import {
   HINTS_HOLD_THUMBS,
   HINTS_START,
   type HintsClock,
+  hintsCovered,
   hintsHold,
   hintsStart,
   stepHints,
@@ -75,6 +76,29 @@ describe('the hint fade clock', () => {
     const faded = run(HINTS_START, 0, 13, false, HINTS_HOLD_THUMBS);
     expect(faded.faded).toBe(true);
     expect(stepHints(faded, 14, true, HINTS_HOLD_THUMBS)).toBe(faded);
+  });
+});
+
+describe('the hint through the Respawn wait', () => {
+  // A phone's wait column (the title, the recap, the life, the goal's
+  // line, the Burr's line, the globe's line) rises into the thumbs hint's
+  // corner: the hint stands down with the thumb controls while the globe
+  // is up, and its clock stands still, to be read once the champion is back.
+  it('is covered by the globe with the thumbs, never with the tap scheme or a mouse', () => {
+    expect(hintsCovered(false, true, true)).toBe(true);
+    expect(hintsCovered(false, true, false)).toBe(false);
+    expect(hintsCovered(false, false, true)).toBe(false);
+    expect(hintsCovered(true, false, false)).toBe(true);
+  });
+
+  it('keeps its seconds through the wait and fades only after it', () => {
+    const a = run(HINTS_START, 0, 4, false, HINTS_HOLD_THUMBS);
+    const wait = run(a, 4.05, 30, hintsCovered(false, true, true), HINTS_HOLD_THUMBS);
+    expect(wait.faded).toBe(false);
+    expect(wait.seen).toBeCloseTo(a.seen, 5);
+    const back = run(wait, 30.05, 37, hintsCovered(false, true, false), HINTS_HOLD_THUMBS);
+    expect(back.faded).toBe(false);
+    expect(run(back, 37.05, 39, false, HINTS_HOLD_THUMBS).faded).toBe(true);
   });
 });
 

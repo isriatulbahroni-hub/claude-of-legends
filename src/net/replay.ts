@@ -46,7 +46,10 @@ import { type ClientMsg, isFiniteVec } from './protocol';
 // (ADR 0023, amended): what the bots see of a ring changes their play.
 // 9: an enemy pod seen only under the team's own reveal zone, never by
 // walking near it (traps.ts): what the bots see of a pod changes their play.
-export const REPLAY_VERSION = 9;
+// 10: the Voidmaul's strike a ground slam over a disk, alternating with its
+// Crush, and the stones its slam throws hurting what they land on
+// (combat/voidmaul_slam.ts, combat/voidmaul_stones.ts).
+export const REPLAY_VERSION = 10;
 
 // The checksum a replay must show at `tick`, or null when the record
 // says nothing about that tick (an older record, or a tick that is not

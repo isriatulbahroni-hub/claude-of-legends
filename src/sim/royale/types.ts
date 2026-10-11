@@ -83,7 +83,10 @@ export const CLAMOR_S = 3;
 // tuning and build.
 // 9: an enemy pod is seen only under the seat's own reveal zone, never by
 // walking near it (traps.ts): what the bots see of a pod changes their play.
-export const ROYALE_RULES_VERSION = 9;
+// 10: the Voidmaul Rising strikes with a ground slam and its Crush, and the
+// stones its slam throws across its ring hurt what they land on
+// (combat/voidmaul_slam.ts, combat/voidmaul_stones.ts).
+export const ROYALE_RULES_VERSION = 10;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {

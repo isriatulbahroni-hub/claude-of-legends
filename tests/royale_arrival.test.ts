@@ -3,9 +3,10 @@
 // fresh inside the light, in its Grace, its tally from zero (a playtest,
 // 2026-10-04: a person took a seat mid-fight at half health and was slain
 // five seconds after joining, with the bot's score and kills). In Respawn
-// it comes down at the field's level, a few steps from a fair first fight
-// when a bot offers one, else at a quiet spot (ADR 0031, amended
-// 2026-10-08). Recorded as an 'arrive' replay event, so a replay
+// it is the strongest standing seat of the champion picked and comes down
+// at the field's level and build at least (ADR 0031, amended 2026-10-11), a
+// few steps from a fair first fight when a bot offers one, else at a quiet
+// spot (amended 2026-10-08). Recorded as an 'arrive' replay event, so a replay
 // re-simulates it alike. The quiet spot (drop.ts arrivalSpot), the fair
 // foe's (drop.ts fairFoeSpot) and the Respawn return's point (score.ts
 // edgeOfLight) are pinned on the real Wanderseed.
@@ -16,6 +17,7 @@ import { RoyaleMatch } from '../server/royale_match';
 import type { RoyalePerson } from '../server/royale_seats';
 import { applyReplayEvent, loadRoyaleReplay } from '../src/net/replay';
 import { DUSK_PHASES } from '../src/sim/content/dusk';
+import { ITEMS } from '../src/sim/content/items';
 import { dist, type Vec3 } from '../src/sim/geo';
 import { Rng } from '../src/sim/rng';
 import {
@@ -36,8 +38,10 @@ import {
   endGrace,
 } from '../src/sim/royale/grace';
 import { along, type RoyaleGround, randomHeading } from '../src/sim/royale/layout';
-import { ARRIVAL_LEVEL_BEHIND } from '../src/sim/royale/levels';
+import { lowerMedian } from '../src/sim/royale/levels';
+import { grantPieces } from '../src/sim/royale/loot';
 import { edgeOfLight, returnCap } from '../src/sim/royale/score';
+import { buildValue } from '../src/sim/royale/strength';
 import {
   CALM_S,
   DROP_S,
@@ -120,8 +124,13 @@ describe('an Arrival in play', () => {
     }
     expect(u.sigilCooldowns.every((c) => c <= sim.time)).toBe(true);
     expect(u.statuses.map((s) => s.kind)).toEqual(['untargetable']);
-    expect(u.level).toBe(before.get(u.id)!.level);
-    expect(u.items).toEqual(before.get(u.id)!.items);
+    // Lifted to the field's middle at least, its level and its build
+    // (the lift's own cases below).
+    const field = champions(sim).filter((o) => o.id !== u.id);
+    expect(u.level).toBe(Math.max(before.get(u.id)!.level, lowerMedian(field.map((o) => o.level))));
+    expect(buildValue(u.items)).toBeGreaterThanOrEqual(
+      lowerMedian(field.map((o) => buildValue(o.items))),
+    );
     expect([u.kills, u.deaths, u.assists, u.killStreak]).toEqual([0, 0, 0, 0]);
     expect(sim.royale!.scores.get(u.id)).toBe(0);
     // The match's own count keeps what happened, and counts the Upstart it
@@ -413,7 +422,7 @@ describe('a Respawn Arrival meets a fair first fight', () => {
 });
 
 describe('a Respawn Arrival at the field level', () => {
-  it('lifts a seat under the field to one level below its lower median, nothing offered for it', () => {
+  it('lifts a seat under the field to its lower median, nothing offered for it', () => {
     const { match, sim } = started();
     const mode = sim.royaleMode!;
     tickTo(match, DROP_S + 30);
@@ -425,16 +434,57 @@ describe('a Respawn Arrival at the field level', () => {
     const maxBefore = seat.maxHp;
     const offers = (mode.state.offers.get(seat.id) ?? []).length;
     arriveAt(sim, seat);
-    expect(seat.level).toBe(9 - ARRIVAL_LEVEL_BEHIND);
+    expect(seat.level).toBe(9);
     expect(seat.maxHp).toBeGreaterThan(maxBefore);
     expect(seat.hp).toBe(seat.maxHp);
     expect(seat.mana).toBe(seat.maxMana);
     expect(seat.skillPoints).toBe(0);
     expect(effectiveRank(seat, 'R')).toBe(1);
-    // The Arrival's own Bough, and none for levels 5 and 7.
+    // The Arrival's own Bough, and none for levels 5, 7 and 9.
     const now = (mode.state.offers.get(seat.id) ?? []).filter((o) => o.offeredAt === sim.time);
     expect(now.map((o) => o.grade)).toEqual(['bough']);
     expect((mode.state.offers.get(seat.id) ?? []).length).toBe(offers + 1);
+  });
+
+  it("brings a seat's build up to the field's lower median, its own pieces, nothing announced", () => {
+    const { match, sim } = started();
+    const mode = sim.royaleMode!;
+    tickTo(match, DROP_S + 30);
+    const seat = bots(match, sim)[0]!;
+    seat.items = [];
+    // Every other seat a few pieces into its own build, the fallen too.
+    const others = champions(sim).filter((o) => o.id !== seat.id);
+    others.forEach((o, i) => {
+      o.items = [];
+      grantPieces(o, mode.builds.get(o.id)!, 2 + (i % 5));
+    });
+    others[0]!.dead = true;
+    const target = lowerMedian(others.map((o) => buildValue(o.items)));
+    expect(target).toBeGreaterThan(0);
+    arriveAt(sim, seat);
+    expect(buildValue(seat.items)).toBeGreaterThanOrEqual(target);
+    // Each piece an item of its own build or a part of one.
+    const tree = (id: string): string[] => [id, ...(ITEMS[id]?.buildsFrom ?? []).flatMap(tree)];
+    const wanted = new Set(mode.builds.get(seat.id)!.flatMap(tree));
+    for (const id of seat.items) expect(wanted.has(id)).toBe(true);
+    // The health its pieces add is all there, and nothing is announced.
+    expect(seat.hp).toBe(seat.maxHp);
+    const events = match.tick();
+    expect(events.some((e) => e.type === 'royale_loot' && e.unitId === seat.id)).toBe(false);
+  });
+
+  it('keeps the build of a seat already worth the field', () => {
+    const { match, sim } = started();
+    tickTo(match, DROP_S + 30);
+    const mode = sim.royaleMode!;
+    const seat = bots(match, sim)[0]!;
+    for (const o of champions(sim)) {
+      o.items = [];
+      grantPieces(o, mode.builds.get(o.id)!, o.id === seat.id ? 6 : 2);
+    }
+    const items = [...seat.items];
+    arriveAt(sim, seat);
+    expect(seat.items).toEqual(items);
   });
 
   it('keeps the level of a seat above the field', () => {
@@ -449,19 +499,96 @@ describe('a Respawn Arrival at the field level', () => {
     expect(seat.xp).toBe(40);
   });
 
-  it('leaves One life alone: a quiet spot in the calm, the level kept', () => {
+  it('leaves One life alone: a quiet spot in the calm, the level and build kept', () => {
     const { match, sim } = started('one_life');
     const mode = sim.royaleMode!;
     tickTo(match, DROP_S + CALM_S / 2);
     const [seat, foe] = bots(match, sim);
     mode.skills.set(foe!.id, 'gentle');
     fairScene(sim, seat!, [foe!], [foe!.pos as Vec3]);
-    for (const o of champions(sim)) if (o.id !== seat!.id && o.id !== foe!.id) levelTo(o, 9);
+    for (const o of champions(sim)) {
+      if (o.id === seat!.id || o.id === foe!.id) continue;
+      levelTo(o, 9);
+      grantPieces(o, mode.builds.get(o.id)!, 4);
+    }
     const level = seat!.level;
+    const items = [...seat!.items];
     arriveAt(sim, seat!);
     expect(seat!.level).toBe(level);
+    expect(seat!.items).toEqual(items);
     expect(mode.tally.fairArrivals).toBe(0);
     quietKept(sim, seat!);
+  });
+});
+
+// The seat a drop-in takes (RoyaleMatch.takeBotSeat, server/royale_join.ts
+// chooseBotSeat): in Respawn the strongest standing seat of the champion
+// picked, so a person arrives in a champion already fed, never one that fed
+// the others; its kills, deaths and assists from zero on the scoreboard.
+// Thirty-four seats: three bots on each champion.
+describe('the seat a drop-in takes', () => {
+  const wide = (variant: 'respawn' | 'one_life') => {
+    const match = new RoyaleMatch(1, 11, variant, [person(1)], royaleFactory(loadPlanet), 34);
+    return { match, sim: match.sim as unknown as Sim };
+  };
+  const fennSeats = (match: RoyaleMatch, sim: Sim): Unit[] =>
+    bots(match, sim)
+      .filter((u) => u.championId === 'fenn')
+      .sort((a, b) => a.id - b.id);
+
+  it('is the strongest standing seat of the champion picked in Respawn, its tally from zero', () => {
+    const { match, sim } = wide('respawn');
+    tickTo(match, DROP_S + 5);
+    const fenns = fennSeats(match, sim);
+    expect(fenns.length).toBe(3);
+    const [weak, strong, down] = fenns as [Unit, Unit, Unit];
+    levelTo(weak, 6);
+    levelTo(strong, 8);
+    levelTo(down, 12);
+    down.dead = true;
+    down.hp = 0;
+    down.respawnAt = sim.time + 4;
+    // A torv above them all: the champion picked comes first.
+    levelTo(bots(match, sim).find((u) => u.championId === 'torv')!, 14);
+    // The seat fed the others: ten deaths to its two takedowns.
+    strong.kills = 2;
+    strong.deaths = 10;
+    strong.assists = 3;
+    const p = match.takeBotSeat(person(2, 'fenn'))!;
+    expect(p.unitId).toBe(strong.id);
+    const score = match.buildScore() as {
+      rows: { unitId: number; kills: number; deaths: number; assists: number; b?: 1 }[];
+    };
+    const row = score.rows.find((r) => r.unitId === strong.id)!;
+    expect([row.kills, row.deaths, row.assists]).toEqual([0, 0, 0]);
+    expect(row.b).toBeUndefined();
+  });
+
+  it('takes the build into account at an equal level, then the Grafts held', () => {
+    const { match, sim } = wide('respawn');
+    tickTo(match, DROP_S + 5);
+    const mode = sim.royaleMode!;
+    const [a, b, c] = fennSeats(match, sim) as [Unit, Unit, Unit];
+    for (const u of [a, b, c]) {
+      levelTo(u, 7);
+      u.items = [];
+      u.grafts = [];
+    }
+    grantPieces(b, mode.builds.get(b.id)!, 3);
+    grantPieces(c, mode.builds.get(c.id)!, 3);
+    expect(b.items).toEqual(c.items);
+    c.grafts = ['g'];
+    expect(match.takeBotSeat(person(2, 'fenn'))!.unitId).toBe(c.id);
+    // The next one: the build over the bare seat.
+    expect(match.takeBotSeat(person(3, 'fenn'))!.unitId).toBe(b.id);
+  });
+
+  it('keeps the lowest unit id in One life, whatever the strength', () => {
+    const { match, sim } = wide('one_life');
+    tickTo(match, DROP_S + CALM_S / 2);
+    const [first, , last] = fennSeats(match, sim) as [Unit, Unit, Unit];
+    levelTo(last, 9);
+    expect(match.takeBotSeat(person(2, 'fenn'))!.unitId).toBe(first.id);
   });
 });
 

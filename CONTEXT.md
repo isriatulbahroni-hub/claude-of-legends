@@ -436,8 +436,10 @@ To take a bot's seat in a public match already under way (ADR 0025), which is wh
 the public queue does when nobody is waiting in it and such a match has people in it, early
 enough. The champion comes as the bot left it, in the seat's assigned lane, which the
 newcomer is told on arrival; the seat is never rated or recorded. In a battle royale under
-way the seat is not handed over in place: it makes an Arrival, keeping the bot's pieces, and
-its level unless Respawn lifts it to the field's, but none of its score or run.
+way the seat is not handed over in place: it makes an Arrival, keeping the bot's level and
+pieces unless Respawn lifts them to the field's, but none of its score, its kills, deaths and
+assists, or its run. In Respawn the seat taken is the strongest standing one of the champion
+picked (its level, then the worth of its build, then its Grafts): a champion already fed.
 _Avoid_: late join, hot join, backfill
 
 **Home**:
@@ -1248,10 +1250,11 @@ _Avoid_: quickening, zone speedup
 **Arrival**:
 A battle royale drop-in's coming down: the seat a person takes from its bot in play lands
 fresh (full health and mana, everything ready), its tally from zero, in its Grace. In Respawn
-it comes down at least one level under the middle of the field, a few steps from a fair first
-fight (a bot out of combat, the softest in reach, no higher in level, in sight of each other,
-nobody else near), else at a quiet spot, its Grace waits for the person's first order, and it
-carries its Upstart; in One life at a quiet spot.
+it comes down at the middle of the field at least, in level and in the worth of its build (the
+next pieces of its own build given until it is), a few steps from a fair first fight (a bot out
+of combat, the softest in reach, no higher in level, in sight of each other, nobody else near),
+else at a quiet spot, its Grace waits for the person's first order, and it carries its
+Upstart; in One life at a quiet spot, as the bot left it.
 _Avoid_: spawn, deploy
 
 **Grace**:

@@ -32,9 +32,11 @@
 // one (Respawn until JOIN_UNTIL_END_S before the end, One life in the
 // calm): one bot seat taken the way the server does (chooseBotSeat with
 // FIRST_ROYALE_CHAMPION, what a first visit's quick pick opens on, and, in
-// Respawn, the field's level), its bot detached, its Arrival begun, then
-// the --standin brain attached. Each
-// drop-in tells its level at landing, the nearest enemy then, whether a
+// Respawn, the strongest standing seat), its bot detached, its Arrival
+// begun, then the --standin brain attached. Each drop-in tells its level,
+// its build's value and its Grafts at landing against the field's (the
+// lower median of every other seat's) and the seat as it was taken, the
+// nearest enemy then, whether a
 // fair first fight was found (RoyaleTally.fairArrivals), whether it sees
 // an enemy on the first tick after landing (team vision), the seconds to
 // the first damage it dealt to a champion (an enemy's recentDamagers
@@ -95,6 +97,7 @@ import {
 import { royaleHouseChampions } from '../src/sim/royale/fill';
 import type { RoyaleLayout } from '../src/sim/royale/layout';
 import { lowerMedian } from '../src/sim/royale/levels';
+import { buildValue, seatStrength } from '../src/sim/royale/strength';
 import {
   CALM_S,
   DROP_S,
@@ -227,8 +230,17 @@ type SeatKind = RoyaleSkillId | 'passive' | 'standin' | 'dropin';
 interface DropIn {
   // The listed time it joined at, seconds after the match's landing.
   joinAt: number;
+  // At landing, its level, its build's value (royale/strength.ts
+  // buildValue) and the Grafts it holds, each against the lower median of
+  // every other seat's then (the fallen too); and the seat as the choice
+  // took it, before the Arrival lifted it. Absent from dumps made before.
   level: number;
   fieldLevel: number;
+  build?: number;
+  fieldBuild?: number;
+  grafts?: number;
+  fieldGrafts?: number;
+  taken?: { level: number; build: number; grafts: number };
   nearestM: number | null;
   fair: boolean;
   // An enemy champion in its sight on the first tick after landing; null
@@ -513,7 +525,6 @@ function play(
       variant === 'respawn' ? sim.time < s.endsAt - JOIN_UNTIL_END_S : sim.time < landAt + CALM_S;
     if (!open) return;
     const champs = [...sim.units.values()].filter((u) => u.kind === 'champion');
-    const fieldLevel = lowerMedian(champs.map((u) => u.level));
     const candidates = [...seats.values()]
       .filter((seat) => seat.skill in ROYALE_SKILLS)
       .map((seat) => {
@@ -523,16 +534,13 @@ function play(
           championId: u.championId ?? seat.championId,
           dead: u.dead,
           out: variant === 'one_life' && s.eliminated.includes(seat.id),
-          level: u.level,
+          ...seatStrength(u),
         };
       });
-    const id = chooseBotSeat(
-      candidates,
-      FIRST_ROYALE_CHAMPION,
-      variant === 'respawn' ? fieldLevel : undefined,
-    );
+    const id = chooseBotSeat(candidates, FIRST_ROYALE_CHAMPION, variant === 'respawn');
     if (id === null) return;
     const seat = seats.get(id)!;
+    const taken = seatStrength(sim.units.get(id)!);
     sim.detachPolicy(id);
     const fairBefore = mode.tally.fairArrivals ?? 0;
     sim.beginArrival(id);
@@ -540,6 +548,7 @@ function play(
     if (loadS <= 0) sim.attachPolicy(id, lagged(traced(dropinSkill, false), dropinLagSlots));
     seat.skill = 'dropin';
     const u = sim.units.get(id)!;
+    const others = champs.filter((o) => o.id !== id);
     let nearest: number | null = null;
     let nearestId = 0;
     for (const o of champs) {
@@ -560,7 +569,12 @@ function play(
       row: {
         joinAt,
         level: u.level,
-        fieldLevel,
+        fieldLevel: lowerMedian(others.map((o) => o.level)),
+        build: buildValue(u.items),
+        fieldBuild: lowerMedian(others.map((o) => buildValue(o.items))),
+        grafts: u.grafts.length,
+        fieldGrafts: lowerMedian(others.map((o) => o.grafts.length)),
+        taken,
         nearestM: nearest,
         fair,
         seen: null,
@@ -1042,7 +1056,9 @@ function print(m: Match): void {
   for (const d of m.dropIns) {
     const s = (x: number | null) => (x === null ? 'never' : `${Math.round(x)} s`);
     console.log(
-      `  drop-in at ${clock(d.joinAt)}: level ${d.level} (field ${d.fieldLevel}), nearest enemy ` +
+      `  drop-in at ${clock(d.joinAt)}: level ${d.level} (field ${d.fieldLevel}), ` +
+        `build ${d.build ?? '-'} (field ${d.fieldBuild ?? '-'}), grafts ${d.grafts ?? '-'} ` +
+        `(field ${d.fieldGrafts ?? '-'}), nearest enemy ` +
         `${d.nearestM === null ? '-' : `${d.nearestM.toFixed(1)} m`}, fair foe ${d.fair ? 'yes' : 'no'}, ` +
         `an enemy in sight ${d.seen ? 'yes' : 'no'}, ` +
         `first hit ${s(d.firstDealt)}, first hurt ${s(d.firstTaken)}, first takedown ${s(d.firstTakedown)}, ` +
@@ -1288,10 +1304,25 @@ function dropInSummary(all: readonly Match[]): void {
       const level = median(ds.map((d) => d.level));
       const field = median(ds.map((d) => d.fieldLevel));
       const life = median(ds.map((d) => d.firstLife));
+      const has = (x: number | undefined): x is number => x !== undefined;
+      const build = median(ds.map((d) => d.build).filter(has));
+      const fieldBuild = median(ds.map((d) => d.fieldBuild).filter(has));
+      const grafts = median(ds.map((d) => d.grafts).filter(has));
+      const fieldGrafts = median(ds.map((d) => d.fieldGrafts).filter(has));
+      const atLevel = ds.filter((d) => d.level >= d.fieldLevel).length;
+      const atBuild = ds.filter(
+        (d) => d.build !== undefined && d.fieldBuild !== undefined && d.build >= d.fieldBuild,
+      ).length;
+      const taken = ds.flatMap((d) => (d.taken ? [d.taken] : []));
       console.log(
         `  ${label}: n ${ds.length}, fair foe ${pct(ds.filter((d) => d.fair).length, ds.length)}, ` +
           `an enemy in sight at landing ${pct(ds.filter((d) => d.seen === true).length, ds.length)}, ` +
           `level median ${level ?? '-'} (field ${field ?? '-'}), ` +
+          `build median ${build ?? '-'} (field ${fieldBuild ?? '-'}), ` +
+          `grafts median ${grafts ?? '-'} (field ${fieldGrafts ?? '-'}), ` +
+          `at or above the field's level ${pct(atLevel, ds.length)}, its build ${pct(atBuild, ds.length)}, ` +
+          `the seat taken at level median ${median(taken.map((t) => t.level)) ?? '-'}, ` +
+          `build median ${median(taken.map((t) => t.build)) ?? '-'}, ` +
           `nearest enemy median ${nearest === null ? '-' : nearest.toFixed(1)} m, ` +
           `first hit median ${medianOrNever(ds.map((d) => d.firstDealt))}, ` +
           `first hurt median ${medianOrNever(ds.map((d) => d.firstTaken))}, ` +

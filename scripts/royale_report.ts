@@ -56,7 +56,8 @@
 // Every seat's assists and level at the end are kept too: the compare
 // line gives the level median of the seats with at most FEW_TAKEDOWNS
 // takedowns (a person who helps and seldom lands the last hit) and their
-// assists.
+// assists, and the Upstarts a match begins (royale/upstart.ts) with the
+// takedowns landed while carrying one.
 // --dump out.json writes the matches played instead of only printing them,
 // and --merge a.json,b.json prints the summary of matches dumped before (a
 // run split over several processes, each its own --from and --seeds).
@@ -351,6 +352,10 @@ interface Match {
   boughFallbacks: number;
   botTimeouts: number;
   dropIns: DropIn[];
+  // Respawn's Upstarts begun (Arrivals and returns), and the takedowns
+  // landed while carrying one (royale/upstart.ts).
+  upstarts?: number;
+  upstartTakedowns?: number;
 }
 
 const ENGAGE_M = 8;
@@ -909,6 +914,8 @@ function play(
     boughFallbacks,
     botTimeouts,
     dropIns: dropIns.map((d) => d.row),
+    upstarts: mode.tally.upstarts,
+    upstartTakedowns: mode.tally.upstartTakedowns,
   };
 }
 
@@ -1325,13 +1332,16 @@ function compareLine(all: readonly Match[]): void {
     const fewLevel = median(few.map((x) => x.level));
     const fewAssists = median(few.map((x) => x.assists));
     const dropLife = median(ms.flatMap((m) => m.dropIns.map((d) => d.firstLife)));
+    const upstarts = ms.reduce((a, m) => a + (m.upstarts ?? 0), 0) / ms.length;
+    const upstartTds = ms.reduce((a, m) => a + (m.upstartTakedowns ?? 0), 0) / ms.length;
     console.log(
       `\ncompare ${variant}: stand-in median life ${life === null ? '-' : life.toFixed(1)} s, ` +
         `fighting ${near > 0 ? ((100 * engaged) / near).toFixed(1) : '-'}%, ` +
         `steals ${tds > 0 ? ((100 * steals) / tds).toFixed(1) : '-'}%, final level median ${level ?? '-'}, ` +
         `level median ${fewLevel ?? '-'} for the ${few.length} seats with at most ${FEW_TAKEDOWNS} takedowns ` +
         `(assists median ${fewAssists ?? '-'}), ` +
-        `drop-in first life median ${dropLife === null ? '-' : dropLife.toFixed(1)} s`,
+        `drop-in first life median ${dropLife === null ? '-' : dropLife.toFixed(1)} s, ` +
+        `Upstarts a match ${upstarts.toFixed(1)} (${upstartTds.toFixed(1)} took a champion down)`,
     );
   }
 }

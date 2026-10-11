@@ -12,6 +12,7 @@
 import { attacksFrom } from './game/attack_notes';
 import { type KillNote, type Presentation, startPresentation } from './game/boot';
 import { creatureNowFrom, riseCreatureNow } from './game/creature_now';
+import { measureMovement } from './game/cursor_lock';
 import { drawnQuality } from './game/drawn_quality';
 import { FIRST_FRAME_WAIT_MS, untilDrawn } from './game/first_frame';
 import { nextStep, type PostMatchAction } from './game/flow';
@@ -1698,6 +1699,10 @@ async function boot(): Promise<void> {
   // From here on the browser's history mirrors the screens (ADR 0020):
   // this page is the root, and everything that opens over it is a layer.
   installNav();
+  // The mouse's movement is measured from the first moves on, while the
+  // cursor is free, so the fullscreen cursor of the first match already
+  // moves at the hand's pace (game/cursor_lock.ts).
+  measureMovement(window);
   // The landing art is the first thing on screen; ask for it before the
   // session check so the two requests fly together.
   preloadBackdrop();

@@ -669,8 +669,11 @@ export function startPresentation(
   };
   const teardownInput = setupInput(renderer, inputHandlers);
   // In fullscreen the mouse stays on the game (cursor_lock.ts): a second
-  // monitor beside it must not take a click mid-fight.
-  const teardownCursorLock = coarsePointer ? () => undefined : installCursorLock(container);
+  // monitor beside it must not take a click mid-fight. It is let go while
+  // the pause menu or the end screen stands (their sliders and lists want
+  // the browser's own pointer), read every frame below; a replay has no
+  // fight, and its scrub slider and draggable bar want that pointer too.
+  const cursorLock = coarsePointer || guide === 'watch' ? null : installCursorLock(container);
 
   // Touch: the same handlers behind finger gestures (tap to move or attack,
   // two-step casts armed by tapping HUD slots). The gesture listeners are
@@ -854,6 +857,7 @@ export function startPresentation(
     const alpha = Math.max(0, Math.min(1, (now - lastTick) / TICK_MS));
     renderer.render(alpha, now);
     placeArrow(alpha);
+    cursorLock?.setFree(hud.covers().pauseMenu || hud.endScreenUp());
     rafId = requestAnimationFrame(frame);
   }
   rafId = requestAnimationFrame(frame);
@@ -882,7 +886,7 @@ export function startPresentation(
       container.removeEventListener('pointerdown', onFirstPointerDown);
       window.removeEventListener('blur', onWindowBlur);
       teardownInput();
-      teardownCursorLock();
+      cursorLock?.dispose();
       touch.dispose();
       stickView?.dispose();
       touchBar?.dispose();

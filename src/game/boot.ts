@@ -38,6 +38,7 @@ import { buildThumbStickView } from '../ui/thumb_stick_view';
 import { buildTouchBar, drinkButton } from '../ui/touch_bar';
 import { unlearnedLine } from '../ui/unlearned_line';
 import type { IWorld } from '../world_api';
+import type { AttackNote } from './attack_notes';
 import { castSoundOf } from './champion_sounds';
 import { installCursorLock } from './cursor_lock';
 import { BeatCamera } from './death_beat';
@@ -62,6 +63,7 @@ import {
   stickYields,
 } from './thumb_stick';
 import { setupTouchControls } from './touch';
+import type { VoidmaulSlamNote } from './voidmaul_slam_notes';
 
 export interface KillNote {
   unitId: number;
@@ -89,7 +91,8 @@ export interface WorldNotes {
   // Damage the player dealt this tick, for personal combat numbers.
   hits: readonly { targetId: number; amount: number }[];
   // Auto-attacks fired by visible units, for swing animations.
-  attacks: readonly { unitId: number; targetId: number }[];
+  attacks: readonly AttackNote[];
+  voidmaulSlams?: readonly VoidmaulSlamNote[];
   // Strikes that landed nothing (the fumble), for the "Miss" over the
   // target; absent where the host tells none.
   misses?: readonly { unitId: number; targetId: number }[];
@@ -786,6 +789,7 @@ export function startPresentation(
         notes.casts.length > 0 ||
         notes.hits.length > 0 ||
         notes.attacks.length > 0 ||
+        (notes.voidmaulSlams?.length ?? 0) > 0 ||
         (notes.misses?.length ?? 0) > 0
       )
         renderer.onCombatNotes(notes);

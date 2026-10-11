@@ -11,7 +11,9 @@
 //
 // A hand-written shader's program is left alone: its key carries the ids
 // of its source stages, which three hands out anew once a stage's last
-// material goes, so a kept one would never be asked for again.
+// material goes, so a kept one would never be asked for again. Those are
+// held by shader_hold.ts instead, a stand-in material keeping the stages
+// and the program both.
 
 // What the keeper reads of a three WebGLProgram.
 export interface KeepableProgram {

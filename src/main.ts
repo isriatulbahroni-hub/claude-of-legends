@@ -9,7 +9,9 @@
 // leaving the site, and a match is guarded, so Back opens the pause menu
 // and closing the tab asks first.
 
+import { attacksFrom } from './game/attack_notes';
 import { type KillNote, type Presentation, startPresentation } from './game/boot';
+import { creatureNowFrom, riseCreatureNow } from './game/creature_now';
 import { drawnQuality } from './game/drawn_quality';
 import { FIRST_FRAME_WAIT_MS, untilDrawn } from './game/first_frame';
 import { nextStep, type PostMatchAction } from './game/flow';
@@ -38,6 +40,7 @@ import {
   prefetchStarOrchard,
 } from './game/star_orchard';
 import { loadStarOrchard } from './game/star_orchard_records';
+import { voidmaulSlamsFrom } from './game/voidmaul_slam_notes';
 import { buildIdFromMeta, startBuildWatch } from './net/build_watch';
 import { ClientWorld } from './net/client_world';
 import { openGuest } from './net/guest';
@@ -395,6 +398,13 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
     // at the end screen), on the dev server only, like the replay's.
     if (import.meta.env.DEV) {
       (window as unknown as { __practice?: unknown }).__practice = { sim };
+      // ?creature=voidmaul: that ring's creature rises at once, the champion
+      // at its edge (src/game/creature_now.ts).
+      const creature = creatureNowFrom(window.location.search);
+      const stand = creature
+        ? riseCreatureNow(sim.ringStates, creature, sim.time, sim.map.size)
+        : null;
+      if (stand) self.pos = stand;
     }
     const pres = startPresentation(container, world, self.id, self.team, exit, {
       terrain: loaded.terrain,
@@ -428,19 +438,26 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
         const golds: number[] = [];
         const casts: { unitId: number; key?: AbilityKey }[] = [];
         const hits: { targetId: number; amount: number }[] = [];
-        const attacks: { unitId: number; targetId: number }[] = [];
         const misses: { unitId: number; targetId: number }[] = [];
-        for (const ev of sim.tick()) {
+        const events = sim.tick();
+        for (const ev of events) {
           if (ev.type === 'death') kills.push({ unitId: ev.unitId, killerId: ev.killerId });
           else if (ev.type === 'gold' && ev.unitId === self.id) golds.push(ev.amount);
           else if (ev.type === 'cast') casts.push({ unitId: ev.unitId, key: ev.key });
           else if (ev.type === 'sigil') casts.push({ unitId: ev.unitId });
-          else if (ev.type === 'attack') attacks.push({ unitId: ev.unitId, targetId: ev.targetId });
           else if (ev.type === 'miss') misses.push({ unitId: ev.unitId, targetId: ev.targetId });
           else if (ev.type === 'damage' && ev.sourceId === self.id && ev.targetId !== self.id)
             hits.push({ targetId: ev.targetId, amount: ev.amount });
         }
-        pres.onWorldTick({ kills, golds, casts, hits, attacks, misses });
+        pres.onWorldTick({
+          kills,
+          golds,
+          casts,
+          hits,
+          attacks: attacksFrom(events),
+          voidmaulSlams: voidmaulSlamsFrom(events),
+          misses,
+        });
       }
       requestAnimationFrame(frame);
     }
@@ -590,17 +607,25 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
       }
       const kills: { unitId: number; killerId: number }[] = [];
       const casts: { unitId: number; key?: AbilityKey }[] = [];
-      const attacks: { unitId: number; targetId: number }[] = [];
       const misses: { unitId: number; targetId: number }[] = [];
-      for (const ev of sim.tick()) {
+      const events = sim.tick();
+      for (const ev of events) {
         if (silent) continue;
         if (ev.type === 'death') kills.push({ unitId: ev.unitId, killerId: ev.killerId });
         else if (ev.type === 'cast') casts.push({ unitId: ev.unitId, key: ev.key });
         else if (ev.type === 'sigil') casts.push({ unitId: ev.unitId });
-        else if (ev.type === 'attack') attacks.push({ unitId: ev.unitId, targetId: ev.targetId });
         else if (ev.type === 'miss') misses.push({ unitId: ev.unitId, targetId: ev.targetId });
       }
-      if (!silent) pres.onWorldTick({ kills, golds: [], casts, hits: [], attacks, misses });
+      if (!silent)
+        pres.onWorldTick({
+          kills,
+          golds: [],
+          casts,
+          hits: [],
+          attacks: attacksFrom(events),
+          voidmaulSlams: voidmaulSlamsFrom(events),
+          misses,
+        });
       checkDrift();
     };
 
@@ -781,15 +806,21 @@ async function runSpectate(matchId: number, team: TeamId): Promise<PostMatchActi
           if (changed && view) {
             const kills: { unitId: number; killerId: number }[] = [];
             const casts: { unitId: number; key?: AbilityKey }[] = [];
-            const attacks: { unitId: number; targetId: number }[] = [];
             const misses: { unitId: number; targetId: number }[] = [];
             for (const e of msg.events) {
               if (e.e === 'death') kills.push({ unitId: e.unitId, killerId: e.killerId });
               else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
-              else if (e.e === 'atk') attacks.push({ unitId: e.unitId, targetId: e.targetId });
               else if (e.e === 'miss') misses.push({ unitId: e.unitId, targetId: e.targetId });
             }
-            view.onWorldTick({ kills, golds: [], casts, hits: [], attacks, misses });
+            view.onWorldTick({
+              kills,
+              golds: [],
+              casts,
+              hits: [],
+              attacks: attacksFrom(msg.events),
+              voidmaulSlams: voidmaulSlamsFrom(msg.events),
+              misses,
+            });
           }
           break;
         }
@@ -1189,17 +1220,23 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
             const golds: number[] = [];
             const casts: { unitId: number; key?: AbilityKey }[] = [];
             const hits: { targetId: number; amount: number }[] = [];
-            const attacks: { unitId: number; targetId: number }[] = [];
             const misses: { unitId: number; targetId: number }[] = [];
             for (const e of msg.events) {
               if (e.e === 'death') kills.push({ unitId: e.unitId, killerId: e.killerId });
               else if (e.e === 'gold') golds.push(e.amount);
               else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
-              else if (e.e === 'atk') attacks.push({ unitId: e.unitId, targetId: e.targetId });
               else if (e.e === 'miss') misses.push({ unitId: e.unitId, targetId: e.targetId });
               else if (e.e === 'dmg') hits.push({ targetId: e.targetId, amount: e.amount });
             }
-            pres?.onWorldTick({ kills, golds, casts, hits, attacks, misses });
+            pres?.onWorldTick({
+              kills,
+              golds,
+              casts,
+              hits,
+              attacks: attacksFrom(msg.events),
+              voidmaulSlams: voidmaulSlamsFrom(msg.events),
+              misses,
+            });
           }
           break;
         }
@@ -1508,12 +1545,10 @@ async function runRoyale(
             const kills: KillNote[] = [];
             const casts: { unitId: number; key?: AbilityKey }[] = [];
             const hits: { targetId: number; amount: number }[] = [];
-            const attacks: { unitId: number; targetId: number }[] = [];
             const misses: { unitId: number; targetId: number }[] = [];
             for (const e of msg.events) {
               if (e.e === 'death') kills.push(royaleKill(e));
               else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
-              else if (e.e === 'atk') attacks.push({ unitId: e.unitId, targetId: e.targetId });
               else if (e.e === 'miss') misses.push({ unitId: e.unitId, targetId: e.targetId });
               else if (e.e === 'dmg') hits.push({ targetId: e.targetId, amount: e.amount });
             }
@@ -1522,7 +1557,8 @@ async function runRoyale(
               golds: [],
               casts,
               hits,
-              attacks,
+              attacks: attacksFrom(msg.events),
+              voidmaulSlams: voidmaulSlamsFrom(msg.events),
               misses,
               royale: royaleNotes(msg.events),
             });

@@ -95,28 +95,48 @@ export const WARM_BODIES: readonly WarmBody[] = [
   { kind: 'camp', campKind: 'barkmaw' },
 ];
 
+// A creature's art drawn outside the spell catalog, built for a sample:
+// the Voidmaul's slam and crush with their stones, its rift and the rift's
+// burst (voidmaul_warm.ts). `age` moves it to a later beat of its life.
+export interface WarmArt {
+  root: THREE.Object3D;
+  age(seconds: number): void;
+  dispose(): void;
+}
+
+// The beats an art sample is compiled at, after its start: the contact's
+// flash and the stones in the air, then the scar and the stones landed.
+export const WARM_ART_AGES_S = [0.15, 2.4] as const;
+
 // One sample of the warm-up, as the files it waits for are looked up: a
-// champion, a body, or a spell's art by its catalog key (the champion's
-// id, then the spell's key: sylra_Q).
+// champion, a body, a creature's art by its name (voidmaul_slam), or a
+// spell's art by its catalog key (the champion's id, then the spell's key:
+// sylra_Q).
 export type WarmSample =
   | { kind: 'champion'; id: string }
   | { kind: 'body'; body: WarmBody }
+  | { kind: 'art'; id: string }
   | { kind: 'spell'; id: string };
 
-// The files a sample can wait for: the Pyrefang's rigged model, which a
-// live one swaps in, and the authored effect files of the champions whose
-// spells are drawn from them, by champion.
+// The files a sample can wait for: the Pyrefang's and the Voidmaul's
+// rigged models, which a live one swaps in, and the authored effect files
+// of the champions whose spells are drawn from them, by champion.
 export interface WarmFiles {
   pyrefang(): Promise<unknown>;
+  voidmaul(): Promise<unknown>;
   effects: Readonly<Record<string, () => Promise<unknown>>>;
 }
 
 // What a sample waits for before it is built, null when it needs no file:
-// a Pyrefang's body waits for its model and a spell for its champion's
-// effect files, while the champions and every other body need none.
+// a Pyrefang's or a Voidmaul's body waits for its model and a spell for its
+// champion's effect files, while the champions, every other body and the
+// creatures' art (drawn from no file) need none.
 export function filesFor(sample: WarmSample, files: WarmFiles): Promise<unknown> | null {
   if (sample.kind === 'body') {
-    return sample.body.creatureId === 'pyrefang' ? files.pyrefang() : null;
+    const creature = sample.body.creatureId;
+    if (creature === 'pyrefang') return files.pyrefang();
+    if (creature === 'voidmaul') return files.voidmaul();
+    return null;
   }
   if (sample.kind === 'spell') {
     const owner = sample.id.slice(0, sample.id.indexOf('_'));
@@ -173,16 +193,21 @@ export async function runSteps(
 
 // What the warm-up needs of the renderer: the planet's compile (bent, then
 // linked against the planet's scene, then kept), its unit and champion
-// builders, the art to sample by its catalog key, a VFX system for the
-// samples' scene, the files the samples wait for, the pause between steps
-// and the pause while every step left waits for its files, and whether the
-// match is gone.
+// builders, the creatures' art and the spells' art to sample, a VFX system
+// for the samples' scene, the files the samples wait for, the pause between
+// steps and the pause while every step left waits for its files, and
+// whether the match is gone. `hold` (shader_hold.ts) hands back the
+// stand-ins that keep a sample's hand-written shaders linked after it is
+// released: compiled with the sample, then left out of the scene and
+// never disposed.
 export interface FightWarmHost {
   compile(scene: THREE.Scene): void;
   body(body: WarmBody): THREE.Object3D | null;
   champion(id: string): { root: THREE.Object3D; dispose(): void } | null;
   championIds: readonly string[];
+  art: Readonly<Record<string, () => WarmArt | null>>;
   catalog: Readonly<Record<string, SpellVisual>>;
+  hold?(root: THREE.Object3D): THREE.Object3D[];
   makeFx(scene: THREE.Scene): VfxSystem;
   files: WarmFiles;
   next(): Promise<void>;
@@ -213,12 +238,17 @@ export async function warmFights(host: FightWarmHost): Promise<number> {
       waits: filesFor(sample, host.files),
       run: () => {
         const built: THREE.Object3D[] = [];
+        const held: THREE.Object3D[] = [];
         const releases: (() => void)[] = [];
         try {
           build(
             (o) => {
               built.push(o);
               scene.add(o);
+              for (const standIn of host.hold?.(o) ?? []) {
+                held.push(standIn);
+                scene.add(standIn);
+              }
             },
             (release) => releases.push(release),
           );
@@ -231,13 +261,15 @@ export async function warmFights(host: FightWarmHost): Promise<number> {
             scene.remove(o);
             releaseMaterials(o);
           }
+          // Out of the scene, never disposed: they keep their programs.
+          for (const standIn of held) scene.remove(standIn);
           for (const release of releases) release();
         }
       },
     });
   };
   // The champions first, the first thing a landing meets, then the bodies,
-  // then the spells.
+  // then the creatures' art, then the spells.
   for (const id of host.championIds) {
     step({ kind: 'champion', id }, (add, after) => {
       const cv = host.champion(id);
@@ -250,6 +282,20 @@ export async function warmFights(host: FightWarmHost): Promise<number> {
     step({ kind: 'body', body }, (add) => {
       const built = host.body(body);
       if (built) add(built);
+    });
+  }
+  for (const [id, make] of Object.entries(host.art)) {
+    step({ kind: 'art', id }, (add, after) => {
+      const art = make();
+      if (!art) return;
+      add(art.root);
+      // Each of its later beats compiled as it stands; the step compiles
+      // it once more after.
+      for (const age of WARM_ART_AGES_S) {
+        art.age(age);
+        host.compile(scene);
+      }
+      after(() => art.dispose());
     });
   }
   for (const [id, vis] of Object.entries(host.catalog)) {

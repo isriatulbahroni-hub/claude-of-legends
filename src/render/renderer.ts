@@ -13,11 +13,19 @@ import {
 } from '../game/map_quality';
 import { pointOnStage, rectOnStage, stageSizeOf } from '../game/match_stage';
 import { playCastSfx, playSfx } from '../game/sfx';
-import { attackWindupSeconds, RANGED_THRESHOLD } from '../sim/combat/auto_attack';
+import type { VoidmaulSlamNote } from '../game/voidmaul_slam_notes';
+import {
+  attackWindupSeconds,
+  RANGED_THRESHOLD,
+  strikeWindupSeconds,
+} from '../sim/combat/auto_attack';
 import type { CastSpec } from '../sim/combat/casting';
 import { isFumbled, isRooted, isStealthed, isStunned } from '../sim/combat/status';
+import { stoneArena, voidmaulStones } from '../sim/combat/voidmaul_stones';
 import { heartwoodOf } from '../sim/content/grafts';
-import { WRATH_EXECUTE_FRAC } from '../sim/content/rings';
+import { creatureOfRing, WRATH_EXECUTE_FRAC } from '../sim/content/rings';
+import type { VoidmaulAttackKind } from '../sim/content/voidmaul_slam';
+import { copy } from '../sim/geo';
 import type { Projectile } from '../sim/projectiles';
 import { otherTeam } from '../sim/teams';
 import { type AbilityKey, DT, type TeamId, type Vec2 } from '../sim/types';
@@ -47,12 +55,19 @@ import {
   preloadChampionAssets,
 } from './champions';
 import { CHAMPION_VISUALS } from './champions/manifest';
+import { creatureRest, HOME_RADIUS, REST_AFTER_SWING_MS } from './creature_facing';
 import { buildCreatureMesh } from './creature_shapes';
 import {
   createPyrefangVisual,
   type PyrefangVisual,
   preloadPyrefang,
 } from './creatures/pyrefang_visual';
+import {
+  createVoidmaulVisual,
+  preloadVoidmaul,
+  VOIDMAUL_SCALE,
+  VoidmaulVisual,
+} from './creatures/voidmaul_visual';
 import { FloatingText, makeTextSprite } from './floating_text';
 import { fogSheetGeometry } from './fog_sheet';
 import { FrameMemo } from './frame_memo';
@@ -80,6 +95,7 @@ import {
   type RoyaleProjector,
   setRoyaleProjector,
 } from './royale_cues';
+import { ShaderHold } from './shader_hold';
 import { pickShieldHolder, type ShieldCandidate } from './shield_holder';
 import { fumbleSwirl, StealthVeils } from './status_veils';
 import { crownHeight, crownLift, flightProgress, isStill } from './structure_fire';
@@ -102,6 +118,13 @@ import { VfxSystem } from './vfx/system';
 import { disposeEffect } from './vfx/timed';
 import { TowerReachFx } from './vfx/tower_reach_fx';
 import { TowerShotFx } from './vfx/tower_shot_fx';
+import { VOIDMAUL_HOLE_ORDER } from './vfx/voidmaul_rift_fx';
+import { voidmaulArenaForImpact } from './voidmaul_arena';
+import { voidmaulAttackFeedback } from './voidmaul_attack_feedback';
+import { VoidmaulImpacts } from './voidmaul_impacts';
+import { VoidmaulRifts } from './voidmaul_rifts';
+import type { VoidmaulSpawnBeat } from './voidmaul_spawn';
+import { VOIDMAUL_WARM_ART } from './voidmaul_warm';
 import { sliced, texturesOf, type WarmBody, warmFights } from './warm_samples';
 
 const TEAM_COLORS: readonly number[] = [0x4a7dd6, 0xd65c5c];
@@ -242,7 +265,8 @@ export interface CombatNotes {
   // Damage the viewer dealt to others; the only cross-unit numbers shown.
   hits: readonly { targetId: number; amount: number }[];
   // Auto-attacks fired by visible units, for swing animations.
-  attacks: readonly { unitId: number; targetId: number }[];
+  attacks: readonly { unitId: number; targetId: number; voidmaulAttack?: VoidmaulAttackKind }[];
+  voidmaulSlams?: readonly VoidmaulSlamNote[];
   // Strikes that landed nothing, their striker fumbling (CONTEXT.md:
   // Fumble): a "Miss" rises over the target.
   misses?: readonly { unitId: number; targetId: number }[];
@@ -333,13 +357,20 @@ export class Renderer {
   private readonly camera: THREE.PerspectiveCamera;
   private readonly raycaster = new THREE.Raycaster();
   private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-  private readonly unitLayer = new THREE.Group();
+  // Drawn after the ground and the Voidmaul's rift (its opening is a hole
+  // through the ground, voidmaul_rift_fx.ts), so a body climbing out shows.
+  private readonly unitLayer = Object.assign(new THREE.Group(), {
+    renderOrder: VOIDMAUL_HOLE_ORDER + 1,
+  });
   private readonly tracked = new Map<number, TrackedUnit>();
   // Rigged GLB visuals for champions whose asset has arrived; champions
   // absent here still animate through the procedural AnimParts path.
   private readonly championVisuals = new Map<number, ChampionVisual>();
-  // Ring creatures with a rigged model (the Pyrefang), by unit id.
-  private readonly creatureVisuals = new Map<number, PyrefangVisual>();
+  // Ring creatures with an authored quadruped rig, by unit id.
+  private readonly creatureVisuals = new Map<number, PyrefangVisual | VoidmaulVisual>();
+  // Where each ring creature stands and looks while at rest: at its lane
+  // (creature_facing.ts), by unit id.
+  private readonly creatureRests = new Map<number, { home: Vec2; yaw: number }>();
   private readonly trackedProjectiles = new Map<number, TrackedMobile>();
   private readonly trackedZones = new Map<number, TrackedZone>();
   // Ability walls (kits-v2): one jagged stone rampart per wall id, risen
@@ -353,6 +384,8 @@ export class Renderer {
   // An enemy tower's reach around the viewer's own champion when it comes
   // near (src/render/tower_reach.ts), flashing on each shot at it.
   private readonly towerReach: TowerReachFx;
+  private readonly voidmaulRifts: VoidmaulRifts;
+  private readonly voidmaulImpacts: VoidmaulImpacts;
   private readonly windups = new Map<number, WindupFx>();
   private readonly camDir = new THREE.Vector3(0, -1, 0);
   // The camera direction inside the scene, whose z axis is mirrored (see
@@ -497,6 +530,10 @@ export class Renderer {
   // (program_keeper.ts): an effect cast again finds its program instead of
   // linking it anew mid-fight.
   private readonly programs = new ProgramKeeper();
+  // The hand-written shaders' stand-ins (shader_hold.ts): the Voidmaul's
+  // slam and rift build theirs for each strike, and would link them anew.
+  private readonly shaderHold = new ShaderHold();
+  private readonly holdScene = new THREE.Scene();
   // The planet's programs linking before its first frame
   // (program_warmup.ts); null on the plane.
   private readonly warmup: ProgramWarmup | null = null;
@@ -538,6 +575,7 @@ export class Renderer {
     // procedural figures as each asset lands.
     preloadChampionAssets(this.gl);
     void preloadPyrefang();
+    void preloadVoidmaul();
     this.gl.toneMappingExposure = 1.18;
     container.appendChild(this.gl.domElement);
     this.scene.background = new THREE.Color(COLOR_BACKGROUND);
@@ -605,6 +643,25 @@ export class Renderer {
       const planet = this.planet;
       this.vfx.chartCarry = (epoch) => planet.carryFrom(epoch);
     }
+    this.voidmaulRifts = new VoidmaulRifts(
+      this.scene,
+      (beat, at) => this.voidmaulSpawnBeat(beat, at),
+      (root) => this.holdShaders(root),
+    );
+    this.voidmaulImpacts = new VoidmaulImpacts(
+      this.scene,
+      this.terrain.heightAt,
+      (at) =>
+        voidmaulAttackFeedback(at, {
+          vfx: this.vfx,
+          camera: this.camera,
+          planet: this.planet ?? undefined,
+          toScene: (point) => this.toScene(point),
+          gain: (x, z) => this.sfxGain(x, z),
+          shake: (strength) => this.addShake(strength),
+        }),
+      (root) => this.holdShaders(root),
+    );
     this.vfx.onShake = (k) => this.addShake(k);
     if (this.planet) {
       const projector = this.royaleProjector(this.planet);
@@ -779,6 +836,8 @@ export class Renderer {
     const notice = buildPictureNotice(container);
     this.picture = watchPicture(this.gl.domElement, {
       restore: async () => {
+        // Three built its caches anew: the stand-ins hold nothing in them.
+        this.shaderHold.forget();
         await this.terrain.restoreImages?.();
         this.terrain.releaseImages?.(upload);
       },
@@ -835,9 +894,12 @@ export class Renderer {
       // so the programs match.
       body: (body: WarmBody) => {
         const { holder } = this.buildBody(warmUnit(body));
-        // The Pyrefang's rigged model too, which a live one swaps in.
+        // The rigged models too, which a live one swaps in.
         if (body.creatureId === 'pyrefang') {
           const visual = createPyrefangVisual(null, holder.scale.x);
+          if (visual) holder.add(visual.root);
+        } else if (body.creatureId === 'voidmaul') {
+          const visual = createVoidmaulVisual(null, holder.scale.x);
           if (visual) holder.add(visual.root);
         }
         return holder;
@@ -854,12 +916,19 @@ export class Renderer {
         };
       },
       championIds: Object.keys(CHAMPION_VISUALS),
+      // The Voidmaul's slam, crush and rift (voidmaul_warm.ts).
+      art: VOIDMAUL_WARM_ART,
       catalog: SPELL_VFX,
+      // Stand-ins taken before the compile bends the sample, compiled with
+      // it, kept after it is released (shader_hold.ts).
+      hold: (root) => this.shaderHold.take(root),
       makeFx: (scene) => new VfxSystem(scene, this.terrain.heightAt),
       // Only the samples drawn from a file wait for it (warm_samples.ts
-      // filesFor): the Pyrefang's bodies, Sylra's and Elowen's spells.
+      // filesFor): the Pyrefang's and the Voidmaul's bodies, Sylra's and
+      // Elowen's spells.
       files: {
         pyrefang: preloadPyrefang,
+        voidmaul: preloadVoidmaul,
         effects: { sylra: preloadSylraEffects, elowen: preloadElowenEffects },
       },
       next: sliced(
@@ -872,6 +941,20 @@ export class Renderer {
       idle: () => new Promise((done) => window.setTimeout(done, WARM_IDLE_MS)),
       gone: () => this.disposed,
     }).catch(() => undefined);
+  }
+
+  // Holds the hand-written shaders of an effect just built
+  // (shader_hold.ts): their stand-ins dressed as the scene is (the
+  // planet's bend) and compiled against it now, while the effect stands,
+  // so its next strike links none of them.
+  private holdShaders(root: THREE.Object3D): void {
+    if (this.disposed) return;
+    const standIns = this.shaderHold.take(root);
+    if (standIns.length === 0) return;
+    for (const o of standIns) this.holdScene.add(o);
+    this.planet?.bendScene(this.holdScene);
+    this.gl.compile(this.holdScene, this.camera, this.scene);
+    for (const o of standIns) this.holdScene.remove(o);
   }
 
   // The planet's minimap window (planet_minimap.ts): its world, its
@@ -1361,8 +1444,9 @@ export class Renderer {
             attacker?.pendingAttack
               ? Math.max(0.01, attacker.pendingAttack.resolveAt - this.world.time)
               : attacker
-                ? attackWindupSeconds(attacker.stats.attackSpeed, true)
+                ? strikeWindupSeconds(attacker, attacker.stats.attackSpeed)
                 : 0.5,
+            atk.voidmaulAttack,
           );
         this.championVisuals
           .get(atk.unitId)
@@ -1399,11 +1483,15 @@ export class Renderer {
       // Melee autos never reach the projectile-impact path; schedule the
       // contact spark on the sim's own strike beat (the attack windup), so
       // the flash lands exactly when the damage does.
-      if (attacker && target && attacker.stats.attackRange <= RANGED_THRESHOLD) {
+      if (
+        attacker &&
+        target &&
+        attacker.creatureId !== 'voidmaul' &&
+        attacker.stats.attackRange <= RANGED_THRESHOLD
+      ) {
         const targetId = atk.targetId;
         const sparkColor = TEAM_LIGHT[this.look(attacker.team)] ?? 0xffffff;
-        const beatMs =
-          attackWindupSeconds(attacker.stats.attackSpeed, attacker.kind === 'champion') * 1000;
+        const beatMs = strikeWindupSeconds(attacker, attacker.stats.attackSpeed) * 1000;
         this.vfx.schedule(beatMs, () => {
           const tt = this.tracked.get(targetId);
           if (!tt?.mesh.visible) return;
@@ -1422,6 +1510,39 @@ export class Renderer {
           this.towerReach.noteShot(atk.unitId, performance.now());
         }
       }
+    }
+    for (const slam of notes.voidmaulSlams ?? []) {
+      const t = this.tracked.get(slam.unitId);
+      const point = this.planet ? this.planet.toLocal(slam) : slam;
+      // The stones the sim lands (combat/voidmaul_stones.ts), from the same
+      // ring and contact, brought into the scene.
+      const site = (this.planet?.base.map.rings ?? this.world.map.rings)?.find(
+        (r) => creatureOfRing(r.id).id === 'voidmaul',
+      );
+      const home = site ? { center: copy(site), radius: site.r } : null;
+      const stones = voidmaulStones(
+        slam,
+        slam.radius,
+        stoneArena(home, slam, slam.radius),
+        slam.paws,
+      ).map((s) => ({
+        ...s,
+        origin: this.planet ? this.planet.toLocal(s.origin) : s.origin,
+        target: this.planet ? this.planet.toLocal(s.target) : s.target,
+      }));
+      this.voidmaulImpacts.start(
+        slam,
+        this.world.time,
+        new THREE.Vector3(point.x, this.groundHeight(point.x, point.z), point.z),
+        t?.mesh.visible === true,
+        t?.yaw ?? 0,
+        voidmaulArenaForImpact(
+          this.planet?.base.map.rings ?? this.world.map.rings,
+          (x, z) => this.groundHeight(x, z),
+          this.planet ? (center) => this.planet!.toLocal(center) : undefined,
+        ),
+        stones,
+      );
     }
     // The viewer's own damage dealt: a crack sound plus numbers over the
     // victim, scaled and recolored by how big the hit is.
@@ -1568,6 +1689,40 @@ export class Renderer {
     return Math.max(0, Math.min(1, 1 - (d - 14) / 28));
   }
 
+  // A ring creature first seen faces its lane; any other unit starts at 0.
+  private restYawOf(id: number, u: Unit): number {
+    if (u.kind !== 'creature' || !u.creatureId) return 0;
+    const rest = creatureRest(this.world.map, u.creatureId);
+    if (!rest) return 0;
+    this.creatureRests.set(id, rest);
+    return rest.yaw;
+  }
+
+  private voidmaulSpawnBeat(beat: VoidmaulSpawnBeat, at: THREE.Vector3): void {
+    const landing = beat === 'landing';
+    const stomp = beat === 'stomp';
+    this.vfx.lightPulse(
+      at.x,
+      at.z,
+      stomp ? 0xa9c8ff : landing ? 0x709bff : 0x8d78ff,
+      stomp ? 11.9 : landing ? 8 : 10.8,
+      stomp ? 650 : landing ? 450 : 750,
+    );
+    // Visibility was checked by the rift clock. Also keep a seen creature
+    // outside the current camera from shaking the viewer's screen.
+    const projected = this.toScene(at).project(this.camera);
+    if (
+      Math.abs(projected.x) > 1 ||
+      Math.abs(projected.y) > 1 ||
+      projected.z < -1 ||
+      projected.z > 1
+    ) {
+      return;
+    }
+    const near = this.sfxGain(at.x, at.z);
+    if (near > 0) this.addShake((stomp ? 0.26 : landing ? 0.1 : 0.18) * near);
+  }
+
   private buildLights(): void {
     // Warm golden key against a cool sky fill and a green ground bounce:
     // the color contrast between key and fill does most of the work.
@@ -1673,7 +1828,20 @@ export class Renderer {
       const built = buildCreatureMesh(u, holder);
       enableShadows(holder);
       collectSpinners(holder);
-      if (u.creatureId === 'pyrefang' && built.body) {
+      if (u.creatureId === 'voidmaul') {
+        const clock = this.world.ringClocks().find((c) => c.unitId === u.id);
+        if (clock?.roseAt != null) {
+          this.voidmaulRifts.start(
+            u.id,
+            this.world.time - clock.roseAt,
+            new THREE.Vector3(clock.x, this.groundHeight(clock.x, clock.z), clock.z),
+            VOIDMAUL_SCALE * holder.scale.x,
+            0,
+            () => holder.visible,
+          );
+        }
+      }
+      if ((u.creatureId === 'pyrefang' || u.creatureId === 'voidmaul') && built.body) {
         this.upgradeCreatureView(holder, built.body, u.id);
       }
       return built;
@@ -1776,24 +1944,29 @@ export class Renderer {
     this.visualPool.set(key, list);
   }
 
-  // Swaps the Pyrefang's figure for its rigged model once the file is in.
-  // A creature that rose moments ago plays its opening from where it is:
-  // the Emerge in the fire column, then the Roar.
+  // Swaps a creature's figure for its authored rig once the file is in.
+  // A recent rise plays the opening from its current age; a creature first
+  // seen later starts idle. The beacon and Ascendant halo stay on the holder.
   private upgradeCreatureView(holder: THREE.Group, figure: THREE.Group, unitId: number): void {
-    void preloadPyrefang().then(() => {
+    const id = this.world.units.get(unitId)?.creatureId;
+    const loaded = id === 'voidmaul' ? preloadVoidmaul() : preloadPyrefang();
+    void loaded.then(() => {
       const t = this.tracked.get(unitId);
       const clock = this.world.ringClocks().find((c) => c.unitId === unitId);
       if (!t || t.mesh !== holder) return;
       const age = clock?.roseAt != null ? this.world.time - clock.roseAt : null;
       const site = this.world.map.rings?.find((r) => r.id === clock?.ring);
-      const visual = createPyrefangVisual(age, holder.scale.x, site?.r ?? null);
+      const visual =
+        id === 'voidmaul'
+          ? createVoidmaulVisual(age, holder.scale.x)
+          : createPyrefangVisual(age, holder.scale.x, site?.r ?? null);
       if (!visual) return;
       holder.remove(figure);
       disposeDeep(figure);
       holder.add(visual.root);
       this.creatureVisuals.set(unitId, visual);
       const u = this.world.units.get(unitId);
-      if (u && age !== null && age < 0.5) {
+      if (u && id !== 'voidmaul' && age !== null && age < 0.5) {
         this.vfx.lightPulse(u.pos.x, u.pos.z, 0xff7a2a, 4, 2200);
       }
     });
@@ -2243,7 +2416,7 @@ export class Renderer {
           graftKey: '',
           prev: { x: u.pos.x, z: u.pos.z },
           curr: { x: u.pos.x, z: u.pos.z },
-          yaw: 0,
+          yaw: this.restYawOf(id, u),
           walkAmp: 0,
           pulseUntil: 0,
           flashUntil: 0,
@@ -2318,6 +2491,10 @@ export class Renderer {
         // damage-over-time ticks from looping the react forever.
         if (u.kind === 'champion' && dhp >= u.maxHp * 0.04) {
           this.championVisuals.get(id)?.playHit();
+        }
+        const creature = this.creatureVisuals.get(id);
+        if (creature instanceof VoidmaulVisual && dhp >= u.maxHp * 0.015) {
+          creature.playHit();
         }
         if (id === this.followId) {
           this.fct.spawn(`-${Math.round(dhp)}`, '#ff6a5e', u.pos.x, t.barY + 1.4, u.pos.z);
@@ -2740,14 +2917,16 @@ export class Renderer {
         this.endShieldFx(t, false);
         const creature = this.creatureVisuals.get(id);
         if (creature) {
-          // The Pyrefang falls on its side before it fades; its bars go.
+          // The authored death plays before the creature fades; its bars go.
           this.creatureVisuals.delete(id);
+          this.creatureRests.delete(id);
           creature.playDeath();
           t.overhead.visible = false;
           this.dying.push({
             mesh: t.mesh,
             start: performance.now(),
-            holdMs: CREATURE_FALL_MS,
+            holdMs:
+              creature instanceof VoidmaulVisual ? creature.deathDurationMs : CREATURE_FALL_MS,
             step: (dtMs) => creature.update(dtMs, { moving: false, speed: 0 }),
           });
           const dispose = t.mesh.userData.dispose as (() => void) | undefined;
@@ -3362,6 +3541,19 @@ export class Renderer {
           while (dyaw > Math.PI) dyaw -= Math.PI * 2;
           while (dyaw < -Math.PI) dyaw += Math.PI * 2;
           t.yaw += dyaw * Math.min(1, dtMs * 0.014);
+        } else if (creature) {
+          // Home and calm, a creature turns back to its lane.
+          const rest = this.creatureRests.get(id);
+          if (
+            rest &&
+            now - t.swingUntil > REST_AFTER_SWING_MS &&
+            Math.abs(x - rest.home.x) + Math.abs(z - rest.home.z) < HOME_RADIUS
+          ) {
+            let dyaw = rest.yaw - t.yaw;
+            while (dyaw > Math.PI) dyaw -= Math.PI * 2;
+            while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+            t.yaw += dyaw * Math.min(1, dtMs * 0.003);
+          }
         }
         t.mesh.rotation.y = t.yaw;
         // Blend the walk cycle in and out instead of snapping.
@@ -3383,7 +3575,10 @@ export class Renderer {
       if (this.planet && t.kind === 'champion') bobY += this.planet.liftOf(id, x, z);
       // Auto-attack lunge: a short hop toward the victim.
       const swinging = t.swingUntil > now;
-      const swingK = swinging ? Math.sin((1 - (t.swingUntil - now) / 200) * Math.PI) : 0;
+      const swingK =
+        swinging && !(creature instanceof VoidmaulVisual)
+          ? Math.sin((1 - (t.swingUntil - now) / 200) * Math.PI)
+          : 0;
       t.mesh.position.set(
         x + t.swingDir.x * swingK * 0.28,
         this.groundHeight(x, z) + bobY,
@@ -3621,6 +3816,8 @@ export class Renderer {
     }
     this.updateWindups(now, alpha);
     this.vfx.update(now, dtMs, this.camDirScene);
+    this.voidmaulRifts.update(dtMs);
+    this.voidmaulImpacts.update(dtMs);
     this.towerShots.update(now);
     for (let i = this.dying.length - 1; i >= 0; i--) {
       const d = this.dying[i]!;
@@ -3932,6 +4129,8 @@ export class Renderer {
     this.planet?.dispose();
     for (const list of this.visualPool.values()) for (const cv of list) cv.dispose();
     this.visualPool.clear();
+    this.voidmaulRifts.dispose();
+    this.voidmaulImpacts.dispose();
     this.terrain.dispose();
     closeRenderer(this.gl);
   }

@@ -3,8 +3,11 @@
 // friend), a failing hook keeps to itself, the steps run one at a time and
 // stop once the match is gone, and every sample is compiled at its start
 // and again later, then released. The champions and the bodies drawn from
-// no file start at once: only a Pyrefang's body waits for its model and a
-// spell for its champion's effect files.
+// no file start at once: only a Pyrefang's or a Voidmaul's body waits for
+// its model and a spell for its champion's effect files. A creature's art
+// (the Voidmaul's slam, crush and rift) is built, compiled at its later
+// beats and released; the stand-ins that hold a sample's hand-written
+// shaders (shader_hold.ts) are compiled with it and kept.
 
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
@@ -17,7 +20,9 @@ import {
   sampleSpellArt,
   sliced,
   texturesOf,
+  WARM_ART_AGES_S,
   WARM_BODIES,
+  type WarmArt,
   type WarmFiles,
   warmFights,
 } from '../src/render/warm_samples';
@@ -220,16 +225,21 @@ describe('the warm-up steps', () => {
 describe('the files a sample waits for', () => {
   const files: WarmFiles = {
     pyrefang: () => Promise.resolve('pyrefang'),
+    voidmaul: () => Promise.resolve('voidmaul'),
     effects: { sylra: () => Promise.resolve('sylra') },
   };
 
-  it('are none for a champion and for every body but the Pyrefang', async () => {
+  it('are none for a champion and for every body but the Pyrefang and the Voidmaul', async () => {
     expect(filesFor({ kind: 'champion', id: 'sylra' }, files)).toBeNull();
     for (const body of WARM_BODIES) {
       const waits = filesFor({ kind: 'body', body }, files);
-      if (body.creatureId === 'pyrefang') expect(await waits).toBe('pyrefang');
+      if (body.creatureId) expect(await waits).toBe(body.creatureId);
       else expect(waits).toBeNull();
     }
+  });
+
+  it("are none for a creature's art, drawn from no file", () => {
+    expect(filesFor({ kind: 'art', id: 'voidmaul_slam' }, files)).toBeNull();
   });
 
   it("are a spell's champion's effect files, none for a champion without", async () => {
@@ -288,9 +298,10 @@ describe('the fights warmed', () => {
         },
       }),
       championIds: ['torv', 'sylra'],
+      art: {},
       catalog: { dain_A: { impact: () => undefined }, dain_R: { zone: () => made() } },
       makeFx: () => fx as unknown as VfxSystem,
-      files: { pyrefang: async () => undefined, effects: {} },
+      files: { pyrefang: async () => undefined, voidmaul: async () => undefined, effects: {} },
       next: async () => undefined,
       idle: async () => undefined,
       gone: () => false,
@@ -302,6 +313,7 @@ describe('the fights warmed', () => {
   it('compiles each sample at its start and later, a step each', async () => {
     const { h, fx, compiled, champions } = host();
     const steps = await warmFights(h);
+    // No creature's art in this host: see the art's own test below.
     // Two spells, every body, two champions.
     const expected = 2 + WARM_BODIES.length + 2;
     expect(steps).toBe(expected);
@@ -340,8 +352,9 @@ describe('the fights warmed', () => {
     expect(order.at(-1)).toBe('spell');
   });
 
-  it('starts the champions and the plain bodies without the Pyrefang and the effect files', async () => {
+  it('starts the champions and the plain bodies without the creatures and the effect files', async () => {
     const pyrefang = onTheWay();
+    const voidmaul = onTheWay();
     const effects = onTheWay();
     const order: string[] = [];
     const { h } = host();
@@ -359,8 +372,15 @@ describe('the fights warmed', () => {
         dain_R: { impact: () => void order.push('spell dain_R') },
         sylra_Q: { impact: () => void order.push('spell sylra_Q') },
       },
+      art: {
+        voidmaul_slam: () => {
+          order.push('art voidmaul_slam');
+          return null;
+        },
+      },
       files: {
         pyrefang: () => pyrefang.promise,
+        voidmaul: () => voidmaul.promise,
         effects: { sylra: () => effects.promise },
       },
       // Only a file landing moves the wait on.
@@ -371,20 +391,87 @@ describe('the fights warmed', () => {
     expect(order).toEqual([
       'champion torv',
       'champion sylra',
-      'body voidmaul',
-      'body voidmaul+',
       'body warden',
       'body spinecrest',
       'body brackenlings',
       'body barkmaw',
+      'art voidmaul_slam',
       'spell dain_R',
     ]);
     effects.land();
     await settle();
     expect(order.at(-1)).toBe('spell sylra_Q');
+    voidmaul.land();
+    await settle();
+    expect(order.slice(-2)).toEqual(['body voidmaul', 'body voidmaul+']);
     pyrefang.land();
-    expect(await done).toBe(2 + WARM_BODIES.length + 2);
+    expect(await done).toBe(2 + WARM_BODIES.length + 1 + 2);
     expect(order.slice(-2)).toEqual(['body pyrefang', 'body pyrefang+']);
+  });
+
+  it("compiles a creature's art at each of its later beats, then releases it", async () => {
+    const events: string[] = [];
+    const { h } = host({
+      compile: () => events.push('compile'),
+      championIds: [],
+      catalog: {},
+      body: () => null,
+    });
+    const steps = await warmFights({
+      ...h,
+      art: {
+        voidmaul_rift: (): WarmArt => ({
+          root: mesh(),
+          age: (s) => events.push(`age ${s}`),
+          dispose: () => events.push('dispose'),
+        }),
+      },
+    });
+    expect(steps).toBe(WARM_BODIES.length + 1);
+    const art = events.slice(
+      events.indexOf(`age ${WARM_ART_AGES_S[0]}`),
+      events.indexOf('dispose') + 1,
+    );
+    expect(art).toEqual([
+      ...WARM_ART_AGES_S.flatMap((age) => [`age ${age}`, 'compile']),
+      // The step's own two, at its start and later.
+      'compile',
+      'compile',
+      'dispose',
+    ]);
+  });
+
+  it("compiles a sample's stand-ins with it and keeps them, out of the scene", async () => {
+    const scenes: THREE.Scene[] = [];
+    const inScene: number[] = [];
+    const standIns: THREE.Mesh[] = [];
+    const disposed = new Set<THREE.Material>();
+    const { h } = host({
+      compile: (scene) => {
+        scenes.push(scene);
+        inScene.push(scene.children.filter((o) => standIns.includes(o as THREE.Mesh)).length);
+      },
+      championIds: [],
+      catalog: {},
+      body: (b) => (b.kind === 'warden' ? mesh() : null),
+    });
+    await warmFights({
+      ...h,
+      hold: () => {
+        const standIn = mesh();
+        (standIn.material as THREE.Material).addEventListener('dispose', () =>
+          disposed.add(standIn.material as THREE.Material),
+        );
+        standIns.push(standIn);
+        return [standIn];
+      },
+    });
+    // The Warden's sample, the one body built, handed its stand-in.
+    expect(standIns).toHaveLength(1);
+    // In the scene at both of its step's compiles, and only then.
+    expect(inScene.filter((n) => n > 0)).toEqual([1, 1]);
+    expect(scenes[0]!.children).toHaveLength(0);
+    expect(disposed.size).toBe(0);
   });
 
   it("hides the samples' own lights from the programs", async () => {

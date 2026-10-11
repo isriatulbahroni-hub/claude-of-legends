@@ -328,19 +328,21 @@ export class RoyaleService {
   }
 
   // A seat changed hands: everyone else in the match reads who, and the
-  // scoreboard with the seat's new name and bot mark follows at once.
+  // scoreboard with the seat's new name and bot mark follows at once. A
+  // seat out for good (One life) is told nothing: no bot plays it on.
   private tellSeat(
     entry: RoyaleEntry,
     change: SeatChange,
-    seat: ChangedSeat,
+    seat: ChangedSeat & { unitId: number },
     about: number | null,
   ): void {
+    entry.seatChanged = true;
+    if (entry.match.isOut(seat.unitId)) return;
     const audience = [...entry.match.players.keys()];
     const playing = !entry.match.over;
     for (const s of seatChangeSends(change, seat, audience, about, playing)) {
       this.deps.send(s.to, s.msg);
     }
-    entry.seatChanged = true;
   }
 
   private unseat(clientId: number): void {

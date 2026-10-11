@@ -697,6 +697,34 @@ describe('a seat changing hands, told to the match', () => {
     expect(entry.match.players.has(2)).toBe(false);
     expect(h.to(1, 'player_left')).toEqual([]);
   });
+
+  it('tells nobody of a One life seat out for good: no bot plays it on', () => {
+    const h = harness();
+    const a = h.connect(1, 'alice');
+    const b = h.connect(2, 'bob');
+    const c = h.connect(3, 'carol');
+    h.enter(a, 'one_life');
+    h.enter(b, 'one_life');
+    h.enter(c, 'one_life');
+    h.runTo(DROP_S + 1);
+    const sim = h.fake.sims[0]!;
+    const bob = h.last(2, 'match_start')!.selfUnitId;
+    const carol = h.last(3, 'match_start')!.selfUnitId;
+    sim.takedown(bob, h.last(1, 'match_start')!.selfUnitId);
+    sim.takedown(carol, h.last(1, 'match_start')!.selfUnitId);
+    h.step(1);
+    const entry = [...h.service.matches.values()][0]!;
+    expect(entry.match.over).toBe(false);
+    // Bob, out, plays again: his old match hears nothing of it.
+    h.enter(b, 'one_life');
+    // Carol, out, closes the tab and comes back within the grace.
+    h.service.disconnect(c);
+    const again = h.connect(4, 'carol');
+    (again as { accountId: number }).accountId = 3;
+    expect(h.service.rejoin(again)).toBe(true);
+    expect(h.to(1, 'player_left')).toEqual([]);
+    expect(h.to(1, 'player_back')).toEqual([]);
+  });
 });
 
 describe('the match kept running for the next visitor', () => {

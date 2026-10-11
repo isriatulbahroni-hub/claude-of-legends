@@ -11,6 +11,7 @@
 import {
   earnedText,
   type LadderPlace,
+  levelText,
   NAME_FIELD_MAX,
   NAME_SAVE,
   NAME_SAVED,
@@ -103,6 +104,7 @@ export function buildLadderBox(
   const place = el('span', '');
   const earned = el('span', 'hud-ladder-earned');
   line.append(place, earned);
+  const level = el('span', 'hud-ladder-level');
   const hint = el('span', 'hud-ladder-hint');
   const field = el('input', 'hud-ladder-field');
   field.type = 'text';
@@ -114,10 +116,11 @@ export function buildLadderBox(
   const row = el('div', 'hud-ladder-row');
   row.append(field, save);
   const status = el('div', 'hud-ladder-status');
-  root.append(line, hint, row, status);
+  root.append(line, level, hint, row, status);
 
   const show = (at: LadderPlace): void => {
     place.textContent = placeText(at);
+    level.textContent = levelText(at.points);
     hint.textContent = nameHint(at);
     row.hidden = !at.guest;
     // Never under the fingers of someone typing.

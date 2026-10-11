@@ -971,6 +971,8 @@ const CSS = `
 .hud-ladder-line { display: block; font-size: 15px; color: #ffe08a; }
 .hud-ladder-earned { margin-left: 8px; color: #8fd06a; white-space: nowrap; }
 .hud-ladder-hint { display: block; margin-top: 2px; font-size: 12.5px; color: #c9bd93; }
+.hud-ladder-level { display: block; margin-top: 3px; font-size: 13px; font-weight: 700;
+  color: #f0d27a; }
 .hud-ladder-row { display: flex; gap: 8px; margin-top: 8px; align-items: stretch; }
 .hud-ladder-field {
   flex: 1; min-width: 0; border-radius: 7px; border: 1px solid #8a7430; background: #16120a;
@@ -988,6 +990,7 @@ const CSS = `
 .hud.compact .hud-ladder { margin-top: 8px; padding: 8px 10px; width: min(520px, 94vw); }
 .hud.compact .hud-ladder-line { font-size: 13px; }
 .hud.compact .hud-ladder-hint { font-size: 11.5px; }
+.hud.compact .hud-ladder-level { font-size: 12px; }
 .hud.compact .hud-ladder-row { margin-top: 6px; gap: 6px; }
 .hud.compact .hud-ladder-field { font-size: 12px; padding: 6px 8px; }
 .hud.compact .hud-ladder-row .hud-menu-btn { padding: 7px 14px; font-size: 12.5px; }
@@ -2691,10 +2694,9 @@ export class Hud {
     const open = this.escapeOverlay.classList.toggle('open');
     this.syncOverlay();
     settlePauseFocus(this.escapeOverlay, open);
-    // Opened in a match that scores: the place as it stands now.
-    if (this.scores() && open) {
-      this.pauseLadder.refresh();
-    }
+    // Opened: the place and the level as they stand now, in any match the
+    // server can answer for (the box stays hidden when it cannot).
+    if (open) this.pauseLadder.refresh();
   }
 
   // Whether this match scores on the ladder (ADR 0027), as far as the HUD

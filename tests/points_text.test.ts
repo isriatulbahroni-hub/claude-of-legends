@@ -10,6 +10,7 @@ import {
   firstPointsText,
   nameHint,
   nameSuggestion,
+  levelText,
   placeText,
   pointsCount,
   popText,
@@ -110,5 +111,14 @@ describe('the ladder box', () => {
       throw new Error('offline');
     }) as typeof fetch;
     expect((await saveName('bob', down)).ok).toBe(false);
+  });
+});
+
+describe('the level under the place', () => {
+  it("reads the line's points on the goal curve, with what the next level wants", () => {
+    expect(levelText(0)).toBe('Level 1 · 50 points to Level 2');
+    expect(levelText(35)).toBe('Level 1 · 15 points to Level 2');
+    expect(levelText(50)).toBe('Level 2 · 75 points to Level 3');
+    expect(levelText(340)).toBe('Level 4 · 10 points to Level 5');
   });
 });

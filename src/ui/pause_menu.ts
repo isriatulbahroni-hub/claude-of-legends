@@ -25,8 +25,10 @@ export const PAUSE_MENU_CSS = `
 /* While the menu is up, the HUD's own blocks and what the match stage
    draws over the HUD (the battle royale's edge arrows, the minimap) stand
    down: between the boxes only the dimmed match shows, and nothing stands
-   over them. Hidden rather than removed, so nothing moves under the menu. */
-.hud.paused > :not(.hud-pause), .hud.paused ~ * { visibility: hidden; }
+   over them. Hidden rather than removed, so nothing moves under the menu.
+   The turn wall keeps its dark ground under the menu, its words already
+   let go (ui/hud.ts). */
+.hud.paused > :not(.hud-pause):not(.hud-turn), .hud.paused ~ * { visibility: hidden; }
 ${M} {
   justify-content: flex-start; align-items: stretch; gap: 0; overflow-y: auto;
   background: radial-gradient(ellipse at 50% 45%, rgba(6, 10, 4, 0.58), rgba(2, 4, 1, 0.8));

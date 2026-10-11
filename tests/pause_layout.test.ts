@@ -194,14 +194,16 @@ describe('the pause menu', () => {
   it('stands the HUD down behind it, the battle royale layers included', () => {
     // Up, the HUD's root says so; its blocks and what the stage draws
     // after it (the edge arrows, the minimap) hide, so only the dimmed
-    // match shows between the boxes and nothing stands over them.
+    // match shows between the boxes and nothing stands over them. The turn
+    // wall keeps its dark ground under the menu, as it did.
     const hud = readFileSync(path.join(ROOT, 'src/ui/hud.ts'), 'utf8');
     expect(hud).toContain(
       "this.rootEl.classList.toggle('paused', this.escapeOverlay.classList.contains('open'));",
     );
     expect(PAUSE_MENU_CSS).toContain(
-      '.hud.paused > :not(.hud-pause), .hud.paused ~ * { visibility: hidden; }',
+      '.hud.paused > :not(.hud-pause):not(.hud-turn), .hud.paused ~ * { visibility: hidden; }',
     );
+    expect(hud).toContain('.hud.overlay-open .hud-turn > * { visibility: hidden; }');
     expect(PAUSE_MENU_CSS).toContain(pauseLayoutCss());
   });
 });

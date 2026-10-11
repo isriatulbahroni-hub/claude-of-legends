@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   actionsHeight,
+  bodyFloor,
   DESKTOP_PAUSE,
   type PauseBoxes,
   PHONE_PAUSE,
@@ -19,6 +20,7 @@ import {
   SETTINGS_ROWS_MOUSE,
   SETTINGS_ROWS_TOUCH,
   settingsHeight,
+  sheetFloor,
   stackHeight,
 } from '../src/ui/pause_layout';
 import {
@@ -36,9 +38,29 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // phone in landscape, which plays on the compact HUD.
 const SCREENS: readonly { w: number; h: number; compact: boolean }[] = [
   { w: 960, h: 540, compact: false },
+  { w: 1024, h: 768, compact: false },
   { w: 1280, h: 720, compact: false },
+  { w: 1366, h: 768, compact: false },
+  { w: 1536, h: 864, compact: false },
   { w: 1920, h: 1080, compact: false },
   { w: 844, h: 390, compact: true },
+];
+
+// What the menu has room for at a larger interface size (ui_scale: the
+// HUD zoomed, its pixels the screen's over the size) or in a short
+// window: the settings box squeezed to its least at most, then the menu
+// scrolls; a phone's browser bars and the smallest phones in landscape.
+const SQUEEZED: readonly { w: number; h: number; compact: boolean; at: string }[] = [
+  { w: 1366 / 1.75, h: 768 / 1.75, compact: false, at: '1366x768 at 175%' },
+  { w: 1366 / 2, h: 768 / 2, compact: false, at: '1366x768 at 200%' },
+  { w: 1280 / 1.5, h: 720 / 1.5, compact: false, at: '1280x720 at 150%' },
+  { w: 1280 / 2, h: 720 / 2, compact: false, at: '1280x720 at 200%' },
+  { w: 960 / 1.25, h: 540 / 1.25, compact: false, at: '960x540 at 125%' },
+  { w: 1024 / 1.5, h: 768 / 1.5, compact: false, at: '1024x768 at 150%' },
+  { w: 1440, h: 400, compact: false, at: 'a window 1440x400' },
+  { w: 844, h: 320, compact: true, at: 'a phone at 844x320' },
+  { w: 667, h: 325, compact: true, at: 'a phone at 667x325' },
+  { w: 568, h: 320, compact: true, at: 'a phone at 568x320' },
 ];
 
 const inside = (outer: ScreenBox, inner: ScreenBox): boolean =>
@@ -56,6 +78,10 @@ const named = (b: PauseBoxes): [string, ScreenBox][] => [
   ['ladder', b.ladder],
   ['feedback', b.feedback],
 ];
+
+// The sheet's selector under the HUD's class for one set of metrics.
+const sheetOf = (m: typeof DESKTOP_PAUSE): string =>
+  `.hud${m === DESKTOP_PAUSE ? ':not(.compact)' : '.compact'} .hud-overlay.modal.hud-pause .hud-pause-sheet`;
 
 const label = (s: { w: number; h: number; compact: boolean }): string =>
   `${s.w}x${s.h}${s.compact ? ' (touch)' : ''}`;
@@ -88,6 +114,7 @@ describe('the pause menu', () => {
     });
 
     it(`fits on one screen with no page scroll at ${label(s)}`, () => {
+      expect(b.menuScrolls).toBe(false);
       expect(inside(screen(s.w, s.h), b.sheet)).toBe(true);
       for (const [name, x] of named(b)) expect(inside(b.sheet, x), name).toBe(true);
     });
@@ -121,6 +148,44 @@ describe('the pause menu', () => {
     });
   }
 
+  for (const s of SQUEEZED) {
+    it(`squeezes no box below its least on ${s.at}`, () => {
+      const b = pauseBoxes(s.w, s.h, s.compact);
+      const m = s.compact ? PHONE_PAUSE : DESKTOP_PAUSE;
+      const boxes = named(b);
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          const [an, a] = boxes[i]!;
+          const [bn, bb] = boxes[j]!;
+          expect(overlaps(a, bb), `${an} over ${bn}`).toBe(false);
+        }
+      }
+      expect(b.settings.bottom - b.settings.top).toBeGreaterThanOrEqual(m.settingsMinH);
+      expect(b.ladder.bottom - b.ladder.top).toBe(m.ladderH);
+      expect(b.feedback.bottom - b.feedback.top).toBeGreaterThanOrEqual(m.feedbackH);
+      for (const [name, x] of named(b)) expect(inside(b.sheet, x), name).toBe(true);
+      // The menu scrolls rather than squeeze further, Resume, Toggle
+      // fullscreen and Leave match still on its first screen.
+      if (!b.menuScrolls) expect(inside(screen(s.w, s.h), b.sheet)).toBe(true);
+      else expect(b.sheet.top).toBe(m.gutter);
+      for (const button of [b.resume, b.fullscreen, b.leave]) {
+        expect(inside(screen(s.w, s.h), button)).toBe(true);
+      }
+    });
+  }
+
+  it('keeps the settings box at its least a label and two rows', () => {
+    for (const m of [DESKTOP_PAUSE, PHONE_PAUSE]) {
+      expect(m.settingsMinH).toBeGreaterThanOrEqual(settingsHeight(m, 2));
+      expect(bodyFloor(m, 'two')).toBe(
+        Math.max(actionsHeight(m) + m.gap + m.settingsMinH, stackHeight(m)),
+      );
+      expect(bodyFloor(m, 'wide')).toBe(stackHeight(m));
+    }
+    // A small phone in landscape still fits one screen at its floor.
+    expect(pauseBoxes(667, 375, true).menuScrolls).toBe(false);
+  });
+
   it("keeps the phone's settings in view at 844x390 too", () => {
     expect(pauseBoxes(844, 390, true, SETTINGS_ROWS_TOUCH).settingsScrolls).toBe(false);
   });
@@ -130,6 +195,7 @@ describe('the pause menu', () => {
     // ladder and the feedback beside them; the settings scroll in their box.
     const small = pauseBoxes(667, 375, true);
     expect(small.kind).toBe('two');
+    expect(small.menuScrolls).toBe(false);
     expect(inside(screen(667, 375), small.sheet)).toBe(true);
     // A narrow window: one column that scrolls, the actions first.
     const narrow = pauseBoxes(480, 800, false);
@@ -176,6 +242,24 @@ describe('the pause menu', () => {
       );
       expect(css).toContain(`max-width: ${m.maxWidth}px; gap: ${m.gap}px;`);
       expect(css).toContain(`.hud-pause-btn { height: ${m.buttonH}px; }`);
+      // The floors, on a room shorter than them only: past them the menu
+      // scrolls rather than squeeze, and with the room the sheet keeps its
+      // own height.
+      for (const kind of ['two', 'wide'] as const) {
+        const floor = sheetFloor(m, kind);
+        expect(floor).toBe(m.headH + m.gap + bodyFloor(m, kind));
+        expect(css).toContain(
+          `(height < ${floor}px) {\n  ${sheetOf(m)} { min-height: ${floor}px; }`,
+        );
+      }
+      expect(css).toContain(
+        `and (width < ${m.wideFrom}px) and (height < ${sheetFloor(m, 'two')}px)`,
+      );
+      // The actions never taller than the room under the title, so Leave
+      // match stays on the first screen of a menu that scrolls.
+      expect(css).toContain(
+        `.hud-pause-actions { max-height: calc(100cqh - ${m.headH + m.gap}px); }`,
+      );
     }
     expect(css).toContain('container: pause / size');
   });

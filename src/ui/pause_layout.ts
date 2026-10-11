@@ -6,6 +6,11 @@
 // the settings, the stack beside them), and a narrow one a single column
 // that scrolls, the actions first.
 //
+// A short screen (a small window, a large interface size) squeezes the
+// settings box first, which then scrolls inside itself, but never below
+// its least, nor the feedback box below what it holds: past that the
+// menu scrolls instead, the actions still on its first screen.
+//
 // Pure numbers, the grid's CSS made from them, and the boxes they make on
 // a screen at interface size 1, so a test keeps the boxes apart, Resume
 // and Leave match on the first screen and the grid across the width at
@@ -42,6 +47,9 @@ export interface PauseMetrics {
   // A settings row, and the gap between two.
   rowH: number;
   rowGap: number;
+  // The settings box at its least, border included: its label and two
+  // rows and a half, so it reads as a list that goes on.
+  settingsMinH: number;
   // The width of a settings row's label.
   rowLabelW: number;
   // The ladder box and the feedback box at their tallest, border included:
@@ -69,6 +77,7 @@ export const DESKTOP_PAUSE: PauseMetrics = {
   leaveGap: 16,
   rowH: 26,
   rowGap: 10,
+  settingsMinH: 144,
   rowLabelW: 112,
   ladderH: 178,
   feedbackH: 156,
@@ -92,6 +101,7 @@ export const PHONE_PAUSE: PauseMetrics = {
   leaveGap: 10,
   rowH: 30,
   rowGap: 6,
+  settingsMinH: 128,
   rowLabelW: 100,
   ladderH: 156,
   feedbackH: 112,
@@ -125,6 +135,17 @@ export function stackHeight(m: PauseMetrics): number {
   return m.ladderH + m.gap + m.feedbackH;
 }
 
+// The body under the title at its least, in the two layouts that stand
+// boxes side by side: the actions whole, the settings box at its least
+// (under the actions in two columns), and the stack whole.
+export function bodyFloor(m: PauseMetrics, kind: 'wide' | 'two'): number {
+  const left =
+    kind === 'two'
+      ? actionsHeight(m) + m.gap + m.settingsMinH
+      : Math.max(actionsHeight(m), m.settingsMinH);
+  return Math.max(left, stackHeight(m));
+}
+
 export interface PauseBoxes {
   kind: PauseKind;
   sheet: ScreenBox;
@@ -138,6 +159,8 @@ export interface PauseBoxes {
   feedback: ScreenBox;
   // The settings box is shorter than its rows and scrolls inside itself.
   settingsScrolls: boolean;
+  // The menu is taller than the screen and scrolls.
+  menuScrolls: boolean;
 }
 
 const box = (left: number, top: number, width: number, height: number): ScreenBox => ({
@@ -198,16 +221,22 @@ export function pauseBoxes(
       ladder,
       feedback,
       settingsScrolls: false,
+      menuScrolls: sheet.bottom > height - m.gutter,
     };
   }
 
-  // The body under the title as tall as its tallest column, and never
-  // taller than the screen: the settings box gives the height back.
+  // The body under the title as tall as its tallest column, and no taller
+  // than the screen: the settings box gives the height back, down to its
+  // least. Past that the menu scrolls, from the top.
   const bodyRoom = innerH - m.headH - m.gap;
+  const placeBody = (natural: number): { bodyH: number; top: number } => {
+    const bodyH = Math.max(Math.min(natural, bodyRoom), bodyFloor(m, kind));
+    const top = Math.max(m.gutter, (height - (m.headH + m.gap + bodyH)) / 2);
+    return { bodyH, top };
+  };
   if (kind === 'two') {
     const colW = (sheetW - m.gap) / 2;
-    const bodyH = Math.min(Math.max(actionsN + m.gap + settingsN, stackN), bodyRoom);
-    const top = (height - (m.headH + m.gap + bodyH)) / 2;
+    const { bodyH, top } = placeBody(Math.max(actionsN + m.gap + settingsN, stackN));
     const head = box(left, top, sheetW, m.headH);
     const bodyTop = head.bottom + m.gap;
     const actions = box(left, bodyTop, colW, actionsN);
@@ -226,17 +255,19 @@ export function pauseBoxes(
       ladder,
       feedback,
       settingsScrolls: settingsH < settingsN,
+      menuScrolls: bodyH > bodyRoom,
     };
   }
 
   const colW = (sheetW - m.actionsWidth - 2 * m.gap) / 2;
-  const bodyH = Math.min(Math.max(actionsN, settingsN, stackN), bodyRoom);
-  const top = (height - (m.headH + m.gap + bodyH)) / 2;
+  const { bodyH, top } = placeBody(Math.max(actionsN, settingsN, stackN));
   const head = box(left, top, sheetW, m.headH);
   const bodyTop = head.bottom + m.gap;
   // Every box in the row as tall as the row: the actions keep Leave match
   // at their foot, the feedback box's field takes what the ladder leaves.
-  const actions = box(left, bodyTop, m.actionsWidth, bodyH);
+  // The actions no taller than the screen's room, though, so Leave match
+  // stays on the first screen of a menu that scrolls.
+  const actions = box(left, bodyTop, m.actionsWidth, Math.min(bodyH, bodyRoom));
   const settings = box(actions.right + m.gap, bodyTop, colW, bodyH);
   const ladder = box(settings.right + m.gap, bodyTop, colW, m.ladderH);
   const feedback = box(ladder.left, ladder.bottom + m.gap, colW, bodyH - m.ladderH - m.gap);
@@ -250,15 +281,25 @@ export function pauseBoxes(
     ladder,
     feedback,
     settingsScrolls: bodyH < settingsN,
+    menuScrolls: bodyH > bodyRoom,
   };
 }
 
 // The grid's own rules for one set of metrics, scoped under the HUD's
 // class for it. The menu is a size container, so the columns follow the
 // room it has inside its gutters (and the safe area): the turned stage's
-// and the interface size's, not the page's.
+// and the interface size's, not the page's. The sheet is never taller
+// than that room, and on a room shorter than its floor it stands at the
+// floor (min-height wins) and the menu scrolls; with the room for it, the
+// sheet keeps its own height.
+export function sheetFloor(m: PauseMetrics, kind: 'wide' | 'two'): number {
+  return m.headH + m.gap + bodyFloor(m, kind);
+}
+
 function gridCss(scope: string, m: PauseMetrics): string {
   const sheet = `${scope} .hud-pause-sheet`;
+  const two = sheetFloor(m, 'two');
+  const wide = sheetFloor(m, 'wide');
   return `
 ${scope} {
   padding: calc(${m.gutter}px + var(--safe-top, 0px)) calc(${m.gutter}px + var(--safe-right, 0px))
@@ -288,6 +329,13 @@ ${sheet} .set-row label { width: ${m.rowLabelW}px; }
     grid-template-rows: auto minmax(0, 1fr);
     grid-template-areas: 'head head head' 'actions settings stack';
   }
+  ${sheet} .hud-pause-actions { max-height: calc(100cqh - ${m.headH + m.gap}px); }
+}
+@container pause (min-width: ${m.twoFrom}px) and (width < ${m.wideFrom}px) and (height < ${two}px) {
+  ${sheet} { min-height: ${two}px; }
+}
+@container pause (min-width: ${m.wideFrom}px) and (height < ${wide}px) {
+  ${sheet} { min-height: ${wide}px; }
 }`;
 }
 

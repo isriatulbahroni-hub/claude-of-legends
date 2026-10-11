@@ -44,7 +44,7 @@ import { castSoundOf } from './champion_sounds';
 import { installCursorLock } from './cursor_lock';
 import { BeatCamera } from './death_beat';
 import type { PostMatchAction } from './flow';
-import { requestGameFullscreen } from './fullscreen';
+import { pauseOnFullscreenExit, requestGameFullscreen, watchFullscreen } from './fullscreen';
 import { type InputHandlers, setupInput } from './input';
 import { buildMatchStage, stageSizeOf } from './match_stage';
 import { moveRingWanted } from './move_ring';
@@ -255,6 +255,24 @@ export function startPresentation(
     if (options.fullscreen !== false) void requestGameFullscreen().then(askLandscape);
   };
   container.addEventListener('pointerdown', onFirstPointerDown, { once: true });
+  // Fullscreen coming and going mid-match (game/fullscreen.ts). Taken: the
+  // phone is asked to turn again, the lock being a fullscreen document's.
+  // Left (the browser's Esc, a phone's Back, the menu's button): the
+  // browser gave the turn back with it, so the stage and the wall answer
+  // for the phone again; the first click no longer takes the screen back,
+  // the window being the player's choice; and the pause menu the Esc was
+  // pressed for opens.
+  const stopFullscreenWatch = watchFullscreen((fullscreen) => {
+    if (fullscreen) {
+      askLandscape();
+      return;
+    }
+    container.removeEventListener('pointerdown', onFirstPointerDown);
+    stage.setLandscapeLocked(false);
+    hud.setLandscapeLocked(false);
+    const cover = { pauseMenu: hud.covers().pauseMenu, ended: hud.endScreenUp() };
+    if (pauseOnFullscreenExit({ ...cover, typing: hud.isChatOpen() })) hud.toggleEscapeMenu();
+  });
 
   let hooks: NetHooks = {};
   const showPing = (x: number, z: number, from: string, team: TeamId): void => {
@@ -884,6 +902,7 @@ export function startPresentation(
       disposed = true;
       cancelAnimationFrame(rafId);
       container.removeEventListener('pointerdown', onFirstPointerDown);
+      stopFullscreenWatch();
       window.removeEventListener('blur', onWindowBlur);
       teardownInput();
       cursorLock?.dispose();

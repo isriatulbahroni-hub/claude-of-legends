@@ -864,6 +864,8 @@ const CSS = `
 .hud.compact .hud-overlay.returning { justify-content: flex-end;
   padding-bottom: ${RETURN_WASH_PHONE_BOTTOM_PX}px; }
 .hud.compact .hud-overlay.returning .hud-overlay-title { font-size: 20px; }
+.hud.compact .hud-end-rating { font-size: 13px; margin-top: 2px; min-height: 0; }
+.hud.compact .hud-end-join { margin-top: 8px; font-size: 11.5px; }
 .hud.compact .hud-menu-btn { margin-top: 6px; padding: 8px 18px; font-size: 13px; }
 .hud.overlay-open ~ .touchbar { display: none; }
 

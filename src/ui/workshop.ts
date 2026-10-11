@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { appNav } from '../game/nav';
+import { wheelPixels } from '../game/wheel_step';
 import {
   captureRestPose,
   findBone,
@@ -288,7 +289,7 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     'wheel',
     (e) => {
       e.preventDefault();
-      dist = Math.min(16, Math.max(2.5, dist + e.deltaY * 0.004));
+      dist = Math.min(16, Math.max(2.5, dist + wheelPixels(e, canvas.clientHeight) * 0.004));
     },
     { passive: false },
   );

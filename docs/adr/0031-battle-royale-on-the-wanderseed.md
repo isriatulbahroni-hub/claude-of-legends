@@ -305,3 +305,13 @@ to come to it. This adds a rule to Respawn; One life is unchanged.
   life 18.4 s against 16.8 (-1.3 to +4.0 s: two runs on rules 9 differ by -2.0 to +1.7 s), the
   bots fighting 67.3 percent against 67.9, the steals 38.1 percent against 38.0. One life
   (`--variant one_life --dropin 60`, seeds 1 to 24) is identical, match for match.
+- **Measured again on rules 11**, merged over the Voidmaul's slam, against rules 10 (the same
+  report, the same seeds). The drop-ins: a takedown within the first minute for 89 of 96
+  against 69 (+12 to +29 points), in the first life for 76 against 51 (+15 to +37 points), the
+  first life 35 s at the median against 28, the enemy nearest at landing falling to the
+  drop-in in 32 percent of the first lives against 23; the stand-in's median life 17.2 s
+  against 16.6 (-1.3 to +3.0 s), the bots fighting 66.4 percent against 67.8, the steals 38.9
+  percent against 38.8, the final level median 10; some 88 Upstarts a match, 24 of them taking
+  a champion down. Without drop-ins (`--variant both`, seeds 1 to 12): Respawn's stand-in
+  median life 17.6 s against 16.1, the bots fighting 66.9 percent against 67.0, the steals 38.8
+  percent against 40.4, the final level median 10; One life identical, match for match.

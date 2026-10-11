@@ -13,14 +13,17 @@
 // The chrome it shares with the signed-in home lives in ui/page.ts.
 
 import { appNav } from '../game/nav';
-import { type AuthedAccount, buildAuthForm } from './auth';
+import { updateSettings } from '../game/settings';
+import { loadLanding, untilLanded } from '../net/landing';
+import { type AuthedAccount, type AuthFormControl, buildAuthForm } from './auth';
+import { setPortrait } from './champion_art';
 import type { DiscordResult } from './discord_entry';
 import { startBackdrop } from './home_backdrop';
 import { CONTRIBUTE_LEAD, CONTRIBUTE_TITLE, CONTRIBUTE_WAYS } from './landing_contribute';
 import { mountEmbers } from './landing_embers';
-import { mountLandingLadder } from './landing_ladder';
+import { markOwnRow, mountLandingLadder } from './landing_ladder';
 import {
-  ACCOUNT_LINE,
+  accountCardWords,
   CLASSIC_ART,
   HERO_RANKED_LINE,
   LANDING_MODES,
@@ -41,6 +44,8 @@ import { el, ensureMenuCss } from './menu';
 import { allNews, countdownText, dayText, isPinned, newestOf } from './news';
 import { newsImageUrl } from './news_images';
 import { openNews } from './news_section';
+import { kept, weekLine } from './own_panel';
+import { mountOwnPanel } from './own_panel_view';
 import { buildPage, ensurePageCss, mountLiveStats, navLink } from './page';
 import { planetEmblem } from './planet_emblem';
 import { buildRepoLink } from './repo_link';
@@ -63,10 +68,12 @@ const CSS = `
    eleven the Respawn line ran to four lines and pushed the gold button
    under the fold of a laptop. */
 .pg.land .pg-cards { display: grid; max-width: 1180px; gap: 18px; align-items: stretch;
-  margin-left: auto; margin-right: auto;
+  margin-left: auto; margin-right: auto; margin-top: clamp(16px, 3vh, 30px);
   grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); }
 .pg.land .pg-cards > .pg-card.plain { order: -2; }
 .pg.land .pg-cards > .pg-card.gold { grid-column: 1 / -1; }
+/* An account reading the landing has no card to be offered. */
+.pg.land .pg-cards > .pg-card.gold[hidden] { display: none; }
 /* What the account opens, inside the card that opens it: the same three
    paintings the home stands at full height, in the same order, so the
    door and the room behind it look alike. Upright and edge to edge, with
@@ -139,6 +146,16 @@ const CSS = `
   letter-spacing: 1.2px; text-transform: uppercase; color: #f0dca0; line-height: 1.15; }
 .pg-way-words span { font-size: 12px; line-height: 1.4; color: #b9cbe4; }
 .pg-way-go { flex: none; font-size: 20px; line-height: 1; color: #c9a84a; }
+/* The 5v5's week under its rules: the three champions' faces, overlapping,
+   and the line naming them. */
+.pg-way-words .pg-way-week { display: flex; align-items: center; gap: 7px; min-width: 0;
+  margin: 3px 0 0; font-size: 11.5px; line-height: 1.3; color: #e6d7a8; }
+.pg-way-words .pg-way-week[hidden] { display: none; }
+.pg-way-words .pg-way-week-faces { display: flex; flex: none; font-size: 0; }
+.pg-way-week-faces img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover;
+  object-position: 50% 18%; border: 1px solid #8a7433; background: #0a1120; margin-left: -6px; }
+.pg-way-week-faces img:first-child { margin-left: 0; }
+.pg-way-words .pg-way-week-text { min-width: 0; font-size: inherit; color: inherit; }
 /* The emblem: the Wanderseed (ui/planet_emblem.ts) for the battle
    royale's two, the ranked painting for the 5v5. */
 .pg-way > .pg-way-art { flex: none; width: 46px; height: 46px; --planet: 46px; position: relative; }
@@ -198,6 +215,22 @@ const CSS = `
    it again: without this an empty green box stood over the button whenever
    nobody was on. */
 .pg.land .pg-presence[hidden] { display: none; }
+/* The own panel (ui/own_panel_view.ts) heads the Play now card: who the
+   visitor is in the game, from the first page. It holds its height from
+   the first frame, unseen until the landing's answer comes, so nothing
+   under it moves. The New banner speaks to a first visit: a line the server
+   already keeps reads its own name, place and level there instead. */
+.pg.land .pg-card.plain > .own { min-height: 196px; }
+.pg.land .pg-card.plain > .own.own-wait { visibility: hidden; }
+.pg.land.own-back .pg-new { display: none; }
+/* Under the own panel the New banner wears its compact dress at every size,
+   its kicker left to the ways in under the button, so the panel, the banner
+   and the gold button share the first screen. Always, so nothing moves. */
+.pg-new { padding: 9px 12px; gap: 12px; margin: 0 0 12px; }
+.pg-new > .planet-emblem { --planet: 60px; }
+.pg-new-kicker { display: none; }
+.pg.land .pg-card .pg-new h2 { font-size: 17px; }
+.pg.land .pg-card .pg-new p { font-size: 12px; line-height: 1.4; }
 /* The hero's second line: the game is ranked from the first match, in the
    browser, with no account (ADR 0027). Gold, since it is the news. The gaps
    around it give back the room it takes, so the two cards, and the gold
@@ -205,7 +238,18 @@ const CSS = `
 .pg.land .pg-ranked { margin: 6px 0 0; font-size: clamp(13.5px, 1.4vw, 15.5px); font-weight: 700;
   letter-spacing: 0.3px; color: #f0dca0; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.85); }
 .pg.land .pg-ranked + .pg-hero-cta { margin-top: 10px; }
-.pg.land .pg-hero { gap: clamp(10px, 1.7vh, 18px); }
+.pg.land .pg-hero { gap: clamp(10px, 1.7vh, 18px); padding-top: clamp(10px, 2.4vh, 26px); }
+/* The hero is a row on every screen wider than a phone held upright: the
+   lockup beside the copy rather than over it, so the Play now card, and
+   the own panel at its top, stand in the first screen. Always, not once
+   the landing's answer comes, so nothing moves. */
+@media (min-width: 561px) {
+  .pg.land .pg-hero { flex-direction: row; justify-content: center; text-align: left;
+    gap: clamp(16px, 2.2vw, 28px); }
+  .pg.land .pg-lockup { width: clamp(96px, 9vw, 132px); }
+  .pg.land .pg-hero-copy { align-items: flex-start; }
+  .pg.land .pg-hero-cta { justify-content: flex-start; }
+}
 /* The ladder of every human (ui/landing_ladder.ts) stands in the grid of
    the two ways in: beside the Play now card on a wide screen, and between
    the Play now card and the account card once they stack, so a phone
@@ -221,10 +265,11 @@ const CSS = `
    as it can, and the card leaves its painting out, so the ladder under it
    is read on the second screen rather than the third. */
 @media (max-height: 560px) {
-  .pg.land .pg-hero { padding-top: 6px; gap: 10px; }
-  .pg.land .pg-lockup { width: 104px; }
-  .pg.land .pg-hero-cta { margin-top: 14px; }
-  .pg.land .pg-ranked + .pg-hero-cta { margin-top: 10px; }
+  .pg.land .pg-hero { padding-top: 6px; gap: 20px; }
+  .pg.land .pg-lockup { width: 76px; }
+  /* The tagline alone beside the crest: the ranked line and the count
+     give their room to the own panel and the gold button under them. */
+  .pg.land .pg-ranked, .pg.land .pg-hero-cta { display: none; }
   .pg.land .pg-cards { margin-top: 14px; }
   .pg.land .pg-card.plain { padding-top: 14px; }
   .pg-new { padding: 8px 12px; gap: 12px; margin-bottom: 10px; }
@@ -237,17 +282,16 @@ const CSS = `
   .pg-way > .pg-way-art { width: 40px; height: 40px; --planet: 40px; }
   .pg-way-words b { font-size: 13.5px; }
   .pg-way-words span { font-size: 11.5px; line-height: 1.3; }
-}
-/* Sideways on a phone the stacked hero, crest over words, took the whole
-   first screen and the gold button sat under it: the crest stands beside
-   the words instead, and the card rises with the button on the first
-   screen. */
-@media (max-height: 560px) and (min-width: 640px) {
-  .pg.land .pg-hero { flex-direction: row; justify-content: center; gap: 20px; text-align: left; }
-  .pg.land .pg-lockup { width: 76px; }
-  .pg.land .pg-hero-copy { align-items: flex-start; }
-  .pg.land .pg-hero-cta { justify-content: flex-start; margin-top: 6px; }
-  .pg.land .pg-ranked + .pg-hero-cta { margin-top: 6px; }
+  /* The panel in its compact dress, and the banner left to the hero's
+     line once the panel stands: the gold button keeps the first screen. */
+  .pg.land .pg-card.plain > .own { min-height: 112px; margin-bottom: 8px; }
+  /* The bar, the presence line and the panel give a few pixels each. */
+  .pg.land .pg-bar { padding-top: 8px; min-height: 50px; }
+  .pg.land .pg-presence { padding: 5px 10px; margin-bottom: 6px; font-size: 12px; }
+  .pg.land.own-on .pg-new { display: none; }
+  .pg-way-words .pg-way-week-faces { display: none; }
+  .pg-way-words .pg-way-week-text { white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; }
 }
 @media (prefers-reduced-motion: reduce) {
   .pg.land .pg-cards .pg-card.glow { animation: none; }
@@ -316,13 +360,22 @@ const CSS = `
      one thing to press at the foot of a card that had already used the
      screen. Heading, line, button, then the picture as what it is,
      decoration under the offer. */
+  .pg.land .pg-lockup { width: 96px; }
+  .pg.land .pg-card.plain > .own { order: 0; min-height: 214px; }
   .pg.land .pg-card.plain > .pg-new { order: 1; }
   .pg.land .pg-card.plain > .pg-presence { order: 3; margin-top: 2px; }
   .pg.land .pg-card.plain > .menu-btn { order: 3; margin-top: 2px; }
   .pg.land .pg-card.plain > .pg-fine { order: 4; }
   .pg.land .pg-card.plain > .pg-ways { order: 5; }
-  .pg-new { gap: 12px; }
-  .pg-new > .planet-emblem { --planet: 56px; }
+  .pg-new { gap: 12px; padding: 8px 12px; }
+  .pg-new > .planet-emblem { --planet: 44px; }
+  /* Upright, the banner is its title: the line under it ran to five lines
+     in a phone's column, and Respawn's row under the button says it. */
+  .pg.land .pg-card .pg-new p { display: none; }
+  /* A little more width for the name beside its Change, a little less
+     height over the gold button. */
+  .pg.land .pg-card.plain { padding: 16px 16px 18px; }
+  .pg.land .pg-hero { gap: 12px; }
   .pg.land .pg-card .pg-new h2 { font-size: 13.5px; letter-spacing: 0.6px; white-space: nowrap; }
   .pg.land .pg-card.plain > .pg-news { order: 6; }
   .pg-mode { height: auto; aspect-ratio: 3 / 4; }
@@ -521,6 +574,10 @@ export function showLanding(
   intent: LandingIntent | null = null,
 ): Promise<LandingResult> {
   ensureCss();
+  // The landing's one request (src/net/landing.ts), asked once as the page
+  // opens: it hands the visitor its Guest and answers the ladder, the own
+  // panel and the week, and each part reads the same answer.
+  const pagePromise = loadLanding();
   return new Promise((resolve) => {
     const { root, inner, bar, hero } = buildPage('land', true);
     const stopBackdrop = startBackdrop(root);
@@ -536,12 +593,22 @@ export function showLanding(
       });
     }
 
+    let leaving = false;
     const finish = (result: LandingResult): void => {
-      stopReveal();
-      stopEmbers();
-      stopBackdrop();
-      root.remove();
-      resolve(result);
+      if (leaving) return;
+      leaving = true;
+      const leave = (): void => {
+        stopReveal();
+        stopEmbers();
+        stopBackdrop();
+        root.remove();
+        resolve(result);
+      };
+      // A Guest's match asks for its Guest (POST /api/guest) with the
+      // cookie the landing's request set, so the match and the own panel
+      // are the same Guest: Play waits for that answer, a moment at most.
+      if (result.kind === 'guest') void untilLanded(pagePromise).then(leave);
+      else leave();
     };
     // The card's way in, built from its door (ui/landing_modes.ts), so the
     // button's words and what it does cannot drift apart.
@@ -553,6 +620,8 @@ export function showLanding(
     };
     // One of the Play now card's ways in, a door of its own: the emblem,
     // the kind of match, the name and its rules, and the chevron.
+    const classicWeek = el('span', 'pg-way-week');
+    classicWeek.hidden = true;
     const wayRow = (way: LandingWay): HTMLButtonElement => {
       const row = el('button', `pg-way${way.door === PLAY_NOW ? ' lead' : ''}`);
       row.type = 'button';
@@ -572,6 +641,9 @@ export function showLanding(
       }
       const words = el('span', 'pg-way-words');
       words.append(el('small', '', way.kicker), el('b', '', way.title), el('span', '', way.line));
+      // The 5v5's week (ADR 0018): the three champions any player may pick
+      // there this week, a Guest too, filled from the landing's answer.
+      if (way.id === 'classic') words.appendChild(classicWeek);
       row.append(art, words, el('span', 'pg-way-go', '\u203a'));
       row.addEventListener('click', () => finish({ kind: way.door.kind, play: way.door.play }));
       return row;
@@ -650,7 +722,19 @@ export function showLanding(
     // account opens, and nothing explains what a bot or a forge is. The
     // paintings do that, and the page is not a manual.
     const online = el('section', 'pg-card gold');
-    online.append(el('h2', '', 'Create a free account'), el('p', '', ACCOUNT_LINE));
+    // Its words follow who reads it (ui/landing_modes.ts accountCardWords):
+    // the plain offer until the answer comes, the account as keeping what
+    // a Guest holds once it holds something, and no card for an account.
+    const onlineTitle = el('h2', '');
+    const onlineLine = el('p', '');
+    const sayAccount = (words: ReturnType<typeof accountCardWords>): void => {
+      online.hidden = words === null;
+      if (!words) return;
+      onlineTitle.textContent = words.title;
+      onlineLine.textContent = words.line;
+    };
+    sayAccount(accountCardWords(null));
+    online.append(onlineTitle, onlineLine);
     // The three the home stands at full height, wearing the paintings the
     // home gives them, standing beside the form rather than under it:
     // what an account opens, next to the thing that opens it.
@@ -669,11 +753,15 @@ export function showLanding(
       opens.appendChild(item);
     }
     const formPanel = el('div', 'pg-opens-form');
+    // Filled by the form: the own panel's Keep it on every device opens its
+    // register tab with the Guest's name in it.
+    const authControl: AuthFormControl = { register: () => {} };
     formPanel.appendChild(
       buildAuthForm(
         (account) => finish({ kind: 'account', account }),
         discordResult,
         intent === 'register' ? 'register' : 'login',
+        authControl,
       ),
     );
     const openRow = el('div', 'pg-open-row');
@@ -717,6 +805,13 @@ export function showLanding(
     bannerWords.append(el('div', 'pg-new-kicker', ROYALE_LABEL), newTitle, el('p', '', NEW_LINE));
     banner.append(planetEmblem('respawn'), bannerWords);
     playCard.append(banner, presence, playBtn, wayList);
+    // The own panel heads the card (ui/own_panel_view.ts): who the visitor
+    // is in the game from the first page, over the banner and the gold
+    // button. It holds its height from the first frame and shows when the
+    // landing's answer comes, so nothing under it moves; with no answer it
+    // goes, and the card stands as it did.
+    const ownHost = el('div', 'own own-wait');
+    playCard.prepend(ownHost);
     // The newest news in one line (CONTEXT.md: News): a site whose last
     // word is from yesterday reads inhabited before anything is clicked.
     // It opens the section over the landing, with the nav told, so Back
@@ -773,7 +868,53 @@ export function showLanding(
     const ladder = el('section', 'pg-ladder');
     ways.append(online, playCard, ladder);
     inner.appendChild(ways);
-    mountLandingLadder(ladder, () => finish({ kind: PLAY_NOW.kind, play: PLAY_NOW.play }));
+    mountLandingLadder(ladder, pagePromise, () =>
+      finish({ kind: PLAY_NOW.kind, play: PLAY_NOW.play }),
+    );
+    void pagePromise.then((page) => {
+      const week = page?.week ?? null;
+      const said = week ? weekLine(week, Date.now()) : '';
+      if (week && said) {
+        const faces = el('span', 'pg-way-week-faces');
+        for (const id of week.rotation) {
+          const face = el('img', '');
+          face.alt = '';
+          face.decoding = 'async';
+          setPortrait(face, id, 0x6b5a2e);
+          faces.appendChild(face);
+        }
+        classicWeek.replaceChildren(faces, el('span', 'pg-way-week-text', said));
+        classicWeek.hidden = false;
+      }
+    });
+    void pagePromise.then((page) => {
+      const own = page?.own ?? null;
+      if (!own || !ownHost.isConnected) {
+        ownHost.remove();
+        return;
+      }
+      // The browser's copy of the line's total, which the end card's level
+      // climbs from (ui/royale_goal.ts).
+      updateSettings({ royaleGoal: own.points });
+      sayAccount(accountCardWords(own));
+      const panel = mountOwnPanel(ownHost, own, {
+        // Offered, never demanded: the account card, on its register tab,
+        // with the name the Guest stands under.
+        onKeep: (name) => {
+          online.scrollIntoView({ block: 'start', behavior: 'smooth' });
+          authControl.register(name);
+        },
+        onRenamed: (name) => {
+          markOwnRow(ladder, name);
+          sayAccount(accountCardWords(panel.own()));
+        },
+        // The session is there: the boot finds it and opens the home.
+        onHome: () => window.location.reload(),
+      });
+      ownHost.classList.remove('own-wait');
+      root.classList.add('own-on');
+      if (own.account || kept(own)) root.classList.add('own-back');
+    });
 
     // --- and the thing the genre does not offer ---
     const give = el('section', 'pg-give');

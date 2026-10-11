@@ -19,7 +19,7 @@ CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-
 - `CHROME` defaults to the usual Windows install path; on Linux and macOS it must be set.
 - The scripts talk to `http://localhost:5173` and expect the server on the port the client
   proxies to. With a non-default `CLIENT_PORT` they will not find the page.
-- `SHOT_DIR`, where a script honours it (`e2e_academy`, `e2e_ladder`, `e2e_wave`), receives PNGs at each step; the scripts print
+- `SHOT_DIR`, where a script honours it (`e2e_academy`, `e2e_ladder`, `e2e_wave`, `e2e_landing`), receives PNGs at each step; the scripts print
   page errors and console messages and exit non-zero on a failed check.
 - Each script registers a fresh account with a generated name (`scripts/e2e_signin.mjs`),
   so the task-local `DATA_DIR` keeps them out of the ordinary state.
@@ -32,6 +32,7 @@ CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-
 | `e2e_replay.mjs`, `e2e_spectate.mjs` | The replay player (needs `scripts/seed_replay.mjs` first) and spectating |
 | `e2e_forge.mjs`, `e2e_workshop.mjs`, `e2e_test_drive.mjs` | The Forge, its workshop and the test drive (use `GENERATION_PROVIDER=mock` in `.env`) |
 | `e2e_profile.mjs`, `e2e_ladder.mjs`, `e2e_lifecycle.mjs` | Profile, ladders, the no-reload match lifecycle |
+| `e2e_landing.mjs` | The landing's own panel at 1280x720, 844x390 and 390x844 (touch): the name and the gold button in the first screen, the rename in place, Keep it on every device. `FIXTURE=1` answers the landing and the rename from the page and needs the Vite client alone (`PRESENCE=1` adds the presence line); without it, the real stack seeded with `node scripts/seed_home.mjs` (a fresh Guest, and the seeded Thornwick through `loc_guest=seed-home-guest`) |
 | `smoke_browser.mjs [url] [shot.png]` | Load one page, report console errors, save a screenshot |
 
 ## Reading a failed run

@@ -139,6 +139,14 @@ export async function requestReset(email: string): Promise<string | null> {
   }
 }
 
+// What the page around the form may ask of it once it is built, filled in
+// by buildAuthForm when given. register(name) opens the register tab with the
+// name in its field and the password field focused: the landing's own panel
+// offers a Guest's name to keep that way (ui/own_panel_view.ts).
+export interface AuthFormControl {
+  register(name: string): void;
+}
+
 // Just the credential panel: the tabs, the fields, the error line and the
 // button. The page around it (ui/landing.ts) owns the layout, so this
 // module stays about proving who someone is and nothing else.
@@ -157,6 +165,7 @@ export function buildAuthForm(
   onSignedIn: (account: AuthedAccount) => void,
   discordResult: DiscordResult | null = null,
   initialMode: 'login' | 'register' = 'login',
+  control?: AuthFormControl,
 ): HTMLElement {
   ensureCss();
   const root = el('div', 'auth-form');
@@ -206,7 +215,7 @@ export function buildAuthForm(
     forgot: { go: 'Send a reset link', busy: 'Sending...' },
   };
 
-  const setMode = (next: Mode): void => {
+  const setMode = (next: Mode, focus = true): void => {
     mode = next;
     loginTab.classList.toggle('on', next === 'login');
     registerTab.classList.toggle('on', next === 'register');
@@ -234,7 +243,7 @@ export function buildAuthForm(
             'confirmed. An unconfirmed address cannot receive one, because it might not be yours.'
           : '';
     error.textContent = '';
-    (next === 'forgot' ? email : name).focus();
+    if (focus) (next === 'forgot' ? email : name).focus();
   };
 
   const attempt = (): void => {
@@ -298,6 +307,15 @@ export function buildAuthForm(
   }
 
   setMode(initialMode);
+  if (control) {
+    control.register = (offered: string): void => {
+      go.disabled = false;
+      setMode('register', false);
+      name.value = offered;
+      // No scroll of its own: the page scrolls the card into view.
+      password.focus({ preventScroll: true });
+    };
+  }
   return root;
 }
 

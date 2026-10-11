@@ -11,8 +11,10 @@
 // chosen. The painting is the tile's, so a mode looks the same on both
 // sides of the door.
 
+import type { LandingOwn } from '../net/landing';
 import type { RoyaleVariant } from '../sim/royale/types';
 import { type TileId, tileArtUrl } from './home_tiles';
+import { kept } from './own_panel';
 import {
   CLASSIC_LINE,
   CLASSIC_TITLE,
@@ -63,6 +65,21 @@ export const HERO_RANKED_LINE =
 // and the three modes painted beside the form.
 export const ACCOUNT_LINE =
   'It keeps your points on every device, and opens ranked, bots and the Forge.';
+
+// What the account card says, by who reads it (the own panel's answer,
+// src/net/landing.ts): the account as what keeps what a Guest holds, once
+// it holds something, offered and never demanded; the plain offer before
+// that, or with no answer; and nothing to an account, whose card is hidden.
+export const ACCOUNT_TITLE = 'Create a free account';
+export const KEEP_TITLE = 'Keep it on every device';
+export const KEEP_LINE =
+  'A free account carries your points, your level and your best to every device behind a ' +
+  'password, and opens ranked, bots and the Forge.';
+export function accountCardWords(own: LandingOwn | null): { title: string; line: string } | null {
+  if (own?.account) return null;
+  if (own && kept(own)) return { title: KEEP_TITLE, line: KEEP_LINE };
+  return { title: ACCOUNT_TITLE, line: ACCOUNT_LINE };
+}
 
 // What a way in plays as a Guest (ADR 0024): the battle royale on one of its
 // two rule sets (ADR 0031), or the 5v5 on the Star Orchard.

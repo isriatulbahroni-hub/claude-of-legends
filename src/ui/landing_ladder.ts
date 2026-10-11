@@ -1,8 +1,8 @@
 // The ladder on the landing: the ladder of every human (ADR 0027), the
 // accounts and the Guests ranked by the points their matches banked, shown
 // to a visitor as the reason to press Play: one match puts their name on
-// it, with no account. Read from one request the server answers without a
-// session (server/landing_page.ts); the wire shape is mirrored here and
+// it, with no account. Read from the landing's one request
+// (server/landing_page.ts), whose wire shape src/net/landing.ts mirrors;
 // the module never imports from server/. The bot ladders stay inside the
 // home and the Academy.
 //
@@ -11,32 +11,8 @@
 // the server does not answer, because a landing with an empty box on it
 // reads worse than one without.
 
+import type { LandingLadder, LandingLadderMe, LandingPage } from '../net/landing';
 import { el } from './menu';
-
-export interface LandingLadderRow {
-  rank: number;
-  name: string;
-  points: number;
-  guest: boolean;
-}
-
-export interface LandingLadderMe {
-  rank: number | null;
-  points: number;
-  name: string;
-  guest: boolean;
-  named: boolean;
-}
-
-export interface LandingLadder {
-  total: number;
-  rows: LandingLadderRow[];
-  me: LandingLadderMe | null;
-}
-
-export interface LandingPage {
-  ladder: LandingLadder;
-}
 
 export const LADDER_HEADING = 'The ladder';
 // What an empty ladder shows: its first places, open.
@@ -66,11 +42,13 @@ export function ladderLead(ladder: Pick<LandingLadder, 'total'>): string {
   return `${who}, ranked by the points their matches earned.`;
 }
 
-// A returning visitor's own place, when the cookie said who they are.
-export function meLine(me: LandingLadderMe | null): string | null {
-  if (!me) return null;
-  if (me.rank === null) return null;
-  return `You are #${me.rank} with ${pointsText(me.points)}. Play to climb.`;
+// The button under the rows, which starts the match the gold button starts:
+// a line not on the ladder yet takes its place there, a line on it climbs.
+// The reader's own place is the own panel's to say (ui/own_panel.ts), at the
+// top of the Play now card.
+export const CLIMB_CALL = 'Play to climb';
+export function joinCall(me: LandingLadderMe | null): string {
+  return me === null || me.rank === null ? JOIN_CALL : CLIMB_CALL;
 }
 
 const CSS = `
@@ -82,7 +60,6 @@ const CSS = `
 .pg-ladder h2 { font-family: Cinzel, Georgia, serif; font-size: 22px; letter-spacing: 1.8px;
   text-transform: uppercase; margin: 0; color: #f0dca0; }
 .pg-ladder .pg-ladder-lead { margin: 6px 0 0; font-size: 12.5px; color: #9db2cf; }
-.pg-ladder .pg-ladder-me { margin: 8px 0 0; font-size: 13px; font-weight: 700; color: #f3e6bd; }
 /* Every line on the ladder, in a box that scrolls: ten and a half rows
    high, so the half row at the foot says there is more under it. One
    column, read down: two columns read #1 left, #2 right, #3 left, which
@@ -135,8 +112,6 @@ export function renderLandingLadder(
   const head = el('div', 'pg-ladder-head');
   head.append(el('h2', '', LADDER_HEADING));
   host.append(head, el('p', 'pg-ladder-lead', ladderLead(ladder)));
-  const mine = meLine(ladder.me);
-  if (mine) host.appendChild(el('p', 'pg-ladder-me', mine));
   if (ladder.rows.length === 0) {
     // An empty ladder still reads as a ladder: its first places stand open,
     // waiting for names, rather than a second line saying it is empty.
@@ -165,30 +140,38 @@ export function renderLandingLadder(
     host.appendChild(list);
   }
   const join = el('div', 'pg-ladder-join');
-  const btn = el('button', 'menu-btn primary', JOIN_CALL);
+  const btn = el('button', 'menu-btn primary', joinCall(ladder.me));
   btn.type = 'button';
   btn.addEventListener('click', onJoin);
   join.appendChild(btn);
   host.appendChild(join);
 }
 
-// Fills the host from the server, or removes it: a section that could not
-// be read is not shown half-drawn.
-export function mountLandingLadder(host: HTMLElement, onJoin: () => void): void {
+// The reader's own row, after a rename in the own panel: the row is the
+// reader's by its rank (li.me), so only its name changes.
+export function markOwnRow(host: HTMLElement, name: string): void {
+  const own = host.querySelector<HTMLElement>('li.me .pg-ladder-name');
+  if (own) own.textContent = name;
+}
+
+// Fills the host from the landing's one answer (src/net/landing.ts), which
+// the landing asks once and hands to the own panel too, or removes it: a
+// section that could not be read is not shown half-drawn.
+export function mountLandingLadder(
+  host: HTMLElement,
+  page: Promise<LandingPage | null>,
+  onJoin: () => void,
+): void {
   host.hidden = true;
-  fetch('/api/public/landing', { credentials: 'same-origin' })
-    .then((res) => (res.ok ? (res.json() as Promise<LandingPage>) : null))
-    .then((page) => {
-      if (!page?.ladder || !host.isConnected) {
-        host.remove();
-        return;
-      }
-      // The box opens on the top of the ladder, whoever reads it: a
-      // returning player's own place is the line over the rows, and the
-      // box scrolled down to it read as a ladder opened at its foot (the
-      // maintainer, 2026-10-02).
-      renderLandingLadder(host, page, onJoin);
-      host.hidden = false;
-    })
-    .catch(() => host.remove());
+  void page.then((answer) => {
+    if (!answer || !host.isConnected) {
+      host.remove();
+      return;
+    }
+    // The box opens on the top of the ladder, whoever reads it: the
+    // reader's own place is the own panel's line, and the box scrolled down
+    // to it read as a ladder opened at its foot (the maintainer, 2026-10-02).
+    renderLandingLadder(host, answer, onJoin);
+    host.hidden = false;
+  });
 }

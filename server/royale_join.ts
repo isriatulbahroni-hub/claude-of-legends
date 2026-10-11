@@ -6,6 +6,7 @@
 // for good. Pure: the service hands in what it knows of its matches. And
 // who comes to the battle royale for the first time (isRoyaleNewcomer).
 
+import { type SeatStrength, strongerFirst } from '../src/sim/royale/strength';
 import {
   CALM_S,
   JOIN_UNTIL_END_S,
@@ -58,40 +59,32 @@ export function chooseRoyaleMatch(
   return best ? best.matchId : null;
 }
 
-// The field's level a seat is weighed against: the lower median of every
-// champion's (src/sim/royale/levels.ts, where a Respawn Arrival reads it).
-export { lowerMedian } from '../src/sim/royale/levels';
-
 // A bot seat as the choice reads it.
-export interface BotSeatCandidate {
+export interface BotSeatCandidate extends SeatStrength {
   unitId: number;
   championId: string;
   // Down for now (Respawn brings it back), or out for good (One life).
   dead: boolean;
   out: boolean;
-  level: number;
 }
 
 // The seat a drop-in takes: never one out for good; a bot playing the
-// champion they picked first, then one standing; within that, given the
-// field's level (the lower median of every champion's, Respawn's
-// RoyaleMatch.takeBotSeat), the seat nearest it, then the higher level (a
-// seat taken minutes in could be level 3 with nearly every champion above
-// it); then the lowest unit id, so the
-// choice depends on nothing but the match.
+// champion they picked first, then one standing; within that, when
+// `strongest` (Respawn's RoyaleMatch.takeBotSeat), the strongest seat: the
+// higher level, then the build worth more, then more Grafts held
+// (src/sim/royale/strength.ts), so a person arrives in a champion already
+// fed, not one that fed the others; then the lowest unit id, so the choice
+// depends on nothing but the match.
 export function chooseBotSeat(
   seats: readonly BotSeatCandidate[],
   championId: string,
-  fieldLevel?: number,
+  strongest = false,
 ): number | null {
   let best: BotSeatCandidate | null = null;
   const rank = (s: BotSeatCandidate): number =>
     (s.championId === championId ? 0 : 2) + (s.dead ? 1 : 0);
-  const gap = (s: BotSeatCandidate): number =>
-    fieldLevel === undefined ? 0 : Math.abs(s.level - fieldLevel);
-  const higher = (s: BotSeatCandidate): number => (fieldLevel === undefined ? 0 : -s.level);
   const compare = (a: BotSeatCandidate, b: BotSeatCandidate): number =>
-    rank(a) - rank(b) || gap(a) - gap(b) || higher(a) - higher(b) || a.unitId - b.unitId;
+    rank(a) - rank(b) || (strongest ? strongerFirst(a, b) : 0) || a.unitId - b.unitId;
   for (const s of seats) {
     if (s.out) continue;
     if (!best || compare(s, best) < 0) best = s;

@@ -79,14 +79,6 @@ export function landingLevels(u: Unit): void {
   spendSkillPoints(u);
 }
 
-// A Respawn drop-in's level (grace.ts arrive): a seat taken minutes in
-// could be level 3 with nearly every champion above it, its first foe a
-// level 6 with 2572 health against its 1487 (a playthrough). The seat
-// comes down ARRIVAL_LEVEL_BEHIND under the middle of the field, the
-// lower median of every other seat's level (the fallen too), and never
-// below its own.
-export const ARRIVAL_LEVEL_BEHIND = 1;
-
 // The sorted values' lower middle (index floor((n - 1) / 2)); START_LEVEL
 // for none.
 export function lowerMedian(values: readonly number[]): number {
@@ -95,8 +87,13 @@ export function lowerMedian(values: readonly number[]): number {
   return sorted[Math.floor((sorted.length - 1) / 2)]!;
 }
 
+// A Respawn drop-in's level (strength.ts liftToField): a seat taken minutes
+// in could be level 3 with nearly every champion above it, its first foe a
+// level 6 with 2572 health against its 1487 (a playthrough). The seat comes
+// down at the middle of the field at least, the lower median of every other
+// seat's level (the fallen too), and never below its own.
 export function arrivalLevel(own: number, field: readonly number[]): number {
-  return Math.max(own, lowerMedian(field) - ARRIVAL_LEVEL_BEHIND);
+  return Math.max(own, lowerMedian(field));
 }
 
 // Experience to a champion, its points spent at once; a fallen one (an

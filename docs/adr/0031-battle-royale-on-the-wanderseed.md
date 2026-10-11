@@ -315,3 +315,50 @@ to come to it. This adds a rule to Respawn; One life is unchanged.
   a champion down. Without drop-ins (`--variant both`, seeds 1 to 12): Respawn's stand-in
   median life 17.6 s against 16.1, the bots fighting 66.9 percent against 67.0, the steals 38.8
   percent against 40.4, the final level median 10; One life identical, match for match.
+
+## Amended: a drop-in arrives already fed (2026-10-11)
+
+A Respawn drop-in took the seat of its champion whose level stood nearest the field's, came
+down one level under the field's lower median at least, and kept whatever build its bot had
+walked. Over seeds 1 to 24 of the royale report (`node scripts/royale_report.mjs --variant
+respawn --dropin 60,180,300,420`, 96 drop-ins), 11 landed under the field's level and 40 with
+a build worth less than the field's. The maintainer: a person should arrive in a champion that
+is already fed, not one that fed the others. This overrides the seat and the level of the
+amendment of 2026-10-08 in Respawn; One life is unchanged.
+
+- **The seat.** A Respawn drop-in still takes a bot playing the champion it picked first, a
+  standing one before one down, never one out for good; within that, the strongest seat: the
+  higher level, then the build worth more (the cost of every item in its bag,
+  `src/sim/content/items.ts`), then more Grafts held, then the lowest unit id
+  (`server/royale_join.ts`, `src/sim/royale/strength.ts`). One life's drop-in still takes the
+  lowest unit id.
+- **The level.** It comes down at the field's lower median at least (every other seat's, the
+  fallen too), no longer one under it, never below its own level, its points spent; the levels
+  lifted offer no Graft.
+- **The build.** When its build is worth less than the field's lower median build value, it is
+  given the next pieces of its own build, each as a cache pays it (`src/sim/royale/loot.ts`
+  grantPiece), until it is worth as much or the build is done: the pieces the middle of the
+  field holds. No loot line announces them and no Graft comes with them: the Arrival's Bough
+  stays its one offer (`src/sim/royale/strength.ts` liftToField).
+- **The scoreboard.** The seat's kills, deaths and assists start from zero at the Arrival, as
+  its score does (`grace.ts` clearTally, as before), and the server's scoreboard row now has a
+  test of its own: a seat that fell ten times shows none for the person. Nothing else on the
+  wire changes.
+- **Unchanged.** A bot never arrives, and the bots' rules are as before. The fair first fight
+  holds: the fair foe 9 to 11 m off and no higher in level than the drop-in, the Grace that
+  waits for the first order, the Upstart (the tally is zero).
+- **Rules 12.** The planet's rules version moves from 11 to 12.
+- **Measured** (the same report, the same seeds, against rules 11; a paired bootstrap over
+  seeds gives the 90 percent bounds). At landing every drop-in stands at or above the field's
+  level (85 of 96 before) and the field's build value (56 of 96 before): one level over the
+  field at the median (level with it before), its build worth 6250 against the field's 4275 at
+  the median (4525 against 4085 before). The seat as taken already stood there for 81 of the
+  levels and 67 of the builds; the lift raised the level of 15 and the build of 29. A takedown
+  within the first minute for 94 of 96 against 89 (+1 to +9 points), 3.1 takedowns in that
+  minute on average against 2.5 (+0.2 to +1.1), a takedown in the first life for 81 against 76
+  (-3 to +14 points), the first life 40 s at the median against 35 (-1 to +11 s) and 53 s on
+  average against 43; a fair foe for 89 of 96 as before. The field: the bots fight 67.2
+  percent of the seconds an enemy is in reach against 66.4, the steals are 40.1 percent
+  against 38.9, the stand-in's median life is 15.8 s against 17.2 (-3.4 to +0.8 s), the final
+  level median stays 10. One life (`--variant one_life --dropin 60`, seeds 1 to 24) is
+  identical, match for match.

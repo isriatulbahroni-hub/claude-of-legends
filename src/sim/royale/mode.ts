@@ -325,9 +325,9 @@ export class RoyaleMode {
 
   // A drop-in's Arrival (CONTEXT.md; Sim.beginArrival, the replay's
   // 'arrive' event): the seat a person takes from its bot comes down fresh
-  // inside the light, in Respawn at the field's level beside a fair first
-  // fight, else at a quiet spot, in its Grace, its tally from zero
-  // (grace.ts arrive). Only in play.
+  // inside the light, in Respawn at the field's level and build at least
+  // (strength.ts) beside a fair first fight, else at a quiet spot, in its
+  // Grace, its tally from zero (grace.ts arrive). Only in play.
   beginArrival(sim: Sim, unitId: number): void {
     // The bot's pick of where to come back is not the person's.
     this.state.respawnPicks.delete(unitId);

@@ -88,7 +88,10 @@ export const CLAMOR_S = 3;
 // (combat/voidmaul_slam.ts, combat/voidmaul_stones.ts).
 // 11: the Upstart, a Respawn champion come down with no takedown on its
 // tally hitting champions harder until its first one (upstart.ts).
-export const ROYALE_RULES_VERSION = 11;
+// 12: a Respawn drop-in takes the strongest standing seat of its champion
+// and its Arrival lifts it to the field's lower median level and build
+// value at least (strength.ts).
+export const ROYALE_RULES_VERSION = 12;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {

@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  type BotSeatCandidate,
   chooseBotSeat,
   chooseRoyaleMatch,
   type RoyaleCandidate,
@@ -61,15 +62,31 @@ describe('the match to join', () => {
 });
 
 describe('the seat to take', () => {
+  const seat = (
+    unitId: number,
+    championId: string,
+    level: number,
+    over: Partial<BotSeatCandidate> = {},
+  ): BotSeatCandidate => ({
+    unitId,
+    championId,
+    dead: false,
+    out: false,
+    level,
+    build: 0,
+    grafts: 0,
+    ...over,
+  });
   const seats = [
-    { unitId: 3, championId: 'torv', dead: false, out: false, level: 3 },
-    { unitId: 5, championId: 'fenn', dead: true, out: false, level: 9 },
-    { unitId: 7, championId: 'fenn', dead: false, out: false, level: 4 },
-    { unitId: 9, championId: 'vesk', dead: false, out: true, level: 8 },
+    seat(3, 'torv', 3),
+    seat(5, 'fenn', 9, { dead: true }),
+    seat(7, 'fenn', 4),
+    seat(9, 'vesk', 8, { out: true }),
   ];
 
   it('is a bot playing the champion picked, standing first', () => {
     expect(chooseBotSeat(seats, 'fenn')).toBe(7);
+    expect(chooseBotSeat(seats, 'fenn', true)).toBe(7);
   });
 
   it('else a standing bot, the lowest unit id first', () => {
@@ -79,42 +96,51 @@ describe('the seat to take', () => {
   it('never a seat out for good', () => {
     expect(chooseBotSeat(seats, 'vesk')).toBe(3);
     expect(chooseBotSeat([seats[3]!], 'vesk')).toBeNull();
-    expect(chooseBotSeat([seats[3]!], 'vesk', 8)).toBeNull();
+    expect(chooseBotSeat([seats[3]!], 'vesk', true)).toBeNull();
   });
 
-  // Respawn's field level (RoyaleMatch.takeBotSeat): the lower median of
-  // every champion's level.
+  // Respawn's choice (RoyaleMatch.takeBotSeat): the strongest standing seat
+  // of the champion picked, so a person arrives already fed.
   const fenns = [
-    { unitId: 2, championId: 'fenn', dead: false, out: false, level: 3 },
-    { unitId: 4, championId: 'fenn', dead: false, out: false, level: 9 },
-    { unitId: 6, championId: 'fenn', dead: false, out: false, level: 7 },
-    { unitId: 8, championId: 'fenn', dead: false, out: false, level: 6 },
-    { unitId: 10, championId: 'fenn', dead: false, out: false, level: 6 },
-    { unitId: 12, championId: 'fenn', dead: true, out: false, level: 8 },
-    { unitId: 14, championId: 'torv', dead: false, out: false, level: 8 },
+    seat(2, 'fenn', 3),
+    seat(4, 'fenn', 9, { build: 2600, grafts: 2 }),
+    seat(6, 'fenn', 9, { build: 3400, grafts: 1 }),
+    seat(8, 'fenn', 6, { build: 5000, grafts: 4 }),
+    seat(10, 'fenn', 9, { build: 3400, grafts: 3 }),
+    seat(12, 'fenn', 13, { dead: true, build: 9000 }),
+    seat(14, 'torv', 14, { build: 9000, grafts: 5 }),
+    seat(16, 'fenn', 15, { out: true, build: 9000 }),
   ];
 
-  it('takes the standing seat of the picked champion nearest the field level', () => {
-    // The standing fenn at 9 and the one at 7 are as near 8: the higher.
-    expect(chooseBotSeat(fenns, 'fenn', 8)).toBe(4);
-    expect(chooseBotSeat(fenns, 'fenn', 3)).toBe(2);
-    expect(chooseBotSeat(fenns, 'fenn', 7)).toBe(6);
-    // Two seats at the field's level: the lowest unit id.
-    expect(chooseBotSeat(fenns, 'fenn', 6)).toBe(8);
+  it('takes the strongest standing seat of the champion picked in Respawn', () => {
+    // Level 9 three times: the build worth more, then more Grafts.
+    expect(chooseBotSeat(fenns, 'fenn', true)).toBe(10);
+    expect(
+      chooseBotSeat(
+        fenns.filter((s) => s.unitId !== 10),
+        'fenn',
+        true,
+      ),
+    ).toBe(6);
+    // Two seats alike: the lowest unit id.
+    const twins = [seat(20, 'fenn', 7, { build: 1200 }), seat(18, 'fenn', 7, { build: 1200 })];
+    expect(chooseBotSeat(twins, 'fenn', true)).toBe(18);
+    // A higher level beats a richer build.
+    expect(chooseBotSeat([fenns[3]!, fenns[1]!], 'fenn', true)).toBe(4);
   });
 
-  it('keeps the picked champion and standing before the level', () => {
-    // The torv at the field's level loses to any standing fenn.
-    expect(chooseBotSeat(fenns, 'fenn', 8)).not.toBe(14);
-    // A fenn down at the field's level loses to the standing ones.
-    expect(chooseBotSeat(fenns, 'fenn', 8)).not.toBe(12);
-    expect(chooseBotSeat(fenns.slice(5), 'fenn', 8)).toBe(12);
-    // Another champion: the standing seats of every other, nearest the level.
-    expect(chooseBotSeat(fenns, 'vesk', 8)).toBe(14);
-    expect(chooseBotSeat(fenns, 'vesk', 3)).toBe(2);
+  it('keeps the champion picked and standing before strength, and never one out', () => {
+    // The torv at level 14 loses to any standing fenn, the fenn down at 13
+    // to the standing ones, the fenn out at 15 to all.
+    expect(chooseBotSeat(fenns, 'fenn', true)).not.toBe(14);
+    expect(chooseBotSeat(fenns, 'fenn', true)).not.toBe(12);
+    expect(chooseBotSeat(fenns.slice(5), 'fenn', true)).toBe(12);
+    // Another champion: the strongest standing seat of any.
+    expect(chooseBotSeat(fenns, 'vesk', true)).toBe(14);
+    expect(chooseBotSeat(fenns.slice(0, 5), 'vesk', true)).toBe(10);
   });
 
-  it('keeps the lowest unit id without a field level', () => {
+  it('keeps the lowest unit id when strength is not asked (One life)', () => {
     expect(chooseBotSeat(fenns, 'fenn')).toBe(2);
     expect(chooseBotSeat(fenns, 'vesk')).toBe(2);
     expect(chooseBotSeat(seats, 'fenn')).toBe(7);

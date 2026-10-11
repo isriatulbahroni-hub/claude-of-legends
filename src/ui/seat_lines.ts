@@ -28,6 +28,17 @@ export const SEAT_NAME_MAX = 16;
 // milliseconds: a kill line's while (ui/hud.ts pushKills).
 export const SEAT_LINE_MS = 6000;
 
+// How many seat lines a feed shows at once: several people dropping in
+// together (or coming back after a dropped connection) leave the newest
+// ones, never a column of them over the fight's lines.
+export const SEAT_LINES_MAX = 2;
+
+// The seat lines past SEAT_LINES_MAX, of those standing oldest first (the
+// 5v5's and the spectator's feeds append): the ones to take down.
+export function seatLinesPast<T>(standing: readonly T[]): T[] {
+  return standing.slice(0, Math.max(0, standing.length - SEAT_LINES_MAX));
+}
+
 export const SEAT_WORDS = {
   joined: 'joined the match',
   back: 'is back in the match',

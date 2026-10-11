@@ -8,7 +8,7 @@ import type { RenderTerrain } from '../render/terrain';
 import type { TeamId } from '../sim/types';
 import { DT } from '../sim/types';
 import { Minimap } from '../ui/minimap';
-import { SEAT_LINE_MS, type SeatLine } from '../ui/seat_lines';
+import { SEAT_LINE_MS, type SeatLine, seatLinesPast } from '../ui/seat_lines';
 import type { IWorld } from '../world_api';
 import type { WorldNotes } from './boot';
 import { startMusic, stopMusic } from './music';
@@ -148,12 +148,13 @@ export function startSpectator(
     pushSeatLine(line: SeatLine): void {
       if (disposed) return;
       const entry = document.createElement('div');
-      entry.className = 'spec-feed-entry';
+      entry.className = 'spec-feed-entry seat-line';
       const who = document.createElement('span');
       who.textContent = line.name;
       who.style.color = SIDE_COLORS[line.team] ?? '#c9d8ae';
       entry.append(who, ` ${line.words}`);
       feed.appendChild(entry);
+      for (const old of seatLinesPast([...feed.querySelectorAll('.seat-line')])) old.remove();
       window.setTimeout(() => entry.remove(), SEAT_LINE_MS);
     },
     dispose(): void {

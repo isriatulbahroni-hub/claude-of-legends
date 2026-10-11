@@ -160,7 +160,7 @@ import {
 } from './royale_steps';
 import { LOOT_EMPTY, LOOT_LABEL, royaleHints, royaleRecap } from './royale_text';
 import { renderScoreboardTeam } from './scoreboard_table';
-import { SEAT_LINE_MS, type SeatLine } from './seat_lines';
+import { SEAT_LINE_MS, type SeatLine, seatLinesPast } from './seat_lines';
 import { buildSettingsPanel } from './settings_panel';
 import { shopSections } from './shop_sections';
 import { suggestedItem } from './shop_suggestion';
@@ -2742,7 +2742,7 @@ export class Hud {
       return;
     }
     const entry = document.createElement('div');
-    entry.className = 'hud-feed-entry';
+    entry.className = 'hud-feed-entry seat-line';
     const who = document.createElement('span');
     who.textContent = line.name;
     who.style.color = TEAM_TEXT_COLORS[this.look(line.team)] ?? '#c9d8ae';
@@ -2750,6 +2750,7 @@ export class Hud {
     words.textContent = ` ${line.words}`;
     entry.append(who, words);
     this.feed.appendChild(entry);
+    for (const old of seatLinesPast([...this.feed.querySelectorAll('.seat-line')])) old.remove();
     window.setTimeout(() => entry.remove(), SEAT_LINE_MS);
   }
 

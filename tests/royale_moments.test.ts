@@ -48,6 +48,7 @@ import {
   tickPitch,
   WHOOSH_LEAD_S,
 } from '../src/ui/royale_moments';
+import { SEAT_LINES_MAX } from '../src/ui/seat_lines';
 
 const SELF = 1;
 const A = 2;
@@ -329,6 +330,23 @@ describe('the feed', () => {
       feed = feed.filter((_, j) => !gone.has(j));
     }
     expect(feed.slice(0, 2)).toContain('seat');
+  });
+
+  it('keeps two seat lines when several change hands at once, a fight still shown', () => {
+    // Newest first: past SEAT_LINES_MAX the oldest seat line goes.
+    expect(SEAT_LINES_MAX).toBe(2);
+    expect(feedOverflow(['seat', 'seat', 'seat'])).toEqual([2]);
+    expect(feedOverflow(['seat', 'seat', 'own', 'seat'])).toEqual([3]);
+    // Five people dropping in, then the viewer's own takedown: the
+    // takedown stands, under the two newest seat lines.
+    let feed: FeedTier[] = [];
+    for (const tier of ['seat', 'seat', 'seat', 'seat', 'seat', 'own'] as FeedTier[]) {
+      const at = feedInsertAt(feed, tier);
+      feed = [...feed.slice(0, at), tier, ...feed.slice(at)];
+      const gone = new Set(feedOverflow(feed));
+      feed = feed.filter((_, j) => !gone.has(j));
+    }
+    expect(feed).toEqual(['seat', 'seat', 'own']);
   });
 
   it('folds a late Respawn of bots on bots instead of standing five rows deep', () => {

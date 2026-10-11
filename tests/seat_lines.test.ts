@@ -15,7 +15,14 @@ import {
   seatLineWidth,
   topLineBox,
 } from '../src/ui/royale_layout';
-import { SEAT_NAME_MAX, SEAT_WORDS, seatLine, seatLineText } from '../src/ui/seat_lines';
+import {
+  SEAT_LINES_MAX,
+  SEAT_NAME_MAX,
+  SEAT_WORDS,
+  seatLine,
+  seatLinesPast,
+  seatLineText,
+} from '../src/ui/seat_lines';
 
 describe('the line a seat change makes', () => {
   it('names the person who joined, came back or left, and says what happened', () => {
@@ -53,6 +60,16 @@ describe('the line a seat change makes', () => {
   it('shows the name as the match shows it, never shortened here', () => {
     const name = 'abcdefghijklmnopqrst';
     expect(seatLine({ t: 'player_joined', name, team: 0 })?.name).toBe(name);
+  });
+});
+
+describe('several seats changing hands at once', () => {
+  it('keeps the newest SEAT_LINES_MAX lines in the 5v5 and the spectator feed', () => {
+    // Oldest first, as those feeds append them.
+    expect(seatLinesPast([])).toEqual([]);
+    expect(seatLinesPast(['a', 'b'])).toEqual([]);
+    expect(seatLinesPast(['a', 'b', 'c', 'd', 'e'])).toEqual(['a', 'b', 'c']);
+    expect(seatLinesPast(['a', 'b', 'c']).length).toBe(3 - SEAT_LINES_MAX);
   });
 });
 

@@ -1118,9 +1118,10 @@ only on the seat's own, one alone; and half for a seat whose opposing lane seats
 player, which the match's start decides. Deaths cost nothing, and a seat left to a bot earns
 nothing more for its player. Never spent, and distinct from the rating, which only rated matches
 move, and from laurels and embers. The points a line holds climb as levels, read off the line's
-points in the 5v5 and the battle royale alike wherever the level shows (the own panel, Respawn's
-end card; ADR 0033): Level 2 at 50 points, each next level a little further, the bar running
-from the last one reached to the next. They show before the card too, off the same points: the
+points in the 5v5 and the battle royale alike wherever the level shows (the own panel, the
+ladder box of the pause menu and the end screen, Respawn's end card; ADR 0033), and in the
+same words: Level 2 at 50 points, each next level a little further, the bar running from the
+last one reached to the next. They show before the card too, off the same points: the
 wash of a Respawn death says the level and the points to the next, a note under each pop of
 points in a battle royale says where they leave it, the home's Respawn card greets an account
 that has played before with its level, and the card's Play the next match carries the points

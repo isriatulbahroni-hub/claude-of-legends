@@ -2172,6 +2172,7 @@ export class Hud {
           selfTeam,
           variant: royale,
           touch: coarsePointer,
+          playing: guide === 'play',
           onExit,
         })
       : null;
@@ -3731,7 +3732,7 @@ export class Hud {
     if (this.royale) {
       // The battle royale's own wash (ui/royale_hud.ts), gone once its end
       // screen stands; and its own end screen, from the server's result.
-      this.royale.update();
+      this.royale.update(this.nudgeBlocked());
       const time = this.world.time;
       const inPlay = this.world.royaleView?.()?.st === 'play';
       // A life begun: the last death's recap is done with, or the next

@@ -1,18 +1,21 @@
 // The arrows at the screen's edge (the loud moments): what everyone should
 // find on the Wanderseed and is not on the screen right now (a Seedfall's
-// column, and later a Rising, the Wrath, the Lodestar, an Ablaze run)
-// points at from the border, with how far it is. Pure: the targets come in
+// column, a Rising, the Wrath, the Lodestar, an Ablaze run), and the
+// carrier of the viewer's own Burr, points at from the border, with how
+// far it is. Pure: the targets come in
 // already projected by the renderer (render/royale_cues.ts), the screen's
 // safe area beside them, and the arrows come out placed and turned. The
 // HUD draws them (ui/royale_hud_moments.ts).
 
 import { SEEDFALL_AT_S } from '../sim/content/royale_events';
 
-// What an arrow points at, in priority order: a Seedfall before a Rising
+// What an arrow points at, in priority order: a Seedfall before the own
+// Burr's carrier (the viewer's alone, and counting down) before a Rising
 // before the Wrath before the Lodestar before an Ablaze run.
-export type EdgeKind = 'seedfall' | 'rising' | 'wrath' | 'lodestar' | 'ablaze';
+export type EdgeKind = 'seedfall' | 'burr' | 'rising' | 'wrath' | 'lodestar' | 'ablaze';
 export const EDGE_PRIORITY: readonly EdgeKind[] = [
   'seedfall',
+  'burr',
   'rising',
   'wrath',
   'lodestar',
@@ -454,14 +457,19 @@ function overlapsRect(a: EdgeRect, b: EdgeRect): boolean {
 // its own track clear of the other arrows alone; where it points last of
 // all, and then without its line when that line would touch another's:
 // two lines never run together. `labelWidths[i]` is the width of arrow
-// i's line, pixels.
+// i's line, pixels. `covers` are boxes no line may stand on, ever (the
+// open Graft cards, read and tapped there): an arrow keeps off them as off
+// an obstacle, and where it finds no room clear of them it goes without
+// its line.
 export function layoutArrows(
   arrows: readonly Pick<EdgeArrow, 'x' | 'y' | 'angle'>[],
   labelWidths: readonly number[],
   obstacles: readonly EdgeRect[],
   v: EdgeView,
   ring?: EdgeRing,
+  covers: readonly EdgeRect[] = [],
 ): { x: number; y: number; labelDx: number; labelShown: boolean }[] {
+  const blocks = covers.length > 0 ? [...obstacles, ...covers] : obstacles;
   const placed: EdgeRect[] = [];
   const out: { x: number; y: number; labelDx: number; labelShown: boolean }[] = [];
   const inner: EdgeView = {
@@ -485,7 +493,7 @@ export function layoutArrows(
     };
     const blocked = (x: number, y: number): boolean => {
       const r = room(x, y);
-      return obstacles.some((o) => overlapsRect(r, o)) || placed.some((p) => crowds(r, p));
+      return blocks.some((o) => overlapsRect(r, o)) || placed.some((p) => crowds(r, p));
     };
     const find = (
       at: { x: number; y: number; angle: number },
@@ -500,9 +508,9 @@ export function layoutArrows(
       find(trackPoint(a.angle, innerView, innerRing), innerView, innerRing, blocked) ??
       find(own, v, ring, crowded) ?? { x: a.x, y: a.y };
     const labelDx = labelShift(p.x, width, v.width);
-    // Where it points over another arrow's room, it goes without its line
-    // and keeps only its dial's room.
-    const labelShown = !crowded(p.x, p.y);
+    // Where it points over another arrow's room or a cover, it goes
+    // without its line and keeps only its dial's room.
+    const labelShown = !crowded(p.x, p.y) && !covers.some((c) => overlapsRect(room(p.x, p.y), c));
     placed.push(labelShown ? room(p.x, p.y) : arrowRect(p, arrowBox(0)));
     out.push({ x: p.x, y: p.y, labelDx, labelShown });
   }

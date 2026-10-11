@@ -119,6 +119,30 @@ export const ROYALE_MIX_GUESTS: Readonly<{ gentle: number; normal: number }> = {
 export const SHARPEN_NORMAL_AT = 2;
 export const SHARPEN_STRONG_AT = 4;
 export const SHARPEN_GENTLE_PHASE = 3;
+
+// The skills from the softest: what a sharpening raises, and how soft an
+// Arrival's first foe plays (royale/grace.ts).
+export const ROYALE_SKILL_RANK: Readonly<Record<RoyaleSkillId, number>> = {
+  gentle: 0,
+  normal: 1,
+  strong: 2,
+};
+
+// The skill a seat dealt `id` plays now, at least its own: as normal from a
+// score of SHARPEN_NORMAL_AT, as strong from SHARPEN_STRONG_AT, and a
+// gentle one as normal from the Dusk's SHARPEN_GENTLE_PHASE. The bot reads
+// it off its observation (royale/bot/brain.ts effectiveSkill), the mode off
+// its state.
+export function sharpenedSkill(id: RoyaleSkillId, score: number, duskPhase: number): RoyaleSkillId {
+  let out = id;
+  const raise = (to: RoyaleSkillId) => {
+    if (ROYALE_SKILL_RANK[to] > ROYALE_SKILL_RANK[out]) out = to;
+  };
+  if (score >= SHARPEN_STRONG_AT) raise('strong');
+  else if (score >= SHARPEN_NORMAL_AT) raise('normal');
+  if (duskPhase >= SHARPEN_GENTLE_PHASE) raise('normal');
+  return out;
+}
 // One life's calm (the Dusk's phase 0): the odds a fight must show rise by
 // this much unless the bot was struck, so the first minute is a loot and
 // not a cull. A sharp dial: at 0.10 up to ten fell in the first minute, at
@@ -209,6 +233,18 @@ export const MARK_FRESH_S = 10;
 export const MARK_CALL_M = 50;
 export const WARY_M = 25;
 export const WARY_STEP_M = 10;
+// The Burr (CONTEXT.md; calls.ts burrCall, fight.ts pickTarget): a normal
+// or strong bot whose Burr's carrier stands within BURR_CALL_M (a mark's
+// hunt's reach), in the light, walks after it when no Seedfall, Clamor or
+// Rising calls, its odds against it (its level, at full health) reaching
+// its nerve. In sight, every skill weighs the carrier BURR_TARGET_PULL less
+// in a target's score (two meters nearer, or three tenths of its health
+// lower) and fights it on odds BURR_MARGIN under its nerve. A bounded
+// preference: no chase past its skill's, no walk past BURR_CALL_M, no fight
+// it would otherwise run from.
+export const BURR_CALL_M = MARK_CALL_M;
+export const BURR_TARGET_PULL = 1.2;
+export const BURR_MARGIN = 0.05;
 // A Rising's site past the light's edge (calls.ts risingReachable): the
 // rings stand where they stand, and from 3:00 the first closing leaves
 // half the planet dark, so half the big creatures rose in the dark and

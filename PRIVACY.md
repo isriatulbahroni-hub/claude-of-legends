@@ -106,7 +106,10 @@ it, and everything it takes away before a record leaves your browser.
   (the match had a winner) or `left` (you walked out, or closed the page,
   before one), carrying how many minutes it had run and whether it was
   practice, an online 5v5, or a battle royale (and then which rule set,
-  Respawn or One life).
+  Respawn or One life). A battle royale's also carries `held`, how many
+  seconds the match was on your screen, and `dropIn`, whether you joined
+  it already running. And `again` when you press Play again on a battle
+  royale's end card, with the same mode and rule set.
   Nothing about who won or what you played.
 - What every counter of this kind reads off the request: the browser and
   operating system, the kind of device, the screen size, the language, and
@@ -150,16 +153,30 @@ whether you hid them (`src/ui/first_steps.ts`), whether it was a Guest's,
 the round trip between your
 browser and the server as the game measured it (a small message the server
 sends every five seconds and the page answers), how many frames a second
-the page drew (the same answer carries it), when the seat's first moments
-came (the first blow your champion gave and took, its first takedown, its
-first fall, the first cache it opened, in seconds from the seat's start),
-the country Cloudflare names for the connection, and
+the page drew and how finely it drew them (the same answer carries it: the
+step it stood on in its quality ladder and the deepest it went, the size
+of the picture in pixels, how many pixels it drew for each one of the
+page's, whether it drew shadows, and whether it smoothed edges and let
+spells light the ground; never the name of your graphics card), when the
+seat's first moments came (the first blow your champion gave and took, its
+first takedown, its first fall, the first cache it opened, in seconds from
+the seat's start), the country Cloudflare names for the connection, and
 whether your browser says it is a phone. No name, no account id, no
 address. The line lands in a file on this machine (`seats.jsonl`) with the
 time it was written, read by the maintainer with `scripts/seat_report.mjs`,
 and it exists to tell a slow connection or a slow load from a match that
 gave a newcomer nothing to do. The country is the coarsest place there is,
 and it is only ever read beside the round trip it explains.
+
+Your browser also keeps, in its own storage and for itself alone, for each
+kind of match whether the next one lets spells light the ground and smooths
+edges, for how many matches it has drawn that way, and how many in a row
+drew far too slowly, and the rate your screen refreshes at: one line under
+`col.quality` (`src/game/quality_memory.ts`), so that a machine too slow
+for the effects starts its next match lighter rather than learning it
+again. How finely a match was drawn is not kept: every match starts at
+your screen's best. It is never sent anywhere; the step the match stands
+on is what the seat line above carries.
 
 ## What you write in the feedback box
 

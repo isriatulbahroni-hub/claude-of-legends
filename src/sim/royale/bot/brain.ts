@@ -11,9 +11,9 @@
 // it can be caught; never a chase into the Dusk); holding still while a
 // cache opens; ahead of the Dusk's next cap; a winning bot after its
 // target into the bush; a big body in reach it takes on; the calls (a
-// gentle bot's care near a mark, a Seedfall, a Clamor, a Rising, the hunt
-// of a mark); the nearest cache; a camp when nothing better is near; a
-// cache or a Seedfall further off, a wander
+// gentle bot's care near a mark, a Seedfall, a Clamor, a Rising, its
+// Burr's carrier, the hunt of a mark); the nearest cache; a camp when
+// nothing better is near; a cache or a Seedfall further off, a wander
 // only with none near. Its skill (content/bots/royale_skills.ts), sharpened
 // by its score and the Dusk, slows its eye, scatters its aim and sets its
 // nerve.
@@ -29,18 +29,20 @@ import {
   PACE_NERVE_PER_SEAT,
   ROYALE_SKILLS,
   type RoyaleSkill,
-  type RoyaleSkillId,
-  SHARPEN_GENTLE_PHASE,
-  SHARPEN_NORMAL_AT,
-  SHARPEN_STRONG_AT,
+  sharpenedSkill,
 } from '../../content/bots/royale_skills';
 import { dirTo, dist, dot, norm, scale, sub, turnLeft, type Vec3 } from '../../geo';
-import { KITE_DANGER_FRAC, KITE_STEP, RANGED_MIN_RANGE } from '../../playbook/micro';
-import type { Action, Observation, ObsRoyale, ObsSeedfall, ObsUnit } from '../../policy';
+import {
+  fumbled,
+  KITE_DANGER_FRAC,
+  KITE_STEP,
+  POD_WARY_M,
+  RANGED_MIN_RANGE,
+} from '../../playbook/micro';
+import type { Action, Observation, ObsRoyale, ObsUnit } from '../../policy';
 import type { Rng } from '../../rng';
 import { depthInside, insideCap } from '../dusk';
 import { along, type RoyaleLayout } from '../layout';
-import { RESPAWN_S } from '../types';
 import {
   ambushBush,
   ambushCall,
@@ -54,6 +56,7 @@ import {
 import { pickDropPoint } from './drop_pick';
 import {
   awayPoint,
+  burrMargin,
   COMMIT_M,
   chaseReach,
   escapeCast,
@@ -167,6 +170,14 @@ export function dodge(sense: Sense, rng: Rng): Action | null {
     if (zn.friendly) continue;
     const at = p3(zn);
     const d = dist(me, at);
+    if (zn.trap && d <= zn.radius + SELF_RADIUS + POD_WARY_M) {
+      // A seen pod ahead: a step across the way to it, rounding its rim
+      // (playbook/micro.ts dodge), no dice: a person who sees one never
+      // walks onto it. On its very center, straight out.
+      const toward = dirTo(me, at);
+      if (!toward) return move(awayFrom(sense, at, zn.radius + SELF_RADIUS + POD_WARY_M + 0.6));
+      return move(along(me, turnLeft(toward, me) as Vec3, DODGE_STEP, R));
+    }
     if (d > zn.radius + SELF_RADIUS) continue;
     if (rng.next() >= sense.skill.dodge) return null;
     return move(awayFrom(sense, at, zn.radius + SELF_RADIUS + 1 - d));
@@ -221,6 +232,12 @@ function fight(sense: Sense, target: ObsUnit, rng: Rng): Action {
   if (c) return c;
   const sigil = fightSigil(sense, target);
   if (sigil) return sigil;
+  // Its attacks would miss (CONTEXT.md: Fumble): it gives ground until the
+  // fumble passes instead of swinging at nothing.
+  if (fumbled(s, obs.time)) {
+    const step = awayPoint(sense, KITE_STEP);
+    return depthInside(sense.now, step) > 2 ? move(step) : NOOP;
+  }
   const d = dist(sense.me, p3(target));
   if (
     sense.skill.kite &&
@@ -272,19 +289,10 @@ function hitNeutral(sense: Sense, n: ObsUnit, rng: Rng): Action {
   return { kind: 'attack', targetId: n.id };
 }
 
-const RANK: Readonly<Record<RoyaleSkillId, number>> = { gentle: 0, normal: 1, strong: 2 };
-
-// The sharpening: the skill a seat plays this slot, at least its own. A
-// score of SHARPEN_NORMAL_AT plays as normal, SHARPEN_STRONG_AT as strong,
-// and from the Dusk's SHARPEN_GENTLE_PHASE a gentle seat plays as normal.
+// The sharpening: the skill a seat plays this slot, at least its own, by
+// its score and the Dusk's phase (royale_skills.ts sharpenedSkill).
 export function effectiveSkill(skill: RoyaleSkill, r: ObsRoyale): RoyaleSkill {
-  let id: RoyaleSkillId = skill.id;
-  const raise = (to: RoyaleSkillId) => {
-    if (RANK[to] > RANK[id]) id = to;
-  };
-  if (r.score >= SHARPEN_STRONG_AT) raise('strong');
-  else if (r.score >= SHARPEN_NORMAL_AT) raise('normal');
-  if (r.dusk.phase >= SHARPEN_GENTLE_PHASE) raise('normal');
+  const id = sharpenedSkill(skill.id, r.score, r.dusk.phase);
   return id === skill.id ? skill : ROYALE_SKILLS[id];
 }
 
@@ -422,37 +430,15 @@ export function followLastSeen(sense: Sense): Action | null {
   return best ? moveTo(sense, best) : null;
 }
 
-// How far within the window of a Seedfall's landing a dead Respawn seat
-// asks to come back beside it.
-export const RESPAWN_PICK_S = 20;
-
-// A dead Respawn seat's pick of where to come back (the 'drop' action,
-// while dead): beside the Seedfall whose landing falls within
-// RESPAWN_PICK_S of its return (RESPAWN_S at the latest, the death timer
-// every player reads), at the point inside the light nearest it; else no
-// pick.
-export function respawnPick(obs: Observation, r: ObsRoyale): Action | null {
-  if (r.variant !== 'respawn' || r.stage !== 'play') return null;
-  const backAt = obs.time + RESPAWN_S;
-  let best: ObsSeedfall | null = null;
-  let bestGap = RESPAWN_PICK_S + 1e-9;
-  for (const sf of r.seedfalls ?? []) {
-    const gap = Math.abs(sf.landsAt - backAt);
-    if (gap > bestGap || (gap === bestGap && best !== null && sf.id > best.id)) continue;
-    best = sf;
-    bestGap = gap;
-  }
-  if (!best) return null;
-  const now = r.dusk.now;
-  let at: Vec3 = p3(best);
-  if (now.radius > 0 && !insideCap(now, at)) {
-    const dir = dirTo(now.center, at);
-    if (dir) at = along(now.center, dir as Vec3, Math.max(0, now.radius - 2), norm(now.center));
-  }
-  if (r.drop && dist(p3(r.drop), at) < 1) return NOOP;
-  return { kind: 'drop', x: at.x, y: at.y, z: at.z };
-}
-
+// A dead Respawn seat is asked once where it comes back (the 'drop' while
+// dead, royale/return_pick.ts, the pick a person makes on the globe), and
+// the house brain picks nothing: it comes back at the edge of the light,
+// where a person who taps nothing comes back. Measured over seeds 1 to 24
+// (scripts/royale_report.mjs, the drop-ins at 60, 180, 300 and 420 s), a
+// pick beside a Seedfall landing within 20 s of the return took the
+// stand-in's median life from 17.9 s to 15.0 s and the steals from 37 to
+// 45 percent, and one across the light from the fall to 13.7 s: the picks
+// crowd the returns into the fights. With none, 18.3 s and 41 percent.
 export function decide(
   obs: Observation,
   rng: Rng,
@@ -474,7 +460,7 @@ export function decide(
     const p = pickDropPoint(layout, rng);
     return { kind: 'drop', x: p.x, y: p.y, z: p.z };
   }
-  if (obs.self.dead) return respawnPick(obs, r) ?? NOOP;
+  if (obs.self.dead) return NOOP;
   if (r.stage !== 'play' || r.flying) return NOOP;
   const skill = effectiveSkill(seatSkill, r);
   const sense = buildSense(obs, r, layout, skill);
@@ -554,7 +540,9 @@ export function decide(
       const odds = royaleOdds(sense, target);
       const finish = target.hpFrac < FINISH_HP && sense.s.hpFrac > target.hpFrac;
       const answer = sense.struck && (cornered || odds >= nerve - ANSWER_MARGIN);
-      const margin = dist(sense.me, p3(target)) <= CLOSE_M ? CLOSE_MARGIN : 0;
+      // Face to face, and the Burr's carrier (fight.ts burrMargin), on less.
+      const faceToFace = dist(sense.me, p3(target)) <= CLOSE_M ? CLOSE_MARGIN : 0;
+      const margin = faceToFace + burrMargin(sense, target);
       const go =
         odds >= nerve - margin ? 'fight' : finish ? 'finish' : answer ? 'struck-back' : null;
       if (go) return why(go, fight(sense, target, rng));

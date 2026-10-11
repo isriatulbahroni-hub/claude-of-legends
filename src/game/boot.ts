@@ -13,7 +13,8 @@ import { schoolColorOf } from '../render/ability_vfx';
 import { aspectColor } from '../render/aspect_colors';
 import { Renderer } from '../render/renderer';
 import type { RenderTerrain } from '../render/terrain';
-import { copy, dist, onSphere } from '../sim/geo';
+import { draughtSlot } from '../sim/content/items';
+import { copy, dirTo, dist, onSphere } from '../sim/geo';
 import type { RoyaleVariant } from '../sim/royale/types';
 import { effectiveRank } from '../sim/stats';
 import type { AbilityKey, TeamId, Vec2 } from '../sim/types';
@@ -34,12 +35,13 @@ import {
 import { Minimap } from '../ui/minimap';
 import { slotTap } from '../ui/slot_tap';
 import { buildThumbStickView } from '../ui/thumb_stick_view';
-import { buildTouchBar } from '../ui/touch_bar';
+import { buildTouchBar, drinkButton } from '../ui/touch_bar';
 import { unlearnedLine } from '../ui/unlearned_line';
 import type { IWorld } from '../world_api';
 import type { AttackNote } from './attack_notes';
 import { castSoundOf } from './champion_sounds';
 import { installCursorLock } from './cursor_lock';
+import { BeatCamera } from './death_beat';
 import type { PostMatchAction } from './flow';
 import { requestGameFullscreen } from './fullscreen';
 import { type InputHandlers, setupInput } from './input';
@@ -52,7 +54,14 @@ import type { MatchCover } from './practice_clock';
 import { getSettings, updateSettings } from './settings';
 import { playCastSfx, playSfx, preloadSfx } from './sfx';
 import { aimedPoint, quickPoint } from './thumb_cast';
-import { leadPoint, STICK_LEAD_M, type StickOrder, shouldResend } from './thumb_stick';
+import {
+  type AttackHold,
+  leadPoint,
+  STICK_LEAD_M,
+  type StickOrder,
+  shouldResend,
+  stickYields,
+} from './thumb_stick';
 import { setupTouchControls } from './touch';
 import type { VoidmaulSlamNote } from './voidmaul_slam_notes';
 
@@ -84,6 +93,9 @@ export interface WorldNotes {
   // Auto-attacks fired by visible units, for swing animations.
   attacks: readonly AttackNote[];
   voidmaulSlams?: readonly VoidmaulSlamNote[];
+  // Strikes that landed nothing (the fumble), for the "Miss" over the
+  // target; absent where the host tells none.
+  misses?: readonly { unitId: number; targetId: number }[];
   // The battle royale's events (net/royale_client.ts), for the HUD's
   // notices and its first steps; absent in a 5v5.
   royale?: readonly RoyaleNote[];
@@ -191,6 +203,10 @@ export function startPresentation(
   // back to the sphere before they become orders.
   const planetMap = renderer.planetMinimap();
   const fromMap = (p: Vec2): Vec2 => (planetMap ? planetMap.toSphere(p.x, p.z) : p);
+  // The attack the player gave last (the attack button, a click or a tap on
+  // an enemy), which the left thumb's stick keeps while it points that way
+  // (thumb_stick.ts stickYields); every walk order lets it go.
+  let attackHold: AttackHold | null = null;
   const minimap = new Minimap(
     stage.el,
     planetMap?.world ?? world,
@@ -198,6 +214,7 @@ export function startPresentation(
     selfId,
     (m) => {
       const p = fromMap(m);
+      attackHold = null;
       world.orderMove(selfId, p.x, p.z, p.y);
       renderer.flashMarker(p.x, p.z, undefined, p.y);
     },
@@ -329,6 +346,7 @@ export function startPresentation(
         const d = groundDist(at, aim);
         if (d > ab.castRange) {
           pendingCast = { key, aim: copy(aim) };
+          attackHold = null;
           world.orderMove(selfId, aim.x, aim.z, aim.y);
           renderer.flashMarker(aim.x, aim.z, 0x6ac9e8, aim.y);
           return;
@@ -396,6 +414,16 @@ export function startPresentation(
   // Where the stick points, for a quick cast with no target in range.
   const stickFacing = (): Vec2 | null =>
     stickOrder ? copy({ x: stickOrder.x, z: stickOrder.z, y: stickOrder.y }) : null;
+  // The way to the held attack's target from the champion, while the
+  // target is there to attack: alive, in sight and targetable (an
+  // untargetable target ends the attack in the sim).
+  const toHeldTarget = (from: Vec2): Vec2 | null => {
+    if (attackHold === null) return null;
+    const target = world.units.get(attackHold.targetId);
+    if (!target || target.dead || !world.isVisible(selfTeam, target.id)) return null;
+    if (target.statuses.some((s) => s.kind === 'untargetable' && s.until > world.time)) return null;
+    return dirTo(from, target.pos);
+  };
   // Where the right thumb's aim stands while a slot is held (thumb_cast.ts).
   let thumbAim: Vec2 | null = null;
   // How far a sigil reaches (Riftstep's dash), and how far the attack
@@ -417,9 +445,11 @@ export function startPresentation(
       pickEnemyOnScreen(world, selfTeam, sx, sy, project) ?? pickEnemyAt(world, p, selfTeam);
     if (enemy) {
       world.orderAttack(selfId, enemy.id);
+      attackHold = { targetId: enemy.id };
       renderer.setAttackTarget(enemy.id);
       hud.setTarget(enemy.id);
     } else {
+      attackHold = null;
       // A move order drops the attack reticle but keeps the SELECTION
       // frame, like the genre; left-click on ground clears that. Touch
       // has no left-click, so there a ground tap clears the frame too,
@@ -439,18 +469,28 @@ export function startPresentation(
     // rest orders a move to where the champion stands, which halts it
     // without a stop order's hold, so idle defense keeps answering. The
     // stick drops the attack reticle, like a walk order does, and brings
-    // the camera back onto the champion after a look at the minimap.
+    // the camera back onto the champion after a look at the minimap. An
+    // attack given meanwhile is kept while the thumb points toward or
+    // sideways of its target: nothing is sent, and a lifted thumb halts
+    // nothing. Pointed away, the attack is let go and the walk goes at once.
     onThumbMove: (dir) => {
       const self = world.units.get(selfId);
       if (!self) return;
       // From where the champion is drawn, so the thumb's stop is where
       // the player sees it and its lead is ahead of it.
       const at = selfAt(self);
+      const toTarget = toHeldTarget(at);
       if (dir === null) {
         if (stickOrder === null) return;
         stickOrder = null;
+        if (toTarget !== null) return;
         world.orderMove(selfId, at.x, at.z, at.y);
         return;
+      }
+      if (stickYields(attackHold, dir, toTarget)) return;
+      if (attackHold !== null) {
+        attackHold = null;
+        stickOrder = null;
       }
       const now = performance.now();
       if (!shouldResend(stickOrder, dir, now)) return;
@@ -517,6 +557,7 @@ export function startPresentation(
       if (target) {
         pendingCast = null;
         world.orderAttack(selfId, target.id);
+        attackHold = { targetId: target.id };
         renderer.setAttackTarget(target.id);
         hud.setTarget(target.id);
         return;
@@ -590,6 +631,7 @@ export function startPresentation(
     },
     onAttackMove: (aim) => {
       pendingCast = null;
+      attackHold = null;
       world.orderAttackMove(selfId, aim.x, aim.z, aim.y);
       renderer.flashMarker(aim.x, aim.z, 0xffa53e, aim.y);
     },
@@ -601,6 +643,7 @@ export function startPresentation(
     },
     onStop: () => {
       pendingCast = null;
+      attackHold = null;
       world.orderStop(selfId);
       renderer.setAttackTarget(null);
     },
@@ -615,6 +658,7 @@ export function startPresentation(
     },
     // A battle royale's Graft card, by its key (1, 2, 3).
     onPickCard: (card) => hud.pickGraft(card),
+    onDrinkSlot: (slot) => hud.drinkSlot(slot),
     isTyping: () => hud.isChatOpen(),
   };
   const teardownInput = setupInput(renderer, inputHandlers);
@@ -656,6 +700,7 @@ export function startPresentation(
   // ground gives it, recorded and budgeted like any other.
   hud.setLaneWalk((p) => {
     pendingCast = null;
+    attackHold = null;
     world.orderMove(selfId, p.x, p.z);
     renderer.setAttackTarget(null);
     renderer.flashMarker(p.x, p.z);
@@ -667,7 +712,7 @@ export function startPresentation(
   const laneArrow = guide === 'play' && !options.royale ? new LaneArrow(stage.el) : null;
   const arrowHalf = laneArrowHalf();
   if (thumbControls) hud.setCastTouch(touch.castTouch);
-  const teardownTouchBar = coarsePointer
+  const touchBar = coarsePointer
     ? buildTouchBar(
         stage.el,
         {
@@ -677,6 +722,10 @@ export function startPresentation(
             : {
                 onRecall: () => inputHandlers.onRecall(),
                 onToggleShop: () => inputHandlers.onToggleShop(),
+                onDrink: () => {
+                  const me = world.units.get(selfId);
+                  if (me) hud.drinkSlot(draughtSlot(me.items));
+                },
               }),
           onToggleMenu: () => inputHandlers.onToggleMenu(),
           onRecenterCamera: () => inputHandlers.onRecenterCamera(),
@@ -686,6 +735,11 @@ export function startPresentation(
     : null;
 
   startMusic();
+
+  // The Death beat in Respawn (game/death_beat.ts): while the champion
+  // waits to come back, the camera is on whoever took it down when the
+  // mirror knows where they stand, and back on the champion at the return.
+  const beat = options.royale === 'respawn' ? new BeatCamera(world, renderer, selfId) : null;
 
   let lastTick = performance.now();
   let wardenWasUp = false;
@@ -697,8 +751,11 @@ export function startPresentation(
   const onWorldTick = (notes?: WorldNotes): void => {
     lastTick = performance.now();
     const me = world.units.get(selfId);
+    // A death ends the attack in the sim: the stick keeps nothing after it.
+    if (me?.dead) attackHold = null;
     selfPrev = selfCurr;
     selfCurr = me ? copy(me.pos) : null;
+    touchBar?.setDrink(drinkButton(me, world.time));
     stepPendingCast();
     // Warden spawn: ping its pit on the minimap and flash the ground so
     // nobody misses it (the HUD adds the announcement and the voice).
@@ -732,10 +789,12 @@ export function startPresentation(
         notes.casts.length > 0 ||
         notes.hits.length > 0 ||
         notes.attacks.length > 0 ||
-        (notes.voidmaulSlams?.length ?? 0) > 0
+        (notes.voidmaulSlams?.length ?? 0) > 0 ||
+        (notes.misses?.length ?? 0) > 0
       )
         renderer.onCombatNotes(notes);
     }
+    beat?.tick(notes?.kills ?? []);
     if (world.winner !== null) stopMusic();
   };
 
@@ -787,7 +846,7 @@ export function startPresentation(
   function frame(now: number): void {
     if (disposed) return;
     const alpha = Math.max(0, Math.min(1, (now - lastTick) / TICK_MS));
-    renderer.render(alpha);
+    renderer.render(alpha, now);
     placeArrow(alpha);
     rafId = requestAnimationFrame(frame);
   }
@@ -819,7 +878,7 @@ export function startPresentation(
       teardownCursorLock();
       touch.dispose();
       stickView?.dispose();
-      teardownTouchBar?.();
+      touchBar?.dispose();
       hud.dispose();
       laneArrow?.dispose();
       minimap.dispose();

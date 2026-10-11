@@ -14,6 +14,7 @@ import {
   clockText,
   completedText,
   countLine,
+  doubleBadge,
   dropBanner,
   duskLine,
   duskPill,
@@ -24,6 +25,7 @@ import {
   LOOT_EMPTY,
   LOOT_LABEL,
   levelText,
+  lifeLine,
   lootNotice,
   lootText,
   markBadge,
@@ -34,6 +36,7 @@ import {
   peopleText,
   placeText,
   royaleHints,
+  royaleRecap,
   seatName,
   takedownsText,
 } from '../src/ui/royale_text';
@@ -56,6 +59,19 @@ const snap = (over: Partial<SnapRoyale> = {}): SnapRoyale => ({
   alive: 50,
   people: 2,
   ...over,
+});
+
+describe("the Last light's mark", () => {
+  it('shows x2 beside the rank line from the Dusk last closing to the end', () => {
+    expect(doubleBadge(snap(), 10 + 527.9)).toBeNull();
+    expect(doubleBadge(snap(), 10 + 528)).toBe('x2');
+    expect(doubleBadge(snap(), 609)).toBe('x2');
+    expect(doubleBadge(snap({ st: 'over' }), 611)).toBeNull();
+  });
+
+  it('never shows in One life', () => {
+    expect(doubleBadge(snap({ v: 'one_life' }), 600)).toBeNull();
+  });
 });
 
 describe('the Dusk line', () => {
@@ -130,6 +146,29 @@ describe('the count', () => {
 
   it('says only the takedowns before the first rank arrives', () => {
     expect(countLine(snap({ score: 0 }))).toBe('0 takedowns');
+  });
+
+  // A drop-in's rank counts since they landed (rs), sent from their first
+  // takedown since then: before it, the takedowns alone.
+  it('says the rank since landing for a drop-in, on a desktop and a phone', () => {
+    const late = snap({ score: 3, rk: 4, gap: 1, rs: 1 });
+    expect(countLine(late)).toBe('#4 since you landed · 3 takedowns · 1 behind #3');
+    expect(countLine(snap({ score: 5, rk: 1, gap: 2, rs: 1 }))).toBe(
+      '#1 since you landed · 5 takedowns · Leading by 2',
+    );
+    expect(countLine(snap({ score: 0 }))).toBe('0 takedowns');
+  });
+
+  // A phone's top row holds the Dusk line, the count and the Wrath's badge
+  // between the edge and the minimap's points: a drop-in's line is no
+  // longer than the whole match's ("#46 of 50 · 1 behind #45").
+  it('keeps a drop-in phone line to the rank alone, no longer than the whole match one', () => {
+    const late = snap({ score: 3, rk: 46, gap: 1, rs: 1, alive: 50 });
+    expect(countLine(late, true)).toBe('#46 since you landed');
+    expect(countLine(snap({ score: 5, rk: 1, gap: 2, rs: 1 }), true)).toBe('#1 since you landed');
+    const whole = countLine(snap({ score: 3, rk: 46, gap: 1, alive: 50 }), true);
+    expect(whole).toBe('#46 of 50 · 1 behind #45');
+    expect(countLine(late, true).length).toBeLessThanOrEqual(whole.length);
   });
 
   it('says how many are in the match during the drop', () => {
@@ -357,5 +396,34 @@ describe('the keys and the bag in a battle royale', () => {
     expect(LOOT_EMPTY.join(' ')).toMatch(/camps/);
     expect(LOOT_EMPTY.join(' ')).toMatch(/takedowns/);
     expect(LOOT_EMPTY.join(' ')).not.toMatch(/shop|buy|gold|sell/i);
+  });
+});
+
+// The wash of a Respawn death: who, how close it was, and what the life
+// held (the wait used to say only who and when).
+describe('a Respawn death', () => {
+  it('names the killer with its level, champion and health while its body was seen', () => {
+    expect(royaleRecap('Pinetinder', { champion: 'Korrath', level: 6, hpShare: 0.31 })).toBe(
+      'Taken down by Pinetinder, a level 6 Korrath on 31% health',
+    );
+    // The title after the comma goes; a sliver of health still reads 1%.
+    expect(
+      royaleRecap('Pinetinder', { champion: 'Korrath, the Bulwark', level: 3, hpShare: 0.002 }),
+    ).toBe('Taken down by Pinetinder, a level 3 Korrath on 1% health');
+    expect(royaleRecap('Korrath', { champion: 'Korrath', level: 9, hpShare: 1 })).toBe(
+      'Taken down by Korrath, level 9 on 100% health',
+    );
+  });
+
+  it('names the killer alone when its body was not in sight', () => {
+    expect(royaleRecap('Pinetinder', null)).toBe('Taken down by Pinetinder');
+  });
+
+  it('says what the life held, leaving a count of zero out', () => {
+    expect(lifeLine(42.7, 1, 2)).toBe('This life: 42 s · 1 takedown · 2 assists');
+    expect(lifeLine(42, 0, 0)).toBe('This life: 42 s');
+    expect(lifeLine(8.8, 0, 1)).toBe('This life: 8 s · 1 assist');
+    expect(lifeLine(125, 3, 0)).toBe('This life: 2:05 · 3 takedowns');
+    expect(lifeLine(-1, 0, 0)).toBe('This life: 0 s');
   });
 });

@@ -1,7 +1,8 @@
 // The Graft cards, decided (CONTEXT.md: Graft; ADR 0032): what each of the
 // three cards of an open offer says (its key, name, grade, what the grade
 // does, its line, and for a Sprout what it adds to the own champion now),
-// the title over them, when they fold into the chip (put off, or a fight),
+// the title over them, when they fold into the chip (put off, a fight, or
+// the first seconds after landing),
 // the key a press picks, the names the end card lists, and where the cards
 // and the chip stand on a screen, as boxes a test checks. The offer never
 // runs out. Pure; ui/royale_hud_grafts.ts draws it.
@@ -92,19 +93,30 @@ export function graftChip(): string {
   return GRAFT_TITLE;
 }
 
+// The cards wait this long after the champion lands, folded into the chip:
+// the first seconds are for the fight and the caches. Open, they covered
+// the top third of a desktop and half a phone, over the first fight.
+export const GRAFT_SETTLE_S = 12;
+
 // Whether the cards fold into the chip: never over the globe in the drop;
-// otherwise when the person put them off (Later) or is in a fight (a hit
-// in the last FIGHT_FOLD_S), on a phone as on a desktop, unless they
-// opened them again from the chip. The offer never runs out, so folding
-// costs nothing but the look.
+// otherwise when the person put them off (Later), is in a fight (a hit in
+// the last FIGHT_FOLD_S), landed less than GRAFT_SETTLE_S ago, or waits
+// to come back in Respawn (`waiting`: the death wash's lines and the globe
+// of where to come back are the wait's, and the cards open over the top
+// third of a desktop and half a phone covered them), on a phone as on a
+// desktop, unless they opened them again from the chip. The offer never
+// runs out, so folding costs nothing but the look.
 export function graftFolded(
   sinceHit: number | null,
   dropping: boolean,
   putOff: boolean,
   reopened: boolean,
+  sinceLanding: number | null,
+  waiting = false,
 ): boolean {
   if (dropping || reopened) return false;
-  return putOff || foldForFight(sinceHit, true);
+  const settling = sinceLanding !== null && sinceLanding < GRAFT_SETTLE_S;
+  return putOff || waiting || foldForFight(sinceHit, true) || settling;
 }
 
 // The card a key picks: 1, 2 and 3 on the top row or the number pad.
@@ -135,18 +147,20 @@ export function graftNames(ids: readonly string[]): string[] {
 export const DESK_CARD_W_PX = 248;
 export const DESK_CARD_H_PX = 132;
 export const DESK_TOP_PX = 96;
-export const PHONE_CARD_W_PX = 240;
+export const PHONE_CARD_W_PX = 222;
 export const PHONE_CARD_H_PX = 104;
 export const PHONE_TOP_PX = 54;
 export const TITLE_H_PX = 30;
 export const PHONE_TITLE_H_PX = 22;
 export const CARD_GAP_PX = 12;
 export const PHONE_CARD_GAP_PX = 8;
-// The folded chip: under the top line on a desktop; on a phone above the
-// bar, which slides left of the middle for the thumbs (ui/hud.ts).
-export const DESK_CHIP_TOP_PX = 96;
-export const CHIP_LEFT_SHARE = 0.4;
-export const CHIP_BOTTOM_PX = 128;
+// The folded chip: in the top left corner, on a desktop as on a phone,
+// above the first steps' card and the thumbs' hints. Under the top line
+// in the middle it stood where the announcements come (at 112 px, over
+// it from the first takedown) and the mark's badge and the Dusk's pill
+// stack; above a phone's bar it stood on the notices ("Completed:").
+export const CHIP_LEFT_PX = 12;
+export const CHIP_TOP_PX = 8;
 export const CHIP_W_PX = 150;
 export const CHIP_H_PX = 30;
 
@@ -159,18 +173,35 @@ export function cardsBox(width: number, compact: boolean): ScreenBox {
   return { left: width / 2 - row / 2, top, right: width / 2 + row / 2, bottom: top + h };
 }
 
-export function chipBox(width: number, height: number, compact: boolean): ScreenBox {
-  if (!compact) {
-    return {
-      left: width / 2 - CHIP_W_PX / 2,
-      top: DESK_CHIP_TOP_PX,
-      right: width / 2 + CHIP_W_PX / 2,
-      bottom: DESK_CHIP_TOP_PX + CHIP_H_PX,
-    };
-  }
-  const mid = width * CHIP_LEFT_SHARE;
-  const bottom = height - CHIP_BOTTOM_PX;
-  return { left: mid - CHIP_W_PX / 2, top: bottom - CHIP_H_PX, right: mid + CHIP_W_PX / 2, bottom };
+// The whole of the open cards: the title over the row, and the Later
+// button under it (its margin and its height), what the edge arrows'
+// lines keep off (ui/royale_edges.ts layoutArrows covers).
+export const LATER_H_PX = 40;
+export const PHONE_LATER_H_PX = 34;
+
+export function cardsCoverBox(width: number, compact: boolean): ScreenBox {
+  const row = cardsBox(width, compact);
+  return {
+    left: row.left,
+    top: compact ? PHONE_TOP_PX : DESK_TOP_PX,
+    right: row.right,
+    bottom: row.bottom + (compact ? PHONE_LATER_H_PX : LATER_H_PX),
+  };
+}
+
+// What steps aside while the cards are open: the first steps' card and
+// the controls' hints, which the cards' row stands over (at 960x540 the
+// card's right end, on a phone the whole card and the thumbs' hints) and
+// which showed through them.
+export const CARDS_ASIDE: readonly string[] = ['.hud-steps', '.hud-hints'];
+
+export function chipBox(_width: number, _height: number, _compact: boolean): ScreenBox {
+  return {
+    left: CHIP_LEFT_PX,
+    top: CHIP_TOP_PX,
+    right: CHIP_LEFT_PX + CHIP_W_PX,
+    bottom: CHIP_TOP_PX + CHIP_H_PX,
+  };
 }
 
 // Whether the champion's body stays in sight under the cards: the row ends

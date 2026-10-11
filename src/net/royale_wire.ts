@@ -54,12 +54,36 @@ export type SnapRising = [RisingKind, number, number, number, number, 0 | 1, num
 // when it was shown.
 export type SnapMark = [number, MarkKind, number, number, number, number];
 
+// The recipient's own Burr (CONTEXT.md: Burr; src/sim/royale/burr.ts): the
+// carrier's unit id, when the Burr runs out, and where the carrier stands
+// while it stands (absent while it is dead).
+export interface SnapBurr {
+  i: number;
+  u: number;
+  at?: WirePoint;
+}
+
 // A Clamor: where a takedown rang out, and when.
 export type SnapClamor = [number, number, number, number];
 
-// A champion in its Grace: its unit id, when the Grace runs out, and where
-// it stands.
-export type SnapGrace = [number, number, number, number, number];
+// A champion in its Grace: its unit id, when the Grace runs out, where it
+// stands, and for a Grace that waits on the seat's first order (a Respawn
+// Arrival's, src/sim/royale/grace.ts) from when an order ends it.
+export type SnapGrace = [number, number, number, number, number, number?];
+
+// The killer a fallen Respawn seat watches through its wait (the Death
+// beat, src/game/death_beat.ts): a dead champion sees nothing, so the
+// mirror draws the killer from this alone. Its unit id, champion, skin and
+// team, where it stands, and its health and maximum for the bar.
+export interface SnapWatch {
+  i: number;
+  c: string;
+  sk: number;
+  t: number;
+  at: WirePoint;
+  h: number;
+  m: number;
+}
 
 // The recipient's own open Graft offer: its grade, the three cards, and
 // when card 0 is taken for them.
@@ -98,6 +122,9 @@ export interface SnapRoyale {
   // Everyone else's landing picks during the drop, sent with the caches
   // once a second: the drop shows where the others mean to land.
   picks?: WirePoint[];
+  // Respawn: where the recipient picked to come back, while dead and once
+  // picked (src/sim/royale/return_pick.ts); absent otherwise.
+  bk?: WirePoint;
   // Optional blocks, absent until their rules ship
   // (server/royale_snapshot_blocks.ts builds each one):
   // The recipient's open Graft offer, and the Grafts they hold.
@@ -110,20 +137,27 @@ export interface SnapRoyale {
   ri?: SnapRising[];
   mk?: SnapMark[];
   cl?: SnapClamor[];
+  // Respawn: the recipient's own Burr while it lasts, every snapshot, so
+  // its absence says none does (the mirror keeps nothing between sends).
+  bu?: SnapBurr;
   // Respawn: the recipient's rank and how far behind the seat above it.
   rk?: number;
   gap?: number;
+  // 1: rk and gap count since the recipient landed (a drop-in's window,
+  // server/royale_ranking.ts windowStanding). The three are sent from the
+  // recipient's first takedown since landing.
+  rs?: 1;
   // One life: when the recipient's Reprieve brings them back, while pending.
   rp?: number;
   // The champions in their Grace the recipient sees, itself included (a
   // drop-in's Arrival, a Respawn return; src/sim/royale/grace.ts): each
-  // [unit id, when it runs out, x, y, z]; absent when none. Sent every
-  // snapshot while any is graced.
+  // [unit id, when it runs out, x, y, z, and for a Respawn Arrival's from
+  // when an order ends it]; absent when none. Sent every snapshot while any
+  // is graced.
   ar?: SnapGrace[];
-  // Respawn's Last light: 1 once a death is final.
-  fi?: 1;
-  // The champion the recipient watches once out, when not their own.
-  wa?: number;
+  // Respawn: the champion that took the recipient down, through the wait
+  // (CONTEXT.md: Death beat), while it stands; absent otherwise.
+  wa?: SnapWatch;
 }
 
 // Sent to each person when their match ends or they are out for good.
@@ -157,12 +191,17 @@ export interface RoyaleResult {
     heartwood?: string;
     bot?: boolean;
   };
-  // The near miss: the seat just above, and by how much.
+  // The near miss: the seat just above (since the recipient landed when
+  // they dropped in, else in the whole match), and by how many takedowns,
+  // when that is one or two (Respawn).
   gap?: { name: string; by: number };
   // The winner's health share at the end (One life).
   winnerHp?: number;
   // Respawn: the standing since the recipient landed (a drop-in's window).
   window?: { rank: number; of: number; score: number };
+  // Respawn: seconds since the recipient landed (a drop-in's Arrival, else
+  // the drop's end).
+  held?: number;
   // The ranking around the recipient: the podium and their own row with
   // two above and two below, people first.
   slice?: { place: number; name: string; championId: string; score: number; bot: boolean }[];
@@ -173,7 +212,8 @@ export type RoyaleClientMsg =
   // Enter a battle royale: joins a running match when one takes people
   // (ADR 0025's drop in), else starts one at once.
   | { t: 'royale'; v: RoyaleVariant; championId: string; sigils: [string, string]; skin?: number }
-  // The landing point picked during the drop.
+  // The landing point picked during the drop; in Respawn, while dead, the
+  // point picked to come back at.
   | { t: 'drop'; x: number; y: number; z: number }
   // A card of the open Graft offer.
   | { t: 'graft'; pick: number }

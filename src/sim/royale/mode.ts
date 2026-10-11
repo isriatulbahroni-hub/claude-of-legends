@@ -8,10 +8,11 @@
 //   after the zones: the Dusk's burn, then a Seedfall's impact ->
 //   in the deaths: takedowns, loot, experience, places ->
 //   after the deaths: caches, Seedfalls, Risings, marks, Clamors, Grafts,
-//   the leader, the end.
+//   the Last light, the leader, the end.
 // Everything here moves with the match and is in the world checkpoint
 // (snapshot, restore); the schedule and the layout are fixed at the start.
 
+import { POLICY_PERIOD_TICKS } from '../bot_driver';
 import { dealDamage } from '../combat/damage';
 import { addStatus, cancelRecall } from '../combat/status';
 import type { RoyaleSkillId } from '../content/bots/royale_skills';
@@ -26,6 +27,8 @@ import type { Sim } from '../sim';
 import type { CombatCtx } from '../sim_context';
 import { DT } from '../types';
 import type { Unit } from '../unit';
+import { payAssists } from './assists';
+import { burrTakedown, clearBurrs, observeBurr, stepBurrs } from './burr';
 import { drawCacheSpots, openingBy, stepCaches } from './caches';
 import { noteClamor, observeClamors, stepClamors } from './clamors';
 import { dealEscorts, ESCORTS, escortLandings, normalizePick, resolveLandings } from './drop';
@@ -44,11 +47,13 @@ import {
   stepGrafts,
   tallyOf,
 } from './grafts';
+import { lastLightFactor, stepLastLight } from './last_light';
 import type { RoyaleGround, RoyaleLayout } from './layout';
 import { creatureXp, grantXp, landingLevels, takedownXp } from './levels';
 import { GOLDEN_PIECES, grantPieces, healShare, manaShare, seatBuild, streakShare } from './loot';
 import { markOf, markPayout, markSlayer, observeMarks, stepMarks } from './marks';
 import { flightOver, flightPos, type PadFlight, padSites, padUnder, startFlight } from './pads';
+import { returnSpot, takesReturnPick } from './return_pick';
 import {
   grantRoyaleWrath,
   observeRisings,
@@ -62,6 +67,7 @@ import {
   oneLifeRanking,
   placeFallen,
   respawnRanking,
+  returnCap,
   type Standing,
 } from './score';
 import {
@@ -120,6 +126,12 @@ export interface RoyaleTally {
   creaturesTaken: number;
   wardensTaken: number;
   markTakedowns: number;
+  // Respawn takedowns that settled a Burr (burr.ts).
+  burrTakedowns: number;
+  // Respawn Arrivals that came down beside a fair first fight (grace.ts).
+  fairArrivals: number;
+  // Respawn returns set down at the seat's own pick (return_pick.ts).
+  returnsPicked: number;
 }
 
 // The ground's answers as the mode's rules ask them.
@@ -182,6 +194,9 @@ export class RoyaleMode {
     creaturesTaken: 0,
     wardensTaken: 0,
     markTakedowns: 0,
+    burrTakedowns: 0,
+    fairArrivals: 0,
+    returnsPicked: 0,
   };
   private hpBefore = new Map<number, number>();
   private aliveBefore = 0;
@@ -225,6 +240,7 @@ export class RoyaleMode {
       seedfalls: [],
       risings: [],
       marks: [],
+      burrs: new Map(),
       clamors: [],
       wrathHolder: null,
       offers: new Map(),
@@ -273,12 +289,21 @@ export class RoyaleMode {
     this.lastActAt.set(unitId, time);
   }
 
-  // A landing pick during the drop; false outside it or for a bad point.
-  pickDrop(unitId: number, p: Vec3, time: number): boolean {
-    if (this.state.stage !== 'drop' || time >= this.state.dropEndsAt) return false;
+  // A landing pick during the drop, or in Respawn's play a dead seat's
+  // pick of where it comes back (return_pick.ts; the last pick wins); false
+  // otherwise or for a bad point.
+  pickDrop(unitId: number, p: Vec3, time: number, dead = false): boolean {
+    const s = this.state;
+    if (s.stage === 'play') {
+      if (!takesReturnPick(this.variant, s.stage, dead)) return false;
+      const back = normalizePick(p, this.layout.radius);
+      if (back) s.respawnPicks.set(unitId, back);
+      return back !== null;
+    }
+    if (s.stage !== 'drop' || time >= s.dropEndsAt) return false;
     const pick = normalizePick(p, this.layout.radius);
     if (!pick) return false;
-    this.state.drops.set(unitId, pick);
+    s.drops.set(unitId, pick);
     return true;
   }
 
@@ -291,11 +316,17 @@ export class RoyaleMode {
 
   // A drop-in's Arrival (CONTEXT.md; Sim.beginArrival, the replay's
   // 'arrive' event): the seat a person takes from its bot comes down fresh
-  // at a quiet spot inside the light, in its Grace, its tally from zero
+  // inside the light, in Respawn at the field's level beside a fair first
+  // fight, else at a quiet spot, in its Grace, its tally from zero
   // (grace.ts arrive). Only in play.
   beginArrival(sim: Sim, unitId: number): void {
+    // The bot's pick of where to come back is not the person's.
+    this.state.respawnPicks.delete(unitId);
     const u = sim.units.get(unitId);
-    if (u && arrive(this, sim, u)) offerOnTrigger(this, sim, unitId, 'arrival');
+    if (!u || !arrive(this, sim, u)) return;
+    // It never fell and took nobody down: no Burr either way (burr.ts).
+    clearBurrs(this.state, unitId);
+    offerOnTrigger(this, sim, unitId, 'arrival');
   }
 
   // A champion back from a Respawn death (the sim's respawn loop, once its
@@ -304,13 +335,19 @@ export class RoyaleMode {
     beginGrace(this, u, sim.time);
   }
 
-  // Whether the bot driver runs a dead seat's policy this tick: while its
-  // Graft offer is open (a Respawn seat; One life's elimination clears the
-  // queue). The Respawn landing pick (bot/brain.ts respawnPick) is a
-  // 'drop' that pickDrop refuses outside the drop until tranche 2 (T2-C)
-  // takes it while dead, so it asks nothing more yet. Never in the 5v5.
-  wantsDeadDecision(unitId: number): boolean {
-    return hasOpenOffer(this, unitId);
+  // Whether the bot driver runs a dead seat's policy on this decision slot:
+  // while its Graft offer is open (a Respawn seat; One life's elimination
+  // clears the queue), and in Respawn's play on its first slot after the
+  // fall, to pick where it comes back (the 'drop' while dead, the pick a
+  // person makes on the globe through the wait; the house brain picks
+  // nothing, bot/brain.ts): once a wait, not every slot of it, since every
+  // slot cost an observation per dead seat (some 3 percent of a match's
+  // time). Never in the 5v5.
+  wantsDeadDecision(u: Pick<Unit, 'id' | 'respawnAt'>, time: number): boolean {
+    if (hasOpenOffer(this, u.id)) return true;
+    if (!takesReturnPick(this.variant, this.state.stage, true)) return false;
+    if (this.state.respawnPicks.has(u.id)) return false;
+    return time - (u.respawnAt - RESPAWN_S) <= POLICY_PERIOD_TICKS * DT + 1e-6;
   }
 
   // The health a champion comes back with (the sim's respawn loop): all of
@@ -524,11 +561,16 @@ export class RoyaleMode {
         const pay = markPayout(this.variant, lodestar, run);
         const holder = markOf(marks, victim.id, 'wrath') !== null;
         if (lodestar || run !== null || holder) this.tally.markTakedowns++;
-        this.lootPieces(sim, taker, 1 + pay.pieces, 'takedown');
+        // A Burr settled counts double and pays a piece more (burr.ts).
+        const burr = burrTakedown(this, sim, victim, taker);
+        if (burr.pieces > 0) this.tally.burrTakedowns++;
+        this.lootPieces(sim, taker, 1 + pay.pieces + burr.pieces, 'takedown');
         const share = streakShare(taker.killStreak);
         healShare(taker, takedownHealOf(taker, TAKEDOWN_HEAL) * share);
         manaShare(taker, TAKEDOWN_MANA * share);
-        this.state.scores.set(taker.id, (this.state.scores.get(taker.id) ?? 0) + pay.score);
+        // Respawn's Last light counts it double (last_light.ts).
+        const score = pay.score * burr.factor * lastLightFactor(this.state, sim.time);
+        this.state.scores.set(taker.id, (this.state.scores.get(taker.id) ?? 0) + score);
         if (pay.snuffed !== null) {
           this.emit(sim, {
             type: 'royale_snuffed',
@@ -544,6 +586,8 @@ export class RoyaleMode {
         if (t.takedowns === 1) offerOnTrigger(this, sim, taker.id, 'first_takedown', 'takedown');
         if (t.takedowns === 3) offerOnTrigger(this, sim, taker.id, 'third_takedown', 'takedown');
         offerOnLevels(this, sim, taker, from);
+        // Respawn's assists, a share each (assists.ts).
+        payAssists(this, sim, victim, taker);
       }
       if (this.variant === 'one_life') {
         this.fallen.push({ id: victim.id, hpBefore: this.hpBefore.get(victim.id) ?? 0 });
@@ -601,8 +645,13 @@ export class RoyaleMode {
 
   // The respawn's delay and place (SimOptions.respawnDelay, respawnPoint):
   // RESPAWN_S and the edge of the light in Respawn, never in One life. The
-  // place is the candidate on the light's edge farthest from every other
-  // champion standing (score.ts edgeOfLight), never the first one drawn.
+  // place is the seat's own pick when it made one during the wait and a
+  // point near it will do (return_pick.ts returnSpot: inside the light, at
+  // least RETURN_CLEAR_M from every champion standing), else the candidate
+  // on the light's edge farthest from every other champion standing
+  // (score.ts edgeOfLight), never the first one drawn; while the Dusk
+  // closes, in the light it closes to (returnCap), for every seat. The pick
+  // is spent either way: each wait picks afresh.
   respawnDelay(): number {
     return this.variant === 'respawn' ? RESPAWN_S : Number.POSITIVE_INFINITY;
   }
@@ -614,7 +663,15 @@ export class RoyaleMode {
       if (o.kind !== 'champion' || o.dead || o.id === u.id || o.pos.y === undefined) continue;
       enemies.push(o.pos as Vec3);
     }
-    return edgeOfLight(sim.rng, this.state.dusk.now, enemies, this.layout, this.ground);
+    const cap = returnCap(this.state.dusk);
+    const pick = this.state.respawnPicks.get(u.id);
+    this.state.respawnPicks.delete(u.id);
+    const at = pick ? returnSpot(pick, cap, enemies, this.layout, this.ground) : null;
+    if (at) {
+      this.tally.returnsPicked++;
+      return at;
+    }
+    return edgeOfLight(sim.rng, cap, enemies, this.layout, this.ground);
   }
 
   // After the deaths: One life's places, the caches, the leader, the end.
@@ -676,8 +733,10 @@ export class RoyaleMode {
     stepSeedfalls(this, sim);
     stepRisings(this, sim);
     stepMarks(this, sim);
+    stepBurrs(this, sim);
     stepClamors(this, sim);
     stepGrafts(this, sim);
+    stepLastLight(this, sim);
     // The end.
     if (s.stage !== 'play') return;
     if (this.variant === 'one_life') {
@@ -748,7 +807,7 @@ export class RoyaleMode {
       };
     }
     const opening = openingBy(s.caches, u.id);
-    const drop = s.drops.get(u.id) ?? null;
+    const drop = (s.stage === 'drop' ? s.drops.get(u.id) : s.respawnPicks.get(u.id)) ?? null;
     let leader: ObsRoyale['leader'] = null;
     if (s.leaderId !== null) {
       const lu = sim.units.get(s.leaderId);
@@ -776,6 +835,7 @@ export class RoyaleMode {
       ...observeSeedfalls(this, sim, u),
       ...observeRisings(this, sim, u),
       ...observeMarks(this, sim, u),
+      ...observeBurr(this, sim, u),
       ...observeClamors(this, sim, u),
       ...observeGrace(this, sim, u),
     };

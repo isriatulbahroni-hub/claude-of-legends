@@ -8,8 +8,10 @@ import { ChampionRegistry } from '../sim/champion_registry';
 import { specForRank } from '../sim/combat/casting';
 import type { Status } from '../sim/combat/status';
 import type { ChampionDef } from '../sim/content/champions';
+import { ITEMS } from '../sim/content/items';
 import type { GameMap, WardenPit } from '../sim/content/map';
 import { creatureOfRing } from '../sim/content/rings';
+import { draughtLeft } from '../sim/draught';
 import { type FavorStacks, NO_FAVORS } from '../sim/favors';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { Vec3 } from '../sim/geo';
@@ -29,9 +31,14 @@ import type {
   SeatLabel,
   SnapCache,
   SnapRoyale,
+  SnapWatch,
   WirePoint,
 } from './royale_wire';
 import { type DrawnSelf, pathOfPairs, SelfPredictor } from './self_predict';
+import { watchRecord } from './watch_body';
+
+const SAP = ITEMS.sapdraught?.drink;
+const DRAUGHT_PER_SECOND = SAP ? SAP.heal / SAP.seconds : 1;
 
 // Rebuilds a displayable Status from its wire chip.
 function toStatus(k: string, until: number, v: number | undefined): Status | null {
@@ -48,6 +55,8 @@ function toStatus(k: string, until: number, v: number | undefined): Status | nul
       return { kind: 'untargetable', until };
     case 'stealth':
       return { kind: 'stealth', until };
+    case 'fumble':
+      return { kind: 'fumble', until };
     case 'slow':
       return { kind: 'slow', until, pct: v ?? 0 };
     case 'shield':
@@ -63,6 +72,9 @@ function toStatus(k: string, until: number, v: number | undefined): Status | nul
       return { kind: 'taunt', until, sourceId: 0 };
     case 'buff':
       return { kind: 'buff', until, msPct: 0, asPct: 0, armor: 0, mr: 0 };
+    case 'draught':
+      // The health still to drink; the pace is the one drink's (draught.ts).
+      return { kind: 'draught', until, perSecond: DRAUGHT_PER_SECOND, left: v ?? 0 };
     default:
       return null;
   }
@@ -113,10 +125,13 @@ function materializeUnit(s: SnapUnit): Unit {
     },
     statuses: [],
     cooldowns: {},
+    charges: {},
     abilityRanks: { Q: 1, W: 1, E: 1, R: 0 },
     skillPoints: 0,
     skin: s.sk ?? 0,
     passiveStacks: 0,
+    actedAt: -999,
+    lurk: null,
     lastDamagedAt: -999,
     lastDealtDamageAt: -999,
     outOfCombatBonus: 0,
@@ -220,6 +235,9 @@ export class ClientWorld implements IWorld {
   // Clamors, the own Grafts): the last of each, kept between sends.
   private kept: Pick<SnapRoyale, 'sf' | 'ri' | 'mk' | 'cl' | 'gr'> = {};
   private readonly seats = new Map<number, SeatLabel>();
+  // The killer's body drawn from the mode block's wa through a Respawn
+  // wait (net/watch_body.ts), by unit id; null when none is.
+  private watched: number | null = null;
 
   // Match-scoped champion resolution, mirroring the server sim's registry:
   // the Forge queue delivers the match's forged definitions at setup and
@@ -302,6 +320,36 @@ export class ClientWorld implements IWorld {
     this.dropPicks = [];
     this.kept = {};
     this.seats.clear();
+    this.watched = null;
+  }
+
+  // The killer the fallen champion watches through its wait (the mode
+  // block's wa), after the snapshot's own units: drawn from wa while the
+  // snapshot sends no record of it, moved with each wa, let go when wa
+  // ends. A record of its own (the killer back in sight) takes over the
+  // body in place.
+  private applyWatch(w: SnapWatch | undefined, sent: ReadonlySet<number>): void {
+    const held = this.watched;
+    if (held !== null && (sent.has(held) || !w || w.i !== held)) {
+      if (!sent.has(held)) this.units.delete(held);
+      this.watched = null;
+    }
+    if (!w || sent.has(w.i)) return;
+    const rec = watchRecord(w);
+    const body = this.units.get(w.i);
+    if (this.watched === w.i && body) {
+      body.pos.x = rec.x;
+      body.pos.y = rec.y;
+      body.pos.z = rec.z;
+      body.hp = rec.h;
+      body.maxHp = rec.m;
+      return;
+    }
+    if (body) return;
+    const unit: MirrorUnit = materializeUnit(rec);
+    unit.champion = unit.championId ? this.champions.get(unit.championId) : null;
+    this.units.set(w.i, unit);
+    this.watched = w.i;
   }
 
   private applyRoyale(r: SnapRoyale): void {
@@ -490,6 +538,10 @@ export class ClientWorld implements IWorld {
 
   drinkItem(_unitId: number, slot: number): boolean {
     if (this.coach) return false;
+    // The sim's own rule (draught.ts): one draught at a time. Refused here,
+    // the HUD says so, as it does offline.
+    const self = this.units.get(this.selfUnitId);
+    if (self && draughtLeft(self, this.time) > 0) return false;
     this.send({ t: 'drink', slot });
     return true;
   }
@@ -608,6 +660,11 @@ export class ClientWorld implements IWorld {
         self.dead = msg.self.dead;
         self.respawnAt = msg.self.respawnAt;
         self.cooldowns = msg.self.cooldowns;
+        // The charge stores (CONTEXT.md: Charge), for the HUD's count.
+        self.charges = {};
+        for (const [key, pair] of Object.entries(msg.self.ch ?? {})) {
+          if (pair) self.charges[key as AbilityKey] = { count: pair[0], nextAt: pair[1] };
+        }
         self.abilityRanks = msg.self.abilityRanks;
         self.skillPoints = msg.self.skillPoints;
         self.sigilCooldowns = msg.self.sigilCooldowns;
@@ -727,6 +784,7 @@ export class ClientWorld implements IWorld {
     }
 
     if (msg.royale) this.applyRoyale(msg.royale);
+    if (this.royaleMatch) this.applyWatch(msg.royale?.wa, new Set(msg.units.map((s) => s.i)));
     // The kill feed names champions the mirror never saw.
     for (const e of msg.events) {
       if (e.e === 'death' || e.e === 'royale_out') {

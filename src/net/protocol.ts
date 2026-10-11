@@ -52,6 +52,20 @@ export interface ForgedMatchAssets {
   icons?: Record<string, string>;
 }
 
+// How finely the page draws its match (src/game/quality_ladder.ts), for
+// the seat report (server/seat_report.ts): the step on the device's ladder
+// (0 its best), the lean level the context was made with
+// (src/game/quality_memory.ts), the canvas's pixels per CSS pixel, the
+// picture's size in pixels, and whether the ground shows shadows.
+export interface DrawnQualityWire {
+  step: number;
+  lean: number;
+  ratio: number;
+  w: number;
+  h: number;
+  shadows: boolean;
+}
+
 export type ClientMsg =
   // Carries no identity: the session cookie settled that on the upgrade
   // (ADR 0006). It only asks whether a live match is still holding this
@@ -97,8 +111,9 @@ export type ClientMsg =
   // a match command.
   | { t: 'loaded' }
   // The echo of the server's round-trip probe, sent back at once, with the
-  // frames a second the page drew since the last one (null while hidden).
-  | { t: 'probe'; n: number; fps?: number | null }
+  // frames a second the page drew since the last one (null while hidden)
+  // and how finely it draws them (null outside a match).
+  | { t: 'probe'; n: number; fps?: number | null; q?: DrawnQualityWire | null }
   // A first step done in this match, or 'off' when the player hid the
   // guide (src/ui/first_steps.ts): what the seat report says of how far
   // a newcomer was led (server/seat_report.ts). Never a match command.
@@ -243,6 +258,10 @@ export interface SelfSnap {
   dead: boolean;
   respawnAt: number;
   cooldowns: Partial<Record<AbilityKey, number>>;
+  // The stores of the abilities cast from charges (CONTEXT.md: Charge), per
+  // key: the charges in store and when the next comes back. Absent when
+  // the kit carries none.
+  ch?: Partial<Record<AbilityKey, [count: number, nextAt: number]>>;
   // Effective ability ranks and unspent skill points, for the HUD pips.
   abilityRanks: Record<AbilityKey, number>;
   skillPoints: number;
@@ -313,6 +332,9 @@ export type SnapEvent =
   | { e: 'atk'; unitId: number; targetId: number; voidmaulAttack?: VoidmaulAttackKind }
   // Resolved ground contact, including its committed position and area.
   | ({ e: 'voidmaul_slam' } & Omit<VoidmaulSlamEvent, 'type'>)
+  // A visible unit's strike landed nothing: it fumbled (CONTEXT.md:
+  // Fumble). Told to whoever sees the striker or the target.
+  | { e: 'miss'; unitId: number; targetId: number }
   | { e: 'victory'; team: TeamId }
   | RoyaleSnapEvent;
 
@@ -534,7 +556,14 @@ export const STEP_IDS = [
 export type StepId = (typeof STEP_IDS)[number];
 // The battle royale's own first steps (src/ui/royale_steps.ts), told on
 // the same wire: its seats reported none while they were left off it.
-export const ROYALE_STEP_IDS = ['br_cache', 'br_dusk', 'br_takedown', 'br_pad', 'br_ult'] as const;
+export const ROYALE_STEP_IDS = [
+  'br_fight',
+  'br_cache',
+  'br_dusk',
+  'br_takedown',
+  'br_pad',
+  'br_ult',
+] as const;
 export type RoyaleStepId = (typeof ROYALE_STEP_IDS)[number];
 export type WireStepId = StepId | RoyaleStepId;
 

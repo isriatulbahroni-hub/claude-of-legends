@@ -5,7 +5,12 @@
 
 import * as THREE from 'three';
 import { attackSoundOf, castSoundOf } from '../game/champion_sounds';
-import { type RenderQuality, readDeviceHints, renderQualityFor } from '../game/map_quality';
+import {
+  ladderOverride,
+  type RenderQuality,
+  readDeviceHints,
+  renderQualityFor,
+} from '../game/map_quality';
 import { pointOnStage, rectOnStage, stageSizeOf } from '../game/match_stage';
 import { playCastSfx, playSfx } from '../game/sfx';
 import type { VoidmaulSlamNote } from '../game/voidmaul_slam_notes';
@@ -15,7 +20,7 @@ import {
   strikeWindupSeconds,
 } from '../sim/combat/auto_attack';
 import type { CastSpec } from '../sim/combat/casting';
-import { isRooted, isStunned } from '../sim/combat/status';
+import { isFumbled, isRooted, isStealthed, isStunned } from '../sim/combat/status';
 import { stoneArena, voidmaulStones } from '../sim/combat/voidmaul_stones';
 import { heartwoodOf } from '../sim/content/grafts';
 import { creatureOfRing, WRATH_EXECUTE_FRAC } from '../sim/content/rings';
@@ -81,6 +86,7 @@ import type { PlanetMinimap } from './planet_minimap';
 import { PlanetStage } from './planet_stage';
 import { closeRenderer, ProgramKeeper } from './program_keeper';
 import { ProgramWarmup, whenLinked } from './program_warmup';
+import { QualityDial } from './quality_dial';
 import { RING_FOG_EDGE, ringFogOpening } from './ring_fog';
 import {
   clearRoyaleProjector,
@@ -90,6 +96,7 @@ import {
   setRoyaleProjector,
 } from './royale_cues';
 import { pickShieldHolder, type ShieldCandidate } from './shield_holder';
+import { fumbleSwirl, StealthVeils } from './status_veils';
 import { crownHeight, crownLift, flightProgress, isStill } from './structure_fire';
 import type { RenderTerrain } from './terrain';
 import { CHARGE_S, nextChargeDelayS } from './tower_shot';
@@ -195,6 +202,8 @@ interface TrackedUnit {
   barY: number;
   lastHp: number;
   stunMark: THREE.Sprite | null;
+  // A fumbling champion's "?" (CONTEXT.md: Fumble), where a stun's "!" sits.
+  fumbleMark: THREE.Sprite | null;
   rootMark: THREE.Mesh | null;
   // The battle royale's hunted (ui/royale_hunted.ts markAuras): a ring at
   // the feet in the color of the mark the champion carries (the Wrath, the
@@ -256,6 +265,9 @@ export interface CombatNotes {
   // Auto-attacks fired by visible units, for swing animations.
   attacks: readonly { unitId: number; targetId: number; voidmaulAttack?: VoidmaulAttackKind }[];
   voidmaulSlams?: readonly VoidmaulSlamNote[];
+  // Strikes that landed nothing, their striker fumbling (CONTEXT.md:
+  // Fumble): a "Miss" rises over the target.
+  misses?: readonly { unitId: number; targetId: number }[];
 }
 
 // What the aim preview needs to draw a cast's range and shape.
@@ -410,6 +422,10 @@ export class Renderer {
   // any single unit (sprites carry userData.sharedMap).
   private markTexture: THREE.Texture | null = null;
   private readonly fct: FloatingText;
+  // Hidden champions the viewer still sees, half see-through, and the
+  // fumble's swirl clocks (status_veils.ts).
+  private readonly veils = new StealthVeils();
+  private readonly swirls = new Map<number, { lastAt: number }>();
   private readonly selfRing: THREE.Mesh;
   private readonly fogCanvas = document.createElement('canvas');
   private readonly fogTexture: THREE.CanvasTexture;
@@ -429,6 +445,10 @@ export class Renderer {
   // Slightly zoomed in by default: characters read far better up close.
   private zoom = 0.85;
   private followId: number | null = null;
+  // The unit the camera looks at in the followed one's stead (the Death
+  // beat, game/death_beat.ts), while the world draws it; null for none.
+  // Nothing else moves to it: the followed champion stays the viewer's.
+  private watchId: number | null = null;
   // The followed champion as this frame draws it when the world draws it
   // ahead of its newest state (IWorld predictedPos: online, the own
   // champion walking the orders on their way); null draws it between its
@@ -481,6 +501,13 @@ export class Renderer {
   // How finely this device draws: a phone's canvas and shadow map are
   // capped (src/game/map_quality.ts).
   private readonly quality: RenderQuality;
+  // How finely this match draws, stepped by its frame rate
+  // (quality_dial.ts): the canvas's ratio and the ground's shadows, with
+  // the context's antialiasing and the effects' lights chosen at its start.
+  private readonly dial: QualityDial;
+  // Whether the last frame was the planet's drop or dive, which the dial
+  // does not judge.
+  private viewingDrop = false;
   // The WebGL context's comings and goings (picture_watch.ts): nothing is
   // drawn while it is gone, or back with the terrain still being redrawn.
   private readonly picture: PictureWatch;
@@ -522,13 +549,17 @@ export class Renderer {
     this.terrain = terrain;
     this.world = world;
     this.planet = null;
-    this.quality = renderQualityFor(
-      readDeviceHints(window),
-      window.devicePixelRatio,
-      terrain.highDetail === true,
-    );
-    this.gl = new THREE.WebGLRenderer({ antialias: true });
-    this.gl.setPixelRatio(this.quality.pixelRatio);
+    const hints = readDeviceHints(window);
+    this.quality = renderQualityFor(hints, window.devicePixelRatio, terrain.highDetail === true);
+    this.dial = new QualityDial({
+      mode: terrain.planet ? 'royale' : 'classic',
+      top: this.quality.pixelRatio,
+      phone: hints.coarsePointer,
+      pin: ladderOverride(window.location.search),
+      now: performance.now(),
+    });
+    this.gl = new THREE.WebGLRenderer({ antialias: this.dial.lean.antialias });
+    this.gl.setPixelRatio(this.dial.rung.ratio);
     this.gl.setSize(container.clientWidth, container.clientHeight);
     this.gl.shadowMap.enabled = true;
     // Plain PCF, not PCFSoft: it is the kernel that honors shadow.radius.
@@ -595,7 +626,11 @@ export class Renderer {
     this.scene.scale.z = -1;
     this.scene.position.z = this.world.map.size;
 
-    this.vfx = new VfxSystem(this.scene, this.terrain.heightAt);
+    this.vfx = new VfxSystem(
+      this.scene,
+      this.terrain.heightAt,
+      this.dial.lean.effectLights ? undefined : 0,
+    );
     this.towerShots = new TowerShotFx(this.scene, this.terrain.heightAt);
     this.towerReach = new TowerReachFx(this.scene, this.terrain.heightAt);
     if (this.planet) {
@@ -622,23 +657,33 @@ export class Renderer {
       this.cleanups.push(() => clearRoyaleProjector(projector));
       this.cleanups.push(onRoyaleCue((cue) => this.onRoyaleCue(cue)));
     }
-    this.vfx.particles.setViewport(
-      Math.max(1, container.clientHeight),
-      (this.camera.fov * Math.PI) / 180,
-    );
+    // The particles' size is in the canvas's pixels: kept as it looks at
+    // the device's own ratio whatever rung the dial stands on.
+    const fitParticles = (): void =>
+      this.vfx.particles.setViewport(
+        Math.max(1, container.clientHeight),
+        (this.camera.fov * Math.PI) / 180,
+        this.gl.getPixelRatio() / this.dial.top,
+      );
+    fitParticles();
 
     const onResize = (): void => {
       this.canvasAt.forget();
       this.gl.setSize(container.clientWidth, container.clientHeight);
       this.camera.aspect = container.clientWidth / Math.max(1, container.clientHeight);
       this.camera.updateProjectionMatrix();
-      this.vfx.particles.setViewport(
-        Math.max(1, container.clientHeight),
-        (this.camera.fov * Math.PI) / 180,
-      );
+      fitParticles();
     };
     window.addEventListener('resize', onResize);
     this.cleanups.push(() => window.removeEventListener('resize', onResize));
+    // A hidden tab draws nothing; back in front, its first seconds are
+    // not judged.
+    const onVisibility = (): void => {
+      if (!document.hidden) this.dial.pause(performance.now());
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    this.cleanups.push(() => document.removeEventListener('visibilitychange', onVisibility));
+    this.cleanups.push(() => this.dial.dispose());
 
     // Mouse-wheel zoom within sane bounds.
     this.gl.domElement.addEventListener(
@@ -793,6 +838,7 @@ export class Renderer {
       this.picture.dispose();
       notice.dispose();
     });
+    this.dial.attach({ gl: this.gl, scene: this.scene, onRatio: fitParticles });
     this.onSimTick();
     // First sync has no history: snap prev onto curr so nothing lerps from 0,0.
     for (const t of this.tracked.values()) t.prev = { ...t.curr };
@@ -890,6 +936,13 @@ export class Renderer {
   followUnit(id: number): void {
     this.followId = id;
     if (this.planet) this.planet.picker = id;
+  }
+
+  // The camera looks at this unit instead of the followed one while the
+  // world draws it, the followed one's place otherwise; null ends it. A
+  // free camera (a pan, a minimap look) still comes first.
+  watchUnit(id: number | null): void {
+    this.watchId = id;
   }
 
   // The team whose fog of war this client renders.
@@ -1476,6 +1529,12 @@ export class Renderer {
       );
     }
     if (impacted) playSfx('impact');
+    for (const miss of notes.misses ?? []) {
+      const t = this.tracked.get(miss.targetId) ?? this.tracked.get(miss.unitId);
+      const at = this.world.units.get(miss.targetId) ?? this.world.units.get(miss.unitId);
+      if (!t || !at || !t.mesh.visible) continue;
+      this.fct.spawn('Miss', '#f2dcae', at.pos.x, t.barY + 1.4, at.pos.z, 0.75);
+    }
     for (const cast of notes.casts) {
       const caster = this.world.units.get(cast.unitId);
       if (!caster) continue;
@@ -2307,6 +2366,7 @@ export class Renderer {
           barY,
           lastHp: u.hp,
           stunMark: null,
+          fumbleMark: null,
           rootMark: null,
           markAura: null,
           wrathMark: null,
@@ -2606,6 +2666,16 @@ export class Renderer {
         }
       }
       if (t.stunMark) t.stunMark.visible = stunned;
+      const fumbling = visible && !stunned && isFumbled(u, this.world.time);
+      if (fumbling && !t.fumbleMark) {
+        const mark = makeTextSprite('?', '#f0a050', 0.8);
+        if (mark) {
+          mark.position.set(0, t.barY + 1.65, 0);
+          t.overhead.add(mark);
+          t.fumbleMark = mark;
+        }
+      }
+      if (t.fumbleMark) t.fumbleMark.visible = fumbling;
       const rooted = visible && !stunned && isRooted(u, this.world.time);
       if (rooted && !t.rootMark) {
         const ring = new THREE.Mesh(
@@ -2619,6 +2689,23 @@ export class Renderer {
         t.rootMark = ring;
       }
       if (t.rootMark) t.rootMark.visible = rooted;
+      // Hidden but seen (its own side): half see-through, shimmering. A
+      // fumbling champion: dust wheeling over its head.
+      if (u.kind === 'champion') {
+        const hidden = visible && isStealthed(u, this.world.time);
+        // The rigged body only: its materials are its own (assets.ts), where
+        // the holder's rings and marks share theirs with the rest.
+        const body = this.championVisuals.get(id)?.root ?? null;
+        this.veils.step(id, body, hidden, t.curr.x, t.curr.z, t.barY * 0.8, this.vfx, nowMs);
+        if (fumbling) {
+          let clock = this.swirls.get(id);
+          if (!clock) {
+            clock = { lastAt: 0 };
+            this.swirls.set(id, clock);
+          }
+          fumbleSwirl(this.vfx, t.curr.x, t.barY + 0.9, t.curr.z, nowMs, clock);
+        }
+      }
 
       // The hunted's aura: everyone who sees the champion sees why every
       // globe shows it, pulsing in the mark's color.
@@ -2813,6 +2900,8 @@ export class Renderer {
           this.dying.push({ mesh: t.mesh, start: performance.now() });
         }
         this.tracked.delete(id);
+        this.veils.lift(id);
+        this.swirls.delete(id);
         const cv = this.championVisuals.get(id);
         if (cv) {
           this.championVisuals.delete(id);
@@ -2926,6 +3015,7 @@ export class Renderer {
           ? vis.zone(z.radius, colors, hostile)
           : buildZoneMesh(z, this.world, TEAM_COLORS[this.look(z.team)] ?? 0xffffff);
         mesh.position.set(z.pos.x, this.groundHeight(z.pos.x, z.pos.z) + 0.1, z.pos.z);
+        mesh.visible = !this.world.zoneSeen || this.world.zoneSeen(this.viewerTeam, z);
         // Telegraphs must never lose the draw-order lottery against the
         // river's translucent layers: lift catalog meshes above them.
         if (vis?.zone) {
@@ -3346,15 +3436,23 @@ export class Renderer {
   }
 
   // alpha in [0, 1): progress through the current tick, for interpolation.
-  render(alpha: number): void {
+  // `frameAt`: the time requestAnimationFrame handed the frame, which the
+  // quality dial reads the screen's refresh from.
+  render(alpha: number, frameAt?: number): void {
     // A new frame: the canvas's place is read again, once.
     this.canvasAt.forget();
     // No context, or a restored one still waiting on the terrain's
     // pictures: a draw now would upload the closed ones.
-    if (this.picture.blocked()) return;
+    if (this.picture.blocked()) {
+      this.dial.gap();
+      return;
+    }
     const now = performance.now();
     // The planet's programs still linking: the picture waits for them.
-    if (this.warmup?.holds(now)) return;
+    if (this.warmup?.holds(now)) {
+      this.dial.gap();
+      return;
+    }
     const dtMs = Math.min(100, now - this.lastFrameAt);
     this.lastFrameAt = now;
     // The planet: its stage first (the drop, the landing), then the chart
@@ -3384,6 +3482,7 @@ export class Renderer {
     this.selfDrawn =
       this.followId !== null ? (this.world.predictedPos?.(this.followId, now) ?? null) : null;
     let followPos: THREE.Vector3 | null = null;
+    let watchPos: THREE.Vector3 | null = null;
     const fadeAt: { id: number; x: number; y: number; z: number }[] = [];
     for (const [id, t] of this.tracked) {
       const ahead = id === this.followId ? this.selfDrawn : null;
@@ -3581,6 +3680,7 @@ export class Renderer {
       const spinners = t.mesh.userData.spinners as THREE.Object3D[] | undefined;
       if (spinners) for (const sp of spinners) sp.rotation.y = now * 0.0006;
       if (id === this.followId) followPos = new THREE.Vector3(x, this.groundHeight(x, z), z);
+      if (id === this.watchId) watchPos = new THREE.Vector3(x, this.groundHeight(x, z), z);
       // The champions the planet's props thin out for: the followed one,
       // then the nearest others in view (planet_dusk.ts).
       if (this.planet && t.kind === 'champion' && t.mesh.visible) {
@@ -3655,6 +3755,10 @@ export class Renderer {
       else fx.vis.shieldTick?.(fx.holder, now - fx.bornAt, (until - this.world.time) * 1000);
     }
     for (const [id, tz] of this.trackedZones) {
+      // A hidden pod shows only while the viewer's team sees it (the
+      // offline world answers; the online mirror only holds what is seen).
+      const zone = this.world.zones.get(id);
+      tz.mesh.visible = !zone || !this.world.zoneSeen || this.world.zoneSeen(this.viewerTeam, zone);
       if (!tz.custom) {
         const s = 1 + 0.05 * Math.sin(now * 0.006 + id);
         tz.mesh.scale.set(s, 1, s);
@@ -3781,9 +3885,10 @@ export class Renderer {
       this.vignette.style.visibility = '';
     }
 
-    this.updateFreeCam(dtMs, followPos);
+    this.updateFreeCam(dtMs, watchPos ?? followPos);
     const target =
       this.freeCam ??
+      watchPos ??
       followPos ??
       new THREE.Vector3(this.world.map.size / 2, 0, this.world.map.size / 2);
     this.camFocus.x = target.x;
@@ -3809,6 +3914,7 @@ export class Renderer {
       restore();
       this.programs.keep(this.gl.info.programs ?? []);
       this.shown();
+      this.drew(now, frameAt);
       return;
     }
     const eye = this.toScene(target);
@@ -3825,6 +3931,24 @@ export class Renderer {
     this.gl.render(this.scene, this.camera);
     this.programs.keep(this.gl.info.programs ?? []);
     this.shown();
+    this.drew(now, frameAt);
+  }
+
+  // A frame drawn, begun at `began`: the quality dial judges it, unless it
+  // was the planet's drop or dive (a view of its own), and starts afresh
+  // on the ground after them.
+  private drew(began: number, frameAt: number | undefined): void {
+    const drop = this.planet !== null && (this.planet.droppingNow || this.planet.divingNow);
+    if (drop) {
+      this.viewingDrop = true;
+      this.dial.gap();
+      return;
+    }
+    if (this.viewingDrop) {
+      this.viewingDrop = false;
+      this.dial.pause(began);
+    }
+    this.dial.frame(frameAt ?? began, performance.now() - began);
   }
 
   // A frame is on the canvas: the first one settles `drawn`.

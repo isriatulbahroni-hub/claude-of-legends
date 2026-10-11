@@ -34,8 +34,7 @@ export interface GameSettings {
   ladderTold: boolean;
   // A left click on the ground walks and on an enemy attacks, like the
   // right click (game/boot.ts): a laptop's trackpad clicks left, and a
-  // visitor whose clicks did nothing left within half a minute (the seat
-  // report, 2026-10-01). Off, a left click only selects, the genre's way.
+  // left click that did nothing left a trackpad with no way to play. Off, a left click only selects, the genre's way.
   leftClickMoves: boolean;
   // The first steps (ui/first_steps.ts): hidden by the player, and the
   // steps this browser has done, so a returning player meets only what
@@ -52,6 +51,14 @@ export interface GameSettings {
   // the first. Which champions exist is the pick's to check
   // (ui/royale_pick_rules.ts), not the storage's.
   royalePick: RoyalePickMemory | null;
+  // The most Respawn takedowns this browser scored in one seat, counted
+  // since landing for a drop-in: the end card's best (ui/royale_result.ts).
+  // 0 before the first. Not a choice, so the settings panel never shows it.
+  royaleBest: number;
+  // The points this browser's seats earned in battle royales: Respawn's end
+  // card climbs them as levels (ui/royale_goal.ts). 0 before the first. Not
+  // a choice, so the settings panel never shows it.
+  royaleGoal: number;
 }
 
 export interface RoyalePickMemory {
@@ -75,6 +82,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
   stepsDone: [],
   royaleStepsDone: [],
   royalePick: null,
+  royaleBest: 0,
+  royaleGoal: 0,
 };
 
 const STORAGE_KEY = 'loc-settings';
@@ -86,6 +95,13 @@ const clamp01 = (v: unknown, fallback: number): number =>
 // in storage stays a small number.
 const count = (v: unknown): number =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(1000, Math.max(0, Math.floor(v))) : 0;
+
+// A total of points kept in storage: a whole number from zero, capped far
+// past any real one (ui/royale_goal.ts GOAL_MAX_POINTS).
+const points = (v: unknown): number =>
+  typeof v === 'number' && Number.isFinite(v)
+    ? Math.min(10_000_000, Math.max(0, Math.floor(v)))
+    : 0;
 
 // A list of step ids kept in storage: strings, once each, a few at most.
 const idList = (v: unknown): string[] =>
@@ -127,6 +143,8 @@ export function clampSettings(raw: unknown): GameSettings {
     stepsDone: idList(r.stepsDone),
     royaleStepsDone: idList(r.royaleStepsDone),
     royalePick: royalePickOf(r.royalePick),
+    royaleBest: count(r.royaleBest),
+    royaleGoal: points(r.royaleGoal),
   };
 }
 

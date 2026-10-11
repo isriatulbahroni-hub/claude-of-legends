@@ -1,15 +1,17 @@
 // The battle royale snapshot's optional blocks (src/net/royale_wire.ts
 // SnapRoyale), one builder each, beside royale_snapshot.ts which calls them
 // all through addRoyaleBlocks: the recipient's Graft offer and Grafts, the
-// Seedfalls, the Risings, the marks, the Clamors, the Respawn rank and gap,
-// the Reprieve, the Graces (an Arrival, a return), the Last light's final seconds and the watched
-// champion; and a cache's kind and its opening time. A builder answers
+// Seedfalls, the Risings, the marks, the recipient's Burr, the Clamors, the
+// Respawn rank and gap
+// (a drop-in's since they landed, with rs), the Reprieve, the Graces (an Arrival, a return) and the Respawn wait's
+// killer; and a cache's kind and its opening time. A builder answers
 // undefined to leave its block off the wire, which every one does until its
 // rules ship. A block sent on change (sf, cl) asks sentOnChange below, the
 // one memory of what each viewer was last sent, never a tracker of its own
 // and never the shared snapshot code.
 
 import type {
+  SnapBurr,
   SnapCache,
   SnapClamor,
   SnapGrace,
@@ -18,12 +20,20 @@ import type {
   SnapRising,
   SnapRoyale,
   SnapSeedfall,
+  SnapWatch,
 } from '../src/net/royale_wire';
 import { RING_RISE_AT_S, RISING_WARN_S } from '../src/sim/content/royale_events';
+import { BURR_S, liveBurr } from '../src/sim/royale/burr';
 import { cacheOpenS } from '../src/sim/royale/caches';
 import { firstSeedfallCallAt } from '../src/sim/royale/seedfall';
-import { CACHE_OPEN_S, type CacheState } from '../src/sim/royale/types';
-import { type RankedSeat, rankAndGapIn, royaleRanking } from './royale_ranking';
+import {
+  CACHE_OPEN_S,
+  type CacheState,
+  RESPAWN_S,
+  type RoyaleState,
+} from '../src/sim/royale/types';
+import type { Unit } from '../src/sim/unit';
+import { type RankedSeat, rankAndGapIn, royaleRanking, windowStanding } from './royale_ranking';
 import type { RoyaleSim } from './royale_sim';
 import type { RoyaleSnapContext, RoyaleViewer } from './royale_snapshot';
 import { round2 } from './snapshot';
@@ -168,6 +178,22 @@ export const marksBlock: Builder<SnapMark[]> = (sim, viewer) => {
   );
   return sentOnChange(viewer, 'mk', value, sim.time);
 };
+// The recipient's own Burr (src/sim/royale/burr.ts), every snapshot of the
+// play while it lasts: the carrier, when it runs out, and where the carrier
+// stands while it stands, the one point the sim shows the owner alone (its
+// observation's burr reads the same). Nobody else is ever sent it.
+export const burrBlock: Builder<SnapBurr> = (sim, viewer) => {
+  const r = sim.royale;
+  if (r.stage !== 'play') return undefined;
+  const b = liveBurr(r.burrs, viewer.unitId, sim.time);
+  if (!b) return undefined;
+  const out: SnapBurr = { i: b.carrierId, u: round2(b.until) };
+  const c = sim.units.get(b.carrierId);
+  if (c && !c.dead && c.pos.y !== undefined) {
+    out.at = [round2(c.pos.x), round2(c.pos.y), round2(c.pos.z)];
+  }
+  return out;
+};
 // How far from the viewer a Clamor is sent: past the client's hearing
 // (60 m, ui/royale_moments.ts CLAMOR_HEAR_M) and the minimap's corners
 // (planet_minimap.ts, a 110 m square), nobody on that screen can use it.
@@ -209,16 +235,31 @@ function respawnRankingOf(sim: RoyaleSim): number[] {
   return ranking;
 }
 
-function standing(sim: RoyaleSim, viewer: RoyaleViewer) {
+// The standing the top line tells: in the whole match, or for a drop-in
+// (ctx.windowBase) since they landed, from their first takedown since
+// then (before it, a rank among the seats that scored reads as a verdict
+// on seconds of play).
+function standing(
+  sim: RoyaleSim,
+  viewer: RoyaleViewer,
+  ctx: RoyaleSnapContext,
+): { rank: number; gap: number; since?: 1 } | null {
   const r = sim.royale;
   if (r.variant !== 'respawn' || r.stage !== 'play') return null;
-  return rankAndGapIn(respawnRankingOf(sim), r, viewer.unitId);
+  const ranking = respawnRankingOf(sim);
+  if (ctx.windowBase) {
+    const w = windowStanding(r.scores, ctx.windowBase, ranking, viewer.unitId);
+    return w.score > 0 ? { rank: w.rank, gap: w.gap, since: 1 } : null;
+  }
+  return rankAndGapIn(ranking, r, viewer.unitId);
 }
 
 // Respawn: the recipient's rank and its gap (server/royale_ranking.ts
-// rankAndGap), every snapshot of the play: the HUD's top line.
-export const rankBlock: Builder<number> = (sim, viewer) => standing(sim, viewer)?.rank;
-export const gapBlock: Builder<number> = (sim, viewer) => standing(sim, viewer)?.gap;
+// rankAndGap, or windowStanding for a drop-in, then with rs), every
+// snapshot of the play: the HUD's top line.
+export const rankBlock: Builder<number> = (sim, viewer, ctx) => standing(sim, viewer, ctx)?.rank;
+export const gapBlock: Builder<number> = (sim, viewer, ctx) => standing(sim, viewer, ctx)?.gap;
+export const sinceBlock: Builder<1> = (sim, viewer, ctx) => standing(sim, viewer, ctx)?.since;
 export const reprieveBlock: Builder<number> = () => undefined;
 // The champions in their Grace the viewer sees, itself included
 // (src/sim/royale/grace.ts; RoyaleState.arriving), each with when it runs
@@ -238,12 +279,52 @@ export const arrivalBlock: Builder<SnapGrace[]> = (sim, viewer) => {
       if (s.kind === 'untargetable' && s.until > until) until = s.until;
     }
     if (until <= sim.time) continue;
-    out.push([id, round2(until), round2(u.pos.x), round2(u.pos.y), round2(u.pos.z)]);
+    const g: SnapGrace = [id, round2(until), round2(u.pos.x), round2(u.pos.y), round2(u.pos.z)];
+    // A Grace that waits on the seat's order: from when one ends it.
+    const floor = sim.graceFloor?.(id) ?? null;
+    if (floor !== null) g.push(round2(floor));
+    out.push(g);
   }
   return out.length > 0 ? out : undefined;
 };
-export const finalBlock: Builder<1> = () => undefined;
-export const watchBlock: Builder<number> = () => undefined;
+// Who took a waiting Respawn champion down: the carrier of its Burr when
+// that Burr was hung by this very fall (burr.ts hangs one on every
+// takedown, at the fall's time); null for a fall nobody landed (the Dusk,
+// a creature), whose Burr, if any, is an older one.
+export function waitKiller(r: Pick<RoyaleState, 'burrs'>, u: Unit): number | null {
+  if (!u.dead || !Number.isFinite(u.respawnAt)) return null;
+  const b = r.burrs.get(u.id);
+  if (!b) return null;
+  const hungAt = b.until - BURR_S;
+  const fellAt = u.respawnAt - RESPAWN_S;
+  return Math.abs(hungAt - fellAt) < 1e-6 ? b.carrierId : null;
+}
+
+// Respawn: the killer the fallen recipient watches through its wait (the
+// Death beat): its champion and where it stands, every snapshot of the
+// wait while it stands, so the mirror can draw it (a dead champion sees
+// nothing). Only the fallen seat is sent it, and nothing of it reaches any
+// observation: the bots see nothing new.
+export const watchBlock: Builder<SnapWatch> = (sim, viewer) => {
+  const r = sim.royale;
+  if (r.variant !== 'respawn' || r.stage !== 'play') return undefined;
+  const me = sim.units.get(viewer.unitId);
+  if (!me) return undefined;
+  const id = waitKiller(r, me);
+  const k = id !== null ? sim.units.get(id) : undefined;
+  if (!k || k.dead || k.kind !== 'champion' || !k.championId || k.pos.y === undefined) {
+    return undefined;
+  }
+  return {
+    i: k.id,
+    c: k.championId,
+    sk: k.skin,
+    t: k.team,
+    at: [round2(k.pos.x), round2(k.pos.y), round2(k.pos.z)],
+    h: Math.round(k.hp),
+    m: Math.round(k.maxHp),
+  };
+};
 
 // Every optional block onto the snapshot's mode block, each only when its
 // builder answers.
@@ -263,18 +344,20 @@ export function addRoyaleBlocks(
   if (ri !== undefined) block.ri = ri;
   const mk = marksBlock(sim, viewer, ctx);
   if (mk !== undefined) block.mk = mk;
+  const bu = burrBlock(sim, viewer, ctx);
+  if (bu !== undefined) block.bu = bu;
   const cl = clamorsBlock(sim, viewer, ctx);
   if (cl !== undefined) block.cl = cl;
   const rk = rankBlock(sim, viewer, ctx);
   if (rk !== undefined) block.rk = rk;
   const gap = gapBlock(sim, viewer, ctx);
   if (gap !== undefined) block.gap = gap;
+  const rs = sinceBlock(sim, viewer, ctx);
+  if (rs !== undefined) block.rs = rs;
   const rp = reprieveBlock(sim, viewer, ctx);
   if (rp !== undefined) block.rp = rp;
   const ar = arrivalBlock(sim, viewer, ctx);
   if (ar !== undefined) block.ar = ar;
-  const fi = finalBlock(sim, viewer, ctx);
-  if (fi !== undefined) block.fi = fi;
   const wa = watchBlock(sim, viewer, ctx);
   if (wa !== undefined) block.wa = wa;
 }

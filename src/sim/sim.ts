@@ -12,6 +12,7 @@ import { ChampionRegistry } from './champion_registry';
 import { type CoachOrder, stepCoachOrder } from './coach';
 import { stepAutoAttacks } from './combat/auto_attack';
 import { castAbility, executeCast, stepWindups } from './combat/casting';
+import { stepCharges } from './combat/charges';
 import { stepDots } from './combat/dots';
 import { stepShieldBursts } from './combat/shield_burst';
 import {
@@ -21,11 +22,10 @@ import {
   expireStatuses,
   isRooted,
   isStunned,
-  sightFactor,
 } from './combat/status';
 import type { VoidmaulSlamEvent } from './combat/voidmaul_slam';
 import { type ChampionDef, DEFAULT_CHAMPION_ID, homeLane } from './content/champions';
-import { ITEMS } from './content/items';
+import { ITEMS, mayCarryDraught } from './content/items';
 import { GAME_MAP, type GameMap, type LaneId, type WardenPit } from './content/map';
 import { type AspectId, type CreatureId, RING_GOLD_EACH, TIDE_PERIOD_S } from './content/rings';
 import { PLANET_NEUTRAL_SCALE, RING_RISE_AT_S, WARDEN_RISE_AT_S } from './content/royale_events';
@@ -38,11 +38,12 @@ import { startDraught, stepDraughts } from './draught';
 import { Favors, favorBonus } from './favors';
 import type { ForgedChampionDef } from './forge/forged_def';
 import { applyFountainRegen, fountainSeat, withinFountain } from './fountain';
-import { copy, dist, point } from './geo';
+import { copy, point } from './geo';
 import { type Ground, PlaneGround } from './ground';
 import { stepIdleDefense } from './idle_defense';
 import { LANE_ACTIVITY_WINDOW_S, LaneSightings } from './lane_sightings';
 import { assignLanes, laneOf } from './lanes';
+import { stepLurk } from './lurk';
 import { createMapUnits } from './map_units';
 import { stepMinionAi } from './minion_ai';
 import { stepMovement } from './movement';
@@ -57,10 +58,16 @@ import { stepProjectiles } from './projectiles';
 import { startRecall, stepRecalls } from './recall';
 import { createRemoteSeat, type RemoteSeat, runRemoteDecisions } from './remote_policy';
 import { respawnDelay } from './respawn';
-import { ASSIST_GOLD_FRAC, championBounty, grantKillRewards, grantPassiveGold } from './rewards';
+import {
+  ASSIST_GOLD_FRAC,
+  assistersOf,
+  championBounty,
+  grantKillRewards,
+  grantPassiveGold,
+} from './rewards';
 import { initialRingStates, onCreatureSlain, type RingClock, ringClocks, stepRings } from './rings';
 import { Rng } from './rng';
-import { keepHold } from './royale/grace';
+import { graceFloor, keepHold, noteOrder } from './royale/grace';
 import { RoyaleMode, type RoyaleOptions } from './royale/mode';
 import { DROP_S, type RoyaleEvent, type RoyaleState } from './royale/types';
 import { MINIONS_ONLY, stepSeparation } from './separation';
@@ -84,6 +91,7 @@ import {
 import { TeamBuffs } from './team_buffs';
 import { otherTeam, perTeam, TWO_TEAMS, validTeam } from './teams';
 import { stepTowerAi } from './tower_ai';
+import { trapSeen } from './traps';
 import {
   type AbilityKey,
   type DamageType,
@@ -94,7 +102,7 @@ import {
   type Vec2,
 } from './types';
 import { createChampion, hostile, staticFootprint, type Unit, type UnitKind } from './unit';
-import { computeVisibility, sightBlocked } from './vision';
+import { computeVisibility, pointSight, seesPoint } from './vision';
 import { clampThroughWalls, stepWalls, type Wall } from './walls';
 import { FIRST_WAVE_AT, spawnWave, WAVE_EVERY } from './waves';
 import type { Zone } from './zones';
@@ -104,6 +112,10 @@ export type SimEvent =
   | { type: 'damage'; sourceId: number; targetId: number; amount: number; dtype: DamageType }
   | { type: 'attack'; unitId: number; targetId: number; voidmaulAttack?: VoidmaulAttackKind }
   | VoidmaulSlamEvent
+  // A strike that landed nothing: its striker fumbled (combat/auto_attack.ts).
+  | { type: 'miss'; unitId: number; targetId: number }
+  // A hidden pod burst under an enemy champion (traps.ts).
+  | { type: 'trap'; zoneId: number; unitId: number; sourceId: number }
   | { type: 'death'; unitId: number; killerId: number }
   | { type: 'cast'; unitId: number; key: AbilityKey }
   | { type: 'sigil'; unitId: number; slot: number }
@@ -121,8 +133,6 @@ export type SimEvent =
   // The battle royale's own (royale/types.ts).
   | RoyaleEvent;
 
-// How long a champion's damage on a victim keeps earning an assist.
-const ASSIST_WINDOW_S = 10;
 // Exported: the HUD draws exactly this many build slots, so a full bag and
 // an empty one read as the same shape.
 export const INVENTORY_SLOTS = 6;
@@ -283,12 +293,19 @@ export class Sim {
   }
 
   // The landing point a seat picks during the battle royale's drop: a point
-  // on the sphere, kept until the drop ends (the last pick wins). False
-  // outside a battle royale's drop.
+  // on the sphere, kept until the drop ends (the last pick wins); in
+  // Respawn, a dead seat's pick of where it comes back (royale/
+  // return_pick.ts). False otherwise, and outside a battle royale.
   pickDrop(unitId: number, p: { x: number; y: number; z: number }): boolean {
     const u = this.units.get(unitId);
     if (!this.royaleMode || u?.kind !== 'champion') return false;
-    return this.royaleMode.pickDrop(unitId, p, this.time);
+    return this.royaleMode.pickDrop(unitId, p, this.time, u.dead);
+  }
+
+  // From when an order ends the battle royale seat's Grace (a Respawn
+  // Arrival's floor, royale/grace.ts); null for none, and outside it.
+  graceFloor(unitId: number): number | null {
+    return this.royaleMode ? graceFloor(this.royaleMode, unitId) : null;
   }
 
   // A seat's pick of its open Graft offer in the battle royale (the 'graft'
@@ -664,11 +681,19 @@ export class Sim {
     const p = point(x, z, y);
     for (const u of this.units.values()) {
       if (u.team !== team || u.neutral || u.dead) continue;
-      if (dist(u.pos, p) > u.sightRange * sightFactor(u, this.time)) continue;
-      if (sightBlocked(this.map, u.pos, p)) continue;
-      return true;
+      if (seesPoint(this.map, u, p, this.time)) return true;
     }
     return false;
+  }
+
+  // Whether `team` sees a zone: its own always; an enemy pod only while one
+  // of the team's reveal zones covers it (traps.ts); any other zone while
+  // its center is in the team's sight. One rule for the wire, the Policy
+  // observation and the offline renderer.
+  zoneSeen(team: TeamId, z: Zone): boolean {
+    if (z.team === team) return true;
+    if (z.trap) return trapSeen(this.zones, team, z, this.time);
+    return this.isPointVisible(team, z.pos.x, z.pos.z, z.pos.y);
   }
 
   isVisible(team: TeamId, unitId: number): boolean {
@@ -777,6 +802,7 @@ export class Sim {
     u.attackTargetId = null;
     u.attackMoveTarget = null;
     u.path = this.ground.findPath(u.pos, point(x, z, y));
+    if (this.royaleMode) noteOrder(this.royaleMode, unitId);
   }
 
   // Stop (S): halt in place and HOLD, opting out of idle auto-defense until
@@ -789,7 +815,10 @@ export class Sim {
     u.path = [];
     u.attackTargetId = null;
     u.attackMoveTarget = null;
-    if (this.royaleMode) keepHold(this.royaleMode, unitId);
+    if (this.royaleMode) {
+      keepHold(this.royaleMode, unitId);
+      noteOrder(this.royaleMode, unitId);
+    }
   }
 
   // The owner's coach order for a bot seat (ADR 0013): sim state like any
@@ -833,6 +862,7 @@ export class Sim {
     u.attackTargetId = null;
     u.attackMoveTarget = point(x, z, y);
     u.path = this.ground.findPath(u.pos, point(x, z, y));
+    if (this.royaleMode) noteOrder(this.royaleMode, unitId);
   }
 
   startRecall(unitId: number): void {
@@ -931,6 +961,7 @@ export class Sim {
     this.royaleMode?.noteAct(unitId, this.time);
     u.sigilCooldowns[slot] = this.time + def.cooldown;
     breakStealth(u);
+    u.actedAt = this.time;
     this.events.push({ type: 'sigil', unitId, slot });
     return true;
   }
@@ -944,9 +975,7 @@ export class Sim {
     // Death is shopping time, like the genre: a corpse respawns at its own
     // fountain, so the range check is waived while it waits. Selling still
     // wants a live champion standing there.
-    // The Sapdraught is not on sale before the HUD can drink it
-    // (docs/plan-potion.md, phase 2).
-    if (def.drink) return false;
+    if (def.drink && !mayCarryDraught(u.items)) return false;
     const dead = u.dead || this.dead.has(unitId);
     if (!dead && !withinFountain(this.map, u.team, u.pos)) return false;
 
@@ -1062,6 +1091,7 @@ export class Sim {
     if (this.twoTeams()) applyFountainRegen(ctx, this.map);
     stepPassives(ctx, this.tickCount);
     for (const u of this.units.values()) {
+      if (u.kind === 'champion') stepCharges(u, this.time, (k) => effectiveRank(u, k));
       if (u.coachOrder) stepCoachOrder(this, u);
     }
 
@@ -1144,15 +1174,7 @@ export class Sim {
         // window, killer excluded. Dead helpers still earn theirs, and the
         // helpers split an assist pot so a won team fight pays the team,
         // not only the last hitter.
-        const assisters: Unit[] = [];
-        for (const r of u.recentDamagers) {
-          if (r.id === killerId) continue;
-          if (this.time - r.at > ASSIST_WINDOW_S) continue;
-          const helper = this.units.get(r.id);
-          if (helper && helper.kind === 'champion' && helper.team !== u.team) {
-            assisters.push(helper);
-          }
-        }
+        const assisters = assistersOf(this.units, u, killerId, this.time);
         const assistGold =
           assisters.length > 0
             ? Math.floor((championBounty(u) * ASSIST_GOLD_FRAC) / assisters.length)
@@ -1266,6 +1288,11 @@ export class Sim {
       royale?.onRespawn(this, u);
     }
 
+    // The lurkers hide or show after everything that moved or acted, so the
+    // vision below sees this tick's step out of the brush (lurk.ts).
+    for (const u of this.units.values()) {
+      if (u.lurk) stepLurk(u, this.time, this.map);
+    }
     this.visibility = computeVisibility(
       this.map,
       this.units,
@@ -1273,9 +1300,7 @@ export class Sim {
       this.zones,
       this.teamCount,
     );
-    noteCampSightings(this.campStates, this.time, (team, x, z, y) =>
-      this.isPointVisible(team, x, z, y),
-    );
+    noteCampSightings(this.campStates, this.time, pointSight(this.map, this.units, this.time));
 
     // Refresh each team's memory of the enemy champions it can see right
     // now; a dead champion is forgotten (its corpse spot means nothing).

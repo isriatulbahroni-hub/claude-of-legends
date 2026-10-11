@@ -1,0 +1,169 @@
+// The Respawn wait's globe as the client shows it (src/ui/royale_return.ts,
+// src/render/planet_drop.ts): when it rises over the fallen champion and
+// until when, the light it faces, what the death wash says on a phone and
+// on a desktop, and the orbit that looks down on that light.
+
+import { describe, expect, it } from 'vitest';
+import type { SnapDusk } from '../src/net/royale_wire';
+import {
+  facingOrbit,
+  ORBIT_ELEVATION_MAX,
+  orbitPosition,
+  RETURN_GLOBE_RIGHT,
+  RETURN_ORBIT_MAX,
+  RETURN_ORBIT_MIN,
+  returnOrbitDistance,
+} from '../src/render/planet_drop';
+import { PLANET_RADIUS } from '../src/render/planet_ground';
+import { RESPAWN_S } from '../src/sim/royale/types';
+import {
+  RETURN_GLOBE_AFTER_S,
+  RETURN_GLOBE_HALF_VH,
+  RETURN_WASH_GAP_VH,
+  returnGlobeOn,
+  returnHint,
+  returnLight,
+  returnWashColumnPx,
+  waitMarks,
+} from '../src/ui/royale_return';
+
+describe('the wait for a return', () => {
+  const respawn = { v: 'respawn' as const, st: 'play' as const };
+  const fellAt = 100;
+  const seat = { dead: true, respawnAt: fellAt + RESPAWN_S };
+
+  it('shows the globe a moment after the fall, and keeps it up until the champion stands', () => {
+    expect(returnGlobeOn(respawn, seat, fellAt)).toBe(false);
+    expect(returnGlobeOn(respawn, seat, fellAt + RETURN_GLOBE_AFTER_S - 0.05)).toBe(false);
+    expect(returnGlobeOn(respawn, seat, fellAt + RETURN_GLOBE_AFTER_S)).toBe(true);
+    // A slow snapshot past the return's time keeps it up, never down early.
+    expect(returnGlobeOn(respawn, seat, seat.respawnAt + 0.3)).toBe(true);
+    expect(returnGlobeOn(respawn, { ...seat, dead: false }, fellAt + 3)).toBe(false);
+  });
+
+  it('never shows it in One life, the drop or the end', () => {
+    const t = fellAt + 3;
+    expect(returnGlobeOn({ v: 'one_life', st: 'play' }, seat, t)).toBe(false);
+    expect(returnGlobeOn({ v: 'respawn', st: 'drop' }, seat, t)).toBe(false);
+    expect(returnGlobeOn({ v: 'respawn', st: 'over' }, seat, t)).toBe(false);
+    expect(returnGlobeOn(respawn, { dead: true, respawnAt: Number.POSITIVE_INFINITY }, t)).toBe(
+      false,
+    );
+  });
+
+  it('says what a tap does on a phone and a click on a desktop, then that the pick holds', () => {
+    expect(returnHint(true, false)).toBe('Tap the globe to choose where you come back');
+    expect(returnHint(false, false)).toBe('Click the globe to choose where you come back');
+    expect(returnHint(true, true)).toBe('You come back where you tapped');
+    expect(returnHint(false, true)).toBe('You come back where you clicked');
+    for (const touch of [true, false]) {
+      for (const picked of [true, false]) {
+        const words = returnHint(touch, picked);
+        // No en or em dash in game text.
+        expect(
+          [...words].some((ch) => ch.charCodeAt(0) === 0x2013 || ch.charCodeAt(0) === 0x2014),
+        ).toBe(false);
+      }
+    }
+  });
+
+  it('faces the light the return comes back in: the one closed to while it closes', () => {
+    const dusk: SnapDusk = {
+      p: 1,
+      c: [0, 80, 0],
+      r: 140,
+      nc: [80, 0, 0],
+      nr: 110,
+      pe: 200,
+      sh: 0,
+      b: 0.01,
+    };
+    expect(returnLight(dusk)).toEqual({ c: [0, 80, 0], r: 140 });
+    expect(returnLight({ ...dusk, sh: 1 })).toEqual({ c: [80, 0, 0], r: 110 });
+    expect(returnLight({ p: 0, c: [0, 80, 0], r: 160, pe: 90, sh: 1, b: 0 })).toEqual({
+      c: [0, 80, 0],
+      r: 160,
+    });
+  });
+});
+
+describe("the wait globe's marks", () => {
+  const dusk: SnapDusk = { p: 0, c: [0, 80, 0], r: 60, pe: 90, sh: 0, b: 0 };
+  const fell = { x: 0, y: 80, z: 0 };
+
+  it('marks the fall, the pick (the tap before the echo) and the Burr carrier while it lasts', () => {
+    const view = {
+      st: 'play' as const,
+      dusk,
+      bk: [3, 79.9, 0] as [number, number, number],
+      bu: { i: 7, u: 140, at: [10, 79.3, 0] as [number, number, number] },
+    };
+    const m = waitMarks(view, 100, null, fell, 80);
+    expect(m.fell).toEqual(fell);
+    expect(m.pick).toEqual({ x: 3, y: 79.9, z: 0 });
+    expect(m.burr).toEqual({ x: 10, y: 79.3, z: 0 });
+    // The own tap shows before the server echoes it.
+    expect(waitMarks(view, 100, { x: 1, y: 80, z: 0 }, fell, 80).pick).toEqual({
+      x: 1,
+      y: 80,
+      z: 0,
+    });
+    // The Burr run out, or its carrier down: no dot.
+    expect(waitMarks(view, 141, null, fell, 80).burr).toBeNull();
+    expect(waitMarks({ ...view, bu: { i: 7, u: 140 } }, 100, null, fell, 80).burr).toBeNull();
+    expect(waitMarks({ st: 'play', dusk }, 100, null, null, 80)).toEqual({
+      pick: null,
+      fell: null,
+      burr: null,
+    });
+  });
+});
+
+describe('the wait globe orbit', () => {
+  it('stands over the direction it faces, off the vertical', () => {
+    const center = { x: 0, y: 0, z: 0 };
+    const dir = { x: 0.6, y: 0.2, z: -0.77 };
+    const o = facingOrbit(dir, 200);
+    const at = orbitPosition(center, o);
+    const len = Math.hypot(dir.x, dir.y, dir.z);
+    expect(at.x / 200).toBeCloseTo(dir.x / len, 6);
+    expect(at.y / 200).toBeCloseTo(dir.y / len, 6);
+    expect(at.z / 200).toBeCloseTo(dir.z / len, 6);
+    expect(facingOrbit({ x: 0, y: 1, z: 0 }, 200).elevation).toBe(ORBIT_ELEVATION_MAX);
+    expect(facingOrbit({ x: 0, y: -1, z: 0 }, 200).elevation).toBe(-ORBIT_ELEVATION_MAX);
+  });
+
+  it('shows the whole globe while the light is wide, nearer as it narrows', () => {
+    expect(returnOrbitDistance(160)).toBe(RETURN_ORBIT_MAX);
+    expect(returnOrbitDistance(110)).toBe(RETURN_ORBIT_MAX);
+    expect(returnOrbitDistance(28)).toBeLessThan(returnOrbitDistance(50));
+    expect(returnOrbitDistance(0)).toBe(RETURN_ORBIT_MIN);
+  });
+});
+
+describe('the wait globe on the screen', () => {
+  // The play camera's vertical field of view (render/renderer.ts).
+  const FOV_DEG = 50;
+
+  it('stands in the middle, and at its farthest orbit spans the half height the wash keeps clear of', () => {
+    expect(RETURN_GLOBE_RIGHT).toBe(0);
+    const edge = Math.asin(PLANET_RADIUS / RETURN_ORBIT_MAX);
+    const halfVh = (50 * Math.tan(edge)) / Math.tan((FOV_DEG * Math.PI) / 360);
+    expect(halfVh).toBeLessThanOrEqual(RETURN_GLOBE_HALF_VH);
+    expect(halfVh).toBeGreaterThan(RETURN_GLOBE_HALF_VH - 1);
+  });
+
+  it('leaves the wash a column left of it, wide enough for its lines', () => {
+    for (const [w, h] of [
+      [1280, 720],
+      [960, 540],
+      [1920, 1080],
+      [844, 390],
+    ] as const) {
+      const column = returnWashColumnPx(w, h);
+      const globeLeft = w / 2 - (RETURN_GLOBE_HALF_VH * h) / 100;
+      expect(column).toBeGreaterThanOrEqual(250);
+      expect(globeLeft - column).toBeCloseTo((RETURN_WASH_GAP_VH * h) / 100, 6);
+    }
+  });
+});

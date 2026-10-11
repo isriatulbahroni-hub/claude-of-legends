@@ -1,6 +1,7 @@
 // The Grafts on the screen (ui/royale_grafts.ts, render/planet_graft_aura.ts,
 // the mirror in src/net/client_world.ts): what the cards say, the title and
-// the grade hints, the fold (put off or a fight) and the chip, the keys, the
+// the grade hints, the fold (put off, a fight, the first seconds after
+// landing) and the chip, the keys, the
 // end card's list, where the cards and the chip stand (a row across the top
 // with the champion in sight, the chip clear of the thumbs' corners), the
 // aura's breath and color, and the mirror keeping the Grafts and the
@@ -14,18 +15,35 @@ import { auraOpacity, heartwoodColor } from '../src/render/planet_graft_aura';
 import { GRAFT_LIST, GRAFTS } from '../src/sim/content/grafts';
 import { Sim } from '../src/sim/sim';
 import {
+  CARDS_ASIDE,
   cardOfKey,
   cardsBox,
+  cardsCoverBox,
   cardsLeaveChampionInSight,
   chipBox,
   GRADE_HINTS,
+  GRAFT_SETTLE_S,
   GRAFT_TITLE,
   graftCards,
   graftChip,
   graftFolded,
   graftNames,
 } from '../src/ui/royale_grafts';
-import { championBox, overlaps, type ScreenBox } from '../src/ui/royale_layout';
+import {
+  announceBox,
+  COMPACT_DONE_MAX_W_PX,
+  championBox,
+  compactNotesBox,
+  compactNoteWidth,
+  feedBox,
+  notesLane,
+  overlaps,
+  type ScreenBox,
+  slainBox,
+  spotBox,
+  stepsBox,
+  topLineBox,
+} from '../src/ui/royale_layout';
 import { royaleEnd } from '../src/ui/royale_result';
 import type { Snap } from './royale_contract_fixture';
 
@@ -70,14 +88,38 @@ describe('the cards', () => {
   });
 
   it('fold when put off or in a fight, never over the globe, and open again from the chip', () => {
-    // sinceHit, dropping, put off, reopened
-    expect(graftFolded(1, false, false, false)).toBe(true);
-    expect(graftFolded(5, false, false, false)).toBe(false);
-    expect(graftFolded(null, false, false, false)).toBe(false);
-    expect(graftFolded(1, true, false, false)).toBe(false);
-    expect(graftFolded(null, false, true, false)).toBe(true);
-    expect(graftFolded(null, false, true, true)).toBe(false);
-    expect(graftFolded(1, false, false, true)).toBe(false);
+    // sinceHit, dropping, put off, reopened, since landing
+    const settled = GRAFT_SETTLE_S + 1;
+    expect(graftFolded(1, false, false, false, settled)).toBe(true);
+    expect(graftFolded(5, false, false, false, settled)).toBe(false);
+    expect(graftFolded(null, false, false, false, settled)).toBe(false);
+    expect(graftFolded(1, true, false, false, null)).toBe(false);
+    expect(graftFolded(null, false, true, false, settled)).toBe(true);
+    expect(graftFolded(null, false, true, true, settled)).toBe(false);
+    expect(graftFolded(1, false, false, true, settled)).toBe(false);
+  });
+
+  it('fold while the champion waits to come back, unless opened from the chip', () => {
+    // The death wash's four lines and the globe are the wait's: the cards
+    // open covered them (a phone at 844x390, a playthrough, 2026-10-08).
+    const settled = GRAFT_SETTLE_S + 1;
+    expect(graftFolded(null, false, false, false, settled, true)).toBe(true);
+    expect(graftFolded(30, false, false, false, settled, true)).toBe(true);
+    expect(graftFolded(null, false, false, true, settled, true)).toBe(false);
+    expect(graftFolded(null, false, false, false, settled, false)).toBe(false);
+  });
+
+  it('wait folded for the first seconds after landing, then open', () => {
+    // Open on landing, the cards covered the first fight.
+    expect(GRAFT_SETTLE_S).toBe(12);
+    expect(graftFolded(null, false, false, false, 0)).toBe(true);
+    expect(graftFolded(null, false, false, false, GRAFT_SETTLE_S - 0.1)).toBe(true);
+    expect(graftFolded(null, false, false, false, GRAFT_SETTLE_S)).toBe(false);
+    // Opened from the chip meanwhile, they stay open.
+    expect(graftFolded(null, false, false, true, 3)).toBe(false);
+    // Never over the globe: the drop has no landing yet.
+    expect(graftFolded(null, true, false, false, null)).toBe(false);
+    expect(graftFolded(null, true, false, false, 0)).toBe(false);
   });
 
   it('pick by the keys 1, 2 and 3 only', () => {
@@ -122,18 +164,85 @@ describe('where the cards stand', () => {
     expect(inside(cardsBox(844, true), 844, 390)).toBe(true);
   });
 
-  it('sets the chip under the top line on a desktop, above the bar clear of the thumbs on a phone', () => {
-    for (const [w, h] of desks) {
-      const chip = chipBox(w, h, false);
+  it('sets the chip in the top left corner, on the screen and off the champion', () => {
+    for (const [w, h] of [...desks, [844, 390] as const]) {
+      const compact = w === 844;
+      const chip = chipBox(w, h, compact);
       expect(inside(chip, w, h)).toBe(true);
       expect(overlaps(chip, championBox(w, h))).toBe(false);
+      expect(chip.right).toBeLessThan(w / 2);
+      expect(chip.bottom).toBeLessThan(h / 4);
     }
-    const chip = chipBox(844, 390, true);
-    expect(inside(chip, 844, 390)).toBe(true);
-    expect(overlaps(chip, championBox(844, 390))).toBe(false);
-    // The stick's quarter and the cluster's corner (ui/thumb_cluster.ts).
-    expect(overlaps(chip, { left: 0, top: 230, right: 230, bottom: 390 })).toBe(false);
-    expect(overlaps(chip, { left: 844 - 300, top: 160, right: 844, bottom: 390 })).toBe(false);
+  });
+
+  it('keeps the chip off the banners, the badge and the pill, the spotlight, the steps and the feed on a desktop', () => {
+    // At 112 px down the announcements came over it, and the badge and the
+    // Dusk's pill stacked on it: it shows through every Respawn wait.
+    for (const [w, h] of desks) {
+      const chip = chipBox(w, h, false);
+      const near: [string, ScreenBox][] = [
+        ['announcement', announceBox(w)],
+        ['top line', topLineBox(w, false)],
+        ['spotlight', spotBox(w, h, false)],
+        ['first steps', stepsBox(w)],
+        ['feed', feedBox(w)],
+        ['wash', slainBox(w, h)],
+        ['notices', notesLane(w, h)],
+      ];
+      for (const [name, box] of near) expect(overlaps(chip, box), `${name} ${w}x${h}`).toBe(false);
+    }
+  });
+
+  it('keeps the chip off the notices and the thumbs on a phone, the Completed line included', () => {
+    const [w, h] = [844, 390];
+    const chip = chipBox(w, h, true);
+    for (const thumbs of [true, false]) {
+      expect(overlaps(chip, compactNotesBox(w, h, thumbs)), `thumbs ${thumbs}`).toBe(false);
+    }
+    // The longest finished item's line fits the column the box counts.
+    expect(compactNoteWidth('Completed: Doombrand \u00b7 Deathmark')).toBeLessThanOrEqual(
+      COMPACT_DONE_MAX_W_PX,
+    );
+    const near: [string, ScreenBox][] = [
+      ['top line', topLineBox(w, true)],
+      ['spotlight', spotBox(w, h, true)],
+      // The thumbs' hints, the touch bar's buttons, the stick's quarter
+      // and the cluster's corner (ui/hud.ts, ui/thumb_cluster.ts).
+      ['hints', { left: 84, top: 44, right: 234, bottom: 117 }],
+      ['touch bar', { left: 8, top: 100, right: 74, bottom: 196 }],
+      ['stick', { left: 0, top: 230, right: 230, bottom: 390 }],
+      ['cluster', { left: w - 300, top: 160, right: w, bottom: 390 }],
+    ];
+    for (const [name, box] of near) expect(overlaps(chip, box), name).toBe(false);
+  });
+
+  it('stand over the first steps and the thumbs hints, which step aside while they are open', () => {
+    // At 960x540 the row's left end covered the card's right end; on a
+    // phone the row stands over the whole card and the hints showed
+    // through it.
+    expect(overlaps(cardsCoverBox(960, false), stepsBox(960))).toBe(true);
+    const phoneSteps = { left: 211, top: 96, right: 633, bottom: 156 };
+    const thumbsHints = { left: 84, top: 44, right: 234, bottom: 117 };
+    expect(overlaps(cardsCoverBox(844, true), phoneSteps)).toBe(true);
+    expect(overlaps(cardsCoverBox(844, true), thumbsHints)).toBe(true);
+    expect(CARDS_ASIDE).toEqual(['.hud-steps', '.hud-hints']);
+  });
+
+  it('keep clear of the touch bar on a phone (Menu stood on the first card)', () => {
+    expect(overlaps(cardsCoverBox(844, true), { left: 8, top: 100, right: 74, bottom: 196 })).toBe(
+      false,
+    );
+  });
+
+  it('cover the title, the row and Later, inside the screen', () => {
+    for (const [w, h] of [...desks, [844, 390] as const]) {
+      const compact = w === 844;
+      const cover = cardsCoverBox(w, compact);
+      const row = cardsBox(w, compact);
+      expect(cover.top).toBeLessThan(row.top);
+      expect(cover.bottom).toBeGreaterThan(row.bottom);
+      expect(inside(cover, w, h)).toBe(true);
+    }
   });
 });
 

@@ -20,7 +20,7 @@ import { chooseRoyaleMatch, type RoyaleCandidate, takesPeople } from './royale_j
 import { RoyaleMatch, type RoyalePlayer, type RoyaleReplay } from './royale_match';
 import { type RoyalePerson, type RoyalePick, royalePick } from './royale_seats';
 import type { RoyaleSimFactory } from './royale_sim';
-import { buildSeatReport, type SeatEnd, type SeatReport } from './seat_report';
+import { buildSeatReport, type SeatEnd, type SeatReport, type SeenQuality } from './seat_report';
 
 // What a match of fifty champions costs the server, counted in 5v5
 // matches against MAX_MATCHES (server/main.ts): its champions are five
@@ -54,6 +54,7 @@ export interface RoyaleClient {
   readonly mobile: boolean;
   readonly pings: readonly number[];
   readonly fps: readonly number[];
+  readonly quality: SeenQuality | null;
 }
 
 export interface RoyaleDeps {
@@ -349,6 +350,7 @@ export class RoyaleService {
             : null,
           pings: client.pings,
           fps: client.fps,
+          quality: client.quality,
         }),
       );
     } catch (err) {

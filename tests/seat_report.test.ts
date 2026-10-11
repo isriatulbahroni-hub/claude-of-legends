@@ -14,8 +14,11 @@ import {
   fpsOnWire,
   isMobileAgent,
   median,
+  qualityOnWire,
   SEAT_REPORT_VERSION,
+  seeQuality,
 } from '../server/seat_report';
+import { QUALITY_KEY } from '../src/game/quality_memory';
 import { stepOnWire } from '../src/net/protocol';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -133,6 +136,11 @@ describe('the seat report', () => {
       unit: { level: 2, kills: 0, deaths: 1, assists: 0, cs: 2 },
       pings: [62, 58, 140],
       fps: [58.2, 31.4, 60],
+      quality: [
+        { step: 0, lean: 0, ratio: 1.25, w: 1920, h: 1080, shadows: true },
+        { step: 3, lean: 0, ratio: 0.75, w: 1152, h: 648, shadows: true },
+        { step: 1, lean: 0, ratio: 1, w: 1536, h: 864, shadows: true },
+      ].reduce(seeQuality, null),
     });
     expect(rec).toEqual({
       v: SEAT_REPORT_VERSION,
@@ -166,6 +174,12 @@ describe('the seat report', () => {
       firstCacheS: null,
       fps: 58,
       fpsLow: 31,
+      step: 1,
+      stepDeep: 3,
+      lean: 0,
+      ratio: 1,
+      px: '1536x864',
+      shadows: true,
     });
     const none = buildSeatReport({
       at: 0,
@@ -196,18 +210,20 @@ describe('the seat report', () => {
       unit: null,
       pings: [],
       fps: [],
+      quality: null,
     });
     expect(none.loadS).toBeNull();
     expect(none.firstOrderS).toBeNull();
     expect(none.pingMs).toBeNull();
     expect(none.fps).toBeNull();
+    expect(none.step).toBeNull();
+    expect(none.px).toBeNull();
     expect(none.firstHitS).toBeNull();
     for (const key of Object.keys(rec)) expect(key).not.toMatch(/name|account|addr|ip|id$/i);
   });
 
   it("notes a seat's first moments once each, champions only", () => {
-    // The visitors of the first days left inside two minutes: had anything
-    // happened to them by then?
+    // What happened to a seat in its first minutes.
     const stats = freshStats(0, 0, 0);
     const champion = (id: number) => id < 100;
     noteMoments(stats, 7, [{ type: 'damage', sourceId: 7, targetId: 150 }], 10, champion);
@@ -238,10 +254,40 @@ describe('the seat report', () => {
     expect(fpsOnWire(Number.NaN)).toBeNull();
   });
 
+  it('hears how finely the page drew off the wire, and nothing more', () => {
+    const q = { step: 2, lean: 1, ratio: 0.85, w: 1306, h: 734, shadows: true };
+    expect(qualityOnWire(q)).toEqual(q);
+    // Only the known fields are kept.
+    expect(qualityOnWire({ ...q, gpu: 'Some GPU' })).toEqual(q);
+    expect(qualityOnWire(null)).toBeNull();
+    expect(qualityOnWire('step 2')).toBeNull();
+    expect(qualityOnWire({ ...q, step: -1 })).toBeNull();
+    expect(qualityOnWire({ ...q, step: 1.5 })).toBeNull();
+    expect(qualityOnWire({ ...q, lean: 9 })).toBeNull();
+    expect(qualityOnWire({ ...q, ratio: 0 })).toBeNull();
+    expect(qualityOnWire({ ...q, ratio: Number.NaN })).toBeNull();
+    expect(qualityOnWire({ ...q, w: 0 })).toBeNull();
+    expect(qualityOnWire({ ...q, h: 99999 })).toBeNull();
+    expect(qualityOnWire({ ...q, shadows: 'yes' })).toBeNull();
+  });
+
+  it('keeps the deepest step of the whole seat, past the last echoes', () => {
+    // Three steps down in the first minute, then half an hour of echoes
+    // back at the top: the deepest is still three.
+    const at = (step: number) => ({ step, lean: 0, ratio: 1, w: 1, h: 1, shadows: true });
+    let seen = seeQuality(null, at(0));
+    seen = seeQuality(seen, at(3));
+    for (let i = 0; i < 360; i++) seen = seeQuality(seen, at(i < 10 ? 1 : 0));
+    expect(seen).toEqual({ last: at(0), deepest: 3 });
+  });
+
   it('is named in the privacy notice, file and module alike', () => {
     const page = readFileSync(path.join(ROOT, 'PRIVACY.md'), 'utf8');
     expect(page).toContain('`seats.jsonl`');
     expect(page).toContain('`server/seat_report.ts`');
     expect(page).toContain('`scripts/seat_report.mjs`');
+    // And what the browser keeps of how it draws, which it never sends.
+    expect(page).toContain(`\`${QUALITY_KEY}\``);
+    expect(page).toContain('`src/game/quality_memory.ts`');
   });
 });

@@ -28,6 +28,8 @@ describe('player settings', () => {
       stepsDone: [],
       royaleStepsDone: [],
       royalePick: null,
+      royaleBest: 0,
+      royaleGoal: 0,
     });
     expect(clampSettings({ sfx: 0.35, music: 0.8, announcer: true })).toEqual({
       sfx: 0.35,
@@ -44,7 +46,32 @@ describe('player settings', () => {
       stepsDone: [],
       royaleStepsDone: [],
       royalePick: null,
+      royaleBest: 0,
+      royaleGoal: 0,
     });
+  });
+
+  // The Respawn end card's best (ui/royale_result.ts): a whole count of
+  // takedowns, 0 before the first match, junk read as nothing.
+  it('keeps the best Respawn tally as a whole count, 0 by default', () => {
+    expect(DEFAULT_SETTINGS.royaleBest).toBe(0);
+    expect(clampSettings({ royaleBest: 7 }).royaleBest).toBe(7);
+    expect(clampSettings({ royaleBest: 7.9 }).royaleBest).toBe(7);
+    for (const junk of [-3, '7', null, Number.NaN, Number.POSITIVE_INFINITY, { n: 7 }]) {
+      expect(clampSettings({ royaleBest: junk }).royaleBest).toBe(0);
+    }
+  });
+
+  // The Respawn end card's goal (ui/royale_goal.ts): the points this
+  // browser's battle royale seats earned, a whole number, far past a
+  // count's cap, junk read as nothing.
+  it('keeps the battle royale points of the goal as a whole number, 0 by default', () => {
+    expect(DEFAULT_SETTINGS.royaleGoal).toBe(0);
+    expect(clampSettings({ royaleGoal: 1234.7 }).royaleGoal).toBe(1234);
+    expect(clampSettings({ royaleGoal: 5e9 }).royaleGoal).toBe(10_000_000);
+    for (const junk of [-3, '70', null, Number.NaN, Number.POSITIVE_INFINITY, { n: 7 }]) {
+      expect(clampSettings({ royaleGoal: junk }).royaleGoal).toBe(0);
+    }
   });
 
   // The battle royale's quick pick keeps the champion, the skin and the two
@@ -123,7 +150,7 @@ describe('player settings', () => {
   });
 
   // A trackpad clicks left: a left click walks and attacks unless the
-  // player turned it off (game/boot.ts, the seat report of 2026-10-01).
+  // player turned it off (game/boot.ts).
   it('lets a left click walk by default, and keeps it off once turned off', () => {
     expect(DEFAULT_SETTINGS.leftClickMoves).toBe(true);
     expect(clampSettings({ leftClickMoves: false }).leftClickMoves).toBe(false);

@@ -22,10 +22,12 @@ import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
 import { setPortrait } from './champion_art';
 import { setClassName, setData, setHidden } from './dom_write';
+import { goalBar } from './royale_goal_bar';
 import { RoyaleHudGrafts } from './royale_hud_grafts';
 import { type MomentDeath, RoyaleHudMoments } from './royale_hud_moments';
 import {
   COMPACT_NOTE_FONT_PX,
+  COMPACT_NOTES_BOTTOM_PX,
   FEED_MAX_W_PX,
   FEED_NAME_MAX_W_PX,
   FEED_RIGHT_PX,
@@ -37,10 +39,21 @@ import {
 } from './royale_layout';
 import { royaleMode } from './royale_modes';
 import type { MomentCall } from './royale_moments';
-import { type RoyaleEndModel, royaleEnd } from './royale_result';
-import { foldForFight, type RoyaleStepsView } from './royale_steps';
+import { type RoyaleEndMine, type RoyaleEndModel, royaleEnd } from './royale_result';
+import {
+  duskOvertakes,
+  type FightTally,
+  foldForFight,
+  foughtBetween,
+  type Landing,
+  NOT_LANDED,
+  noteLanding,
+  type RoyaleStepsView,
+  sinceLanding,
+} from './royale_steps';
 import {
   countLine,
+  doubleBadge,
   dropBanner,
   duskLine,
   duskPill,
@@ -54,8 +67,11 @@ import {
   seatName,
 } from './royale_text';
 
-// An enemy champion this close counts as near, for the takedown step.
+// An enemy champion this close counts as near, for the fight and takedown
+// steps.
 const ENEMY_NEAR_M = 11;
+// The spells whose cast says the champion fought, for the fight step.
+const FIGHT_KEYS = ['Q', 'W', 'E'] as const;
 // How long a notice stays up, milliseconds (the feed's lines keep their
 // own clock, ui/royale_hud_moments.ts).
 const NOTICE_MS = 3000;
@@ -90,7 +106,12 @@ const CSS = `
 .br-dusk.dark i { background: #3a0e18; box-shadow: 0 0 10px rgba(232, 74, 90, 0.6); }
 @keyframes br-ember { 50% { transform: scale(1.25); } }
 .br-count { font-size: 12.5px; font-weight: 700; color: #e6dcb8; letter-spacing: 0.3px;
-  white-space: nowrap; }
+  white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+/* Respawn's Last light: takedowns count double while it shows. */
+.br-x2 { padding: 0 6px; border-radius: 6px; background: #ffd36b; color: #2a1c04;
+  font-size: 11px; font-weight: 900; line-height: 16px; letter-spacing: 0.4px;
+  box-shadow: 0 0 8px rgba(255, 211, 107, 0.7); }
+.br-x2[hidden] { display: none; }
 .br-leader { display: flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
   border: 1px solid #8a7430; background: rgba(30, 26, 12, 0.88); color: #ffe08a;
   font-size: 12px; font-weight: 800; white-space: nowrap; }
@@ -264,7 +285,8 @@ const CSS = `
 .hud.compact .br-head { flex-direction: row; gap: 8px; }
 .hud.compact .br-dusk { font-size: 13px; padding: 3px 12px 3px 9px; gap: 7px; }
 .hud.compact .br-dusk i { width: 10px; height: 10px; }
-.hud.compact .br-count { font-size: 11px; }
+.hud.compact .br-count { font-size: 11px; gap: 4px; }
+.hud.compact .br-x2 { font-size: 10px; line-height: 14px; padding: 0 4px; }
 .hud.compact .br-leader { font-size: 10.5px; padding: 2px 8px; }
 .hud.compact .br-burn { font-size: 11px; padding: 3px 10px; }
 .hud.compact .br-drop { top: calc(66px + var(--safe-top, env(safe-area-inset-top, 0px)));
@@ -283,8 +305,7 @@ const CSS = `
 .hud.compact.thumbs .br-open { left: calc(40% + 132px); bottom: 18px; }
 .hud.compact .br-ring { width: 36px; height: 36px; }
 .hud.compact .br-ring::after { inset: 5px; }
-.hud.compact .br-notes { bottom: 112px; }
-.hud.compact.thumbs .br-notes { left: 40%; bottom: 64px; }
+.hud.compact .br-notes { bottom: ${COMPACT_NOTES_BOTTOM_PX}px; }
 .hud.compact .br-note:nth-last-child(n + 3) { display: none; }
 .hud.compact .br-note { font-size: ${COMPACT_NOTE_FONT_PX}px; padding: 3px 10px 3px 4px; }
 .hud.compact .br-note img { width: 22px; height: 22px; }
@@ -348,6 +369,9 @@ export class RoyaleHud {
   private readonly duskEl: HTMLElement;
   private readonly duskText: HTMLElement;
   private readonly countEl: HTMLElement;
+  private readonly countText: HTMLElement;
+  // Respawn's Last light: "x2" beside the rank line while it lasts.
+  private readonly doubleEl: HTMLElement;
   private readonly leaderEl: HTMLElement;
   private readonly leaderText: HTMLElement;
   private readonly burnEl: HTMLElement;
@@ -364,6 +388,13 @@ export class RoyaleHud {
   // What this champion did this match, for the first steps.
   private openedCache = false;
   private padUsed = false;
+  // When this champion landed (ui/royale_steps.ts noteLanding), for the
+  // first steps and the Graft cards.
+  private landing: Landing = NOT_LANDED;
+  // Fought since it landed (a Q, W or E cast, a takedown or an assist):
+  // sticky, read off the tally of the update before.
+  private fought = false;
+  private tally: FightTally | null = null;
   // Announcements go through the HUD's own line (ui/hud.ts announce): a
   // kept one holds its line for `holdMs`, what comes meanwhile waits.
   private announce: AnnounceFn = () => undefined;
@@ -386,6 +417,10 @@ export class RoyaleHud {
     this.duskText = el('span', '');
     this.duskEl.append(el('i', ''), this.duskText);
     this.countEl = el('div', 'br-count');
+    this.countText = el('span', '');
+    this.doubleEl = el('b', 'br-x2');
+    this.doubleEl.hidden = true;
+    this.countEl.append(this.countText, this.doubleEl);
     this.leaderEl = el('div', 'br-leader');
     this.leaderText = el('span', '');
     this.leaderEl.append(el('i', 'br-crown'), this.leaderText);
@@ -454,20 +489,27 @@ export class RoyaleHud {
     root.classList.toggle('br-dropping', r?.st === 'drop');
     if (!r) return;
     const time = world.time;
+    this.landing = noteLanding(this.landing, r.st, r.de, time);
     this.moments.step(r);
     const own = world.units.get(selfId);
+    if (own && this.landing.at !== null && !this.fought) this.noteFight(r, own);
     this.grafts.update(
       r,
       time,
       own ? { ad: own.stats.ad, maxHp: own.maxHp, grafts: r.gr ?? [] } : null,
       this.moments.sinceHit(time),
+      sinceLanding(this.landing, r.st, time),
+      r.v === 'respawn' && r.st === 'play' && own?.dead === true,
     );
     const line = duskLine(r, time);
     if (this.duskText.textContent !== line.text) this.duskText.textContent = line.text;
     setClassName(this.duskEl, `br-dusk ${line.tone}`);
     const compact = root.classList.contains('compact');
     const count = countLine(r, compact);
-    if (this.countEl.textContent !== count) this.countEl.textContent = count;
+    if (this.countText.textContent !== count) this.countText.textContent = count;
+    const double = doubleBadge(r, time);
+    setHidden(this.doubleEl, double === null);
+    if (double !== null && this.doubleEl.textContent !== double) this.doubleEl.textContent = double;
     // The Dusk's turns, said once each as they come.
     const turn = duskTurn(this.lastDusk, r.dusk);
     if (turn) this.announce(turn, r.dusk.p >= 6 ? '#f5a3a3' : '#ffb27a');
@@ -511,6 +553,19 @@ export class RoyaleHud {
       }
       this.lastLevel = me.level;
     }
+  }
+
+  // The fight step's tally, one update: a cast, a takedown or an assist
+  // since the last makes it fought.
+  private noteFight(r: SnapRoyale, u: Readonly<Unit>): void {
+    const row = this.host.world.scoreboard().find((x) => x.unitId === this.host.selfId);
+    const now: FightTally = {
+      cooldowns: FIGHT_KEYS.map((k) => u.cooldowns[k] ?? 0),
+      takedowns: r.score ?? u.kills,
+      assists: row?.assists ?? u.assists,
+    };
+    if (this.tally !== null && foughtBetween(this.tally, now)) this.fought = true;
+    this.tally = now;
   }
 
   // Who a unit is on the screen: the seat's name, else what it is.
@@ -605,7 +660,11 @@ export class RoyaleHud {
     const { world, selfId, selfTeam } = this.host;
     const r = this.state();
     const time = world.time;
-    const landed = r !== null && r.st !== 'drop';
+    // The landing noted here too: the HUD asks for the steps before this
+    // layer's update, and on the first tick in play a step with no landing
+    // gate (the ultimate, for a drop-in at the bot's level) took the card
+    // from the fight's.
+    if (r) this.landing = noteLanding(this.landing, r.st, r.de, time);
     let enemyNear = false;
     for (const o of world.units.values()) {
       if (o.id === selfId || o.dead || o.kind !== 'champion' || o.team === selfTeam) continue;
@@ -627,11 +686,12 @@ export class RoyaleHud {
       time,
       covered: covered || this.endEl !== null || fight,
       dead: u.dead,
-      sinceLanding: landed && r ? Math.max(0, time - r.de) : null,
+      sinceLanding: r ? sinceLanding(this.landing, r.st, time) : null,
+      fought: this.fought,
       openedCache: this.openedCache,
       padUsed: this.padUsed,
-      closing: r !== null && r.dusk.p >= 1,
       outside: r && !u.dead ? outsideLight(u.pos, r.dusk) : null,
+      overtaken: r && !u.dead ? duskOvertakes(u.pos, r.dusk) : null,
       enemyNear,
       takedowns: r?.score ?? u.kills,
       level: u.level,
@@ -654,7 +714,7 @@ export class RoyaleHud {
     }
     return {
       title: 'SLAIN',
-      sub: `Back in ${Math.max(0, u.respawnAt - this.host.world.time).toFixed(1)} s, at the edge of the light`,
+      sub: `Back in ${Math.max(0, u.respawnAt - this.host.world.time).toFixed(1)} s`,
     };
   }
 
@@ -664,10 +724,15 @@ export class RoyaleHud {
 
   // The end screen, from the result the server sent; `extras` are the
   // HUD's own boxes that belong under it (the ladder, the account offer,
-  // the feedback box).
-  showResult(result: RoyaleResult, extras: readonly HTMLElement[] = []): void {
+  // the feedback box); `mine`, what the card reads off this screen (the
+  // own assists, the best kept).
+  showResult(
+    result: RoyaleResult,
+    extras: readonly HTMLElement[] = [],
+    mine?: RoyaleEndMine,
+  ): void {
     this.endEl?.remove();
-    const model = royaleEnd(result);
+    const model = royaleEnd(result, mine);
     const end = el('div', 'br-end');
     end.appendChild(this.endCard(model, result));
     const more = el('div', 'br-end-extras');
@@ -686,6 +751,7 @@ export class RoyaleHud {
     );
     for (const line of model.lines) card.appendChild(el('p', 'br-end-line', line));
     if (model.grafts) card.appendChild(el('p', 'br-end-grafts', model.grafts));
+    if (model.goal) card.appendChild(goalBar(model.goal));
     if (model.rows.length > 0) {
       const rank = el('div', 'br-end-rank');
       rank.appendChild(el('h3', '', model.heading));

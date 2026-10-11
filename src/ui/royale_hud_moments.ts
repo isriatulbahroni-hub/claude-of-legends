@@ -24,6 +24,7 @@ import type { RoyaleVariant } from '../sim/royale/types';
 import type { TeamId } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { itemIconUrl } from './icons';
+import { BURR_COLOR, burrTarget } from './royale_burr';
 import {
   compactRing,
   EdgeChimes,
@@ -40,6 +41,8 @@ import {
   COMPACT_NOTE_MAX_W_PX,
   SPOT_FADE_MS,
   spotCoverMs,
+  THUMBS_NOTES_BOTTOM_PX,
+  THUMBS_NOTES_LEFT_PCT,
 } from './royale_layout';
 import {
   arcDistance,
@@ -55,13 +58,16 @@ import {
   feedLife,
   feedOverflow,
   feedTier,
+  foldsOut,
   frostLevel,
   heartbeat,
   impactGain,
   impactShake,
+  lastMarkPoint,
   type MomentCall,
   type MomentKill,
   musicIntensity,
+  newsNear,
   OpeningRitual,
   panOf,
   RoyaleMoments,
@@ -90,6 +96,10 @@ const CSS = `
 .br-spot.on { opacity: 1; transform: translateX(-50%) scale(1); }
 .br-spot.top { font-size: 66px; letter-spacing: 8px; }
 .br-feed-line.fold { color: #a9a48c; border-color: #2a2618; font-style: italic; }
+/* News from afar (ui/royale_moments.ts newsCall): a line of the feed in
+   the mark's own color, cut short like a name rather than wrapped. */
+.br-feed-line.news { font-weight: 700; }
+.br-feed-line.news span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .br-note.done { color: #fff1b8; border-color: #f0c860; box-shadow: 0 0 18px rgba(240, 200, 96, 0.55); }
 .br-note.whole { color: #241a08; border-color: #f0deae; padding-left: 14px;
   background: linear-gradient(180deg, #e8cc74 0%, #c9a84a 55%, #a07830 100%); text-shadow: none; }
@@ -126,6 +136,10 @@ const CSS = `
 .br-edge[data-kind='ablaze'] i { background: radial-gradient(circle at 40% 40%, #ffe0c0, #ff7a2a 60%, #6a1a04);
   box-shadow: 0 0 14px rgba(255, 120, 40, 0.85); }
 .br-edge[data-kind='ablaze'] b { color: #ffb070; }
+/* The own Burr's carrier (ui/royale_burr.ts): a thorn's red. */
+.br-edge[data-kind='burr'] i { background: radial-gradient(circle at 40% 40%, #ffe0e8, ${BURR_COLOR} 60%, #6a0a24);
+  box-shadow: 0 0 14px rgba(255, 90, 130, 0.9); }
+.br-edge[data-kind='burr'] b { color: ${BURR_COLOR}; }
 .br-flight { position: absolute; width: 34px; height: 34px; border-radius: 7px; pointer-events: none;
   border: 1px solid #f0c860; box-shadow: 0 0 16px rgba(240, 200, 96, 0.9); z-index: 7; }
 /* A phone: a loot line that says what the piece adds runs long, so it
@@ -140,7 +154,8 @@ const CSS = `
   max-width: ${COMPACT_DONE_MAX_W_PX}px; box-sizing: border-box; }
 .hud.compact .br-note.done span, .hud.compact .br-note.whole span { min-width: 0;
   overflow: hidden; text-overflow: ellipsis; }
-.hud.compact.thumbs .br-notes { left: 44%; bottom: 82px; }
+.hud.compact.thumbs .br-notes { left: ${THUMBS_NOTES_LEFT_PCT}%;
+  bottom: ${THUMBS_NOTES_BOTTOM_PX}px; }
 .hud.compact .br-spot { font-size: 26px; letter-spacing: 3px;
   top: calc(98px + var(--safe-top, env(safe-area-inset-top, 0px))); }
 .hud.compact .br-spot.top { font-size: 34px; letter-spacing: 4px; }
@@ -227,6 +242,11 @@ export class RoyaleHudMoments {
   private readonly cachesAt = new Map<number, [number, number, number]>();
   private obstacles: EdgeRect[] = [];
   private obstaclesAt = 0;
+  // The open Graft cards' box, which no arrow's line stands on, and
+  // whether they were open at the last look (opened or closed, the boxes
+  // are measured again at once).
+  private covers: EdgeRect[] = [];
+  private cardsOpen = false;
   // The phone's safe-area insets, pixels, measured with the obstacles.
   private insets = { top: 0, right: 0, bottom: 0, left: 0 };
   private raf = 0;
@@ -362,9 +382,14 @@ export class RoyaleHudMoments {
     return { calls, champion };
   }
 
-  // Plays calls: the spotlight or the announcement, the voice, the sound.
+  // Plays calls: the spotlight or the announcement, the voice, the sound;
+  // news from afar as one quiet line of the feed.
   play(calls: readonly MomentCall[]): void {
     for (const c of calls) {
+      if (c.feed) {
+        this.newsLine(c);
+        continue;
+      }
       if (c.spotlight) this.spotlight(c);
       else this.host.announce(c.text, c.color, c.holdMs, c.keep);
       if (c.voice) announceVoice(c.voice, true, true);
@@ -395,7 +420,7 @@ export class RoyaleHudMoments {
 
   // One line of the feed, or one more folded away.
   private feedLine(k: MomentDeath): void {
-    const { selfId, selfTeam, world, feed } = this.host;
+    const { selfId, selfTeam, world } = this.host;
     const r = this.view();
     const marked = new Set((r?.mk ?? []).map((m) => m[0]));
     const leader = r?.v === 'respawn' && r.leader && r.leader.s > 0 ? r.leader.i : null;
@@ -434,12 +459,29 @@ export class RoyaleHudMoments {
       el('span', 'gt', '>'),
       who(k.unitId, this.host.victimName(k), k.vb ?? this.host.botOf(k.unitId)),
     );
+    this.pushLine(line, tier);
+  }
+
+  // News from afar (a mark, a run snuffed out): one line of the feed in the
+  // call's color, kept the near tier's while.
+  private newsLine(c: MomentCall): void {
+    const line = el('div', 'br-feed-line news');
+    line.dataset.tier = 'news';
+    line.style.color = c.color;
+    line.appendChild(el('span', '', c.text));
+    this.pushLine(line, 'news');
+  }
+
+  // A line on top of the feed: the ones it pushes out go (a near death
+  // joins the fold), and it leaves once its tier's time is up.
+  private pushLine(line: HTMLElement, tier: FeedTier): void {
+    const { feed } = this.host;
     feed.prepend(line);
     const lines = [...feed.children].filter((c): c is HTMLElement => c !== this.fold);
     const tiers = lines.map((c) => (c.dataset.tier ?? 'near') as FeedTier);
     let folded = false;
     for (const i of feedOverflow(tiers)) {
-      if (tiers[i] === 'near') {
+      if (foldsOut(tiers[i] as FeedTier)) {
         this.folded.add(performance.now());
         folded = true;
       }
@@ -496,9 +538,22 @@ export class RoyaleHudMoments {
     }
     this.landings(notes);
     this.play(this.moments.onNotes(notes, world.time));
-    // The Risings called, the marks, the Wrath passing, a run snuffed out.
+    // The Risings called, the marks, the Wrath passing, a run snuffed out:
+    // another's news a banner only from within reach, a feed line beyond.
     const nameOf = (id: number) => this.host.victimName({ unitId: id, killerId: 0 });
-    this.play(huntedCalls(notes, selfId, world.time, nameOf));
+    this.play(huntedCalls(notes, selfId, world.time, nameOf, (id) => this.near(id)));
+  }
+
+  // Whether a champion stands within the news' reach of the viewer
+  // (ui/royale_moments.ts newsNear): its body where the mirror holds it,
+  // else where its latest mark showed it.
+  private near(unitId: number): boolean {
+    const { world, selfId } = this.host;
+    const me = world.units.get(selfId);
+    const self = me && me.pos.y !== undefined ? me.pos : null;
+    const u = world.units.get(unitId);
+    const body = u && !u.dead && u.pos.y !== undefined ? u.pos : null;
+    return newsNear(self, body ?? lastMarkPoint(this.view()?.mk, unitId));
   }
 
   // The seeds that crashed down this batch: each one's shockwave, dust and
@@ -563,7 +618,8 @@ export class RoyaleHudMoments {
 
   // The edge arrows, every frame: the Seedfalls not on the screen (a
   // landed one left unopened past an interval no longer), with their
-  // seconds left while they fall. On a phone they stand on a ring round the
+  // seconds left while they fall, and the own Burr's carrier while the own
+  // champion stands, with the Burr's seconds left. On a phone they stand on a ring round the
   // champion, inside the thumbs; on a desktop on the screen's border.
   private placeArrows(): void {
     const r = this.view();
@@ -571,13 +627,16 @@ export class RoyaleHudMoments {
     const stage = this.edges.parentElement;
     const seen = new Set<string>();
     const hunted = r ? huntedTargets(r, this.host.world.time, this.host.selfId) : [];
-    const any = (r?.sf?.length ?? 0) > 0 || hunted.length > 0;
+    const standing = this.host.world.units.get(this.host.selfId)?.dead === false;
+    const burr = standing ? burrTarget(r, this.host.world.time) : null;
+    const any = (r?.sf?.length ?? 0) > 0 || hunted.length > 0 || burr !== null;
     if (r && projector && stage && r.st === 'play' && any) {
       const self = projector.self();
       const time = this.host.world.time;
       const targets: EdgeTarget[] = [];
-      // The Risings called or standing and the marks while shown.
-      for (const h of hunted) {
+      // The Risings called or standing and the marks while shown, and the
+      // own Burr's carrier.
+      for (const h of burr ? [...hunted, burr] : hunted) {
         const p = projector.project(h.at, ARROW_LIFT_M);
         if (!p) continue;
         const hidden = p.hidden === true;
@@ -614,6 +673,7 @@ export class RoyaleHudMoments {
       }
       const size = projector.view();
       const obstacles = [...this.measureObstacles(stage)];
+      const covers = this.covers;
       const inset = this.insets;
       const view: EdgeView = {
         width: size.width,
@@ -660,6 +720,7 @@ export class RoyaleHudMoments {
         obstacles,
         view,
         ring,
+        covers,
       );
       for (const [i, a] of arrows.entries()) {
         const node = nodes[i];
@@ -708,15 +769,28 @@ export class RoyaleHudMoments {
   }
 
   // What the arrows keep off, in the stage's pixels: the minimap, the
-  // thumbs and the bar, the top line and the feed. Measured twice a second.
+  // thumbs and the bar, the top line and the feed, the Graft chip; and the
+  // open Graft cards, which their lines never stand on (ui/royale_edges.ts
+  // layoutArrows covers). Measured twice a second, and at once when the
+  // cards open or fold.
   private measureObstacles(stage: HTMLElement): EdgeRect[] {
     const now = performance.now();
-    if (now - this.obstaclesAt < OBSTACLES_MS) return this.obstacles;
+    const cards = stage.querySelector<HTMLElement>('.br-grafts');
+    const cardsOpen = cards !== null && !cards.hidden;
+    if (cardsOpen === this.cardsOpen && now - this.obstaclesAt < OBSTACLES_MS) {
+      return this.obstacles;
+    }
+    this.cardsOpen = cardsOpen;
     this.obstaclesAt = now;
     this.measureInsets();
+    this.covers = [];
+    if (cards && cardsOpen) {
+      const b = cards.getBoundingClientRect();
+      if (b.width > 0 && b.height > 0) this.covers.push(rectOnStage(cards, b));
+    }
     const picks = stage.querySelectorAll<HTMLElement>(
       '.hud-slots, .hud-bottom, .hud-kda, .stick-base, .stick-ghost, .touchbar, .br-top, ' +
-        '.br-feed, .br-open, .br-note, .hud-steps, .hud-points, .hud-hints, ' +
+        '.br-feed, .br-open, .br-note, .hud-steps, .hud-points, .hud-hints, .br-graft-chip, ' +
         'canvas[style*="right"]',
     );
     const out: EdgeRect[] = [];

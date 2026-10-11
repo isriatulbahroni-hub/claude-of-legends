@@ -48,6 +48,10 @@ export interface RoyaleSnapContext {
   // The recipient's place in the final ranking, once the match is over
   // (Respawn's places are known only then).
   finalPlace?: number;
+  // Respawn, a drop-in: every seat's score when the recipient landed
+  // (server/royale_match.ts RoyalePlayer.window); the rank line counts
+  // from there.
+  windowBase?: ReadonlyMap<number, number>;
 }
 
 const point = (p: Vec3): WirePoint => [round2(p.x), round2(p.y), round2(p.z)];
@@ -112,6 +116,9 @@ export function royaleBlock(
     const mine = r.drops.get(self);
     if (mine) block.drop = point(mine);
   }
+  // Respawn: where the recipient picked to come back, while it waits.
+  const back = r.stage === 'play' ? r.respawnPicks.get(self) : undefined;
+  if (back) block.bk = point(back);
   if (ctx.caches) {
     block.caches = r.caches
       .filter((c) => c.present)
@@ -205,6 +212,11 @@ function royaleEvents(
         if (sees(ev.unitId)) out.push({ e: 'voidmaul_slam', ...impact });
         break;
       }
+      case 'miss':
+        if (sees(ev.unitId) || sees(ev.targetId)) {
+          out.push({ e: 'miss', unitId: ev.unitId, targetId: ev.targetId });
+        }
+        break;
       case 'royale_land':
         if (sees(ev.unitId)) out.push({ e: 'royale_land', unitId: ev.unitId });
         break;
@@ -384,7 +396,7 @@ export function buildRoyaleSnapshot(
   }
   const zones: SnapMobile[] = [];
   for (const z of sim.zones.values()) {
-    if (z.sourceId !== self && !sim.isPointVisible(team, z.pos.x, z.pos.z, z.pos.y)) continue;
+    if (!sim.zoneSeen(team, z)) continue;
     zones.push(zoneRecord(z));
   }
   const walls: SnapWall[] = [];

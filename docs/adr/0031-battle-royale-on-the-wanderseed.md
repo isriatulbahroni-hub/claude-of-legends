@@ -1,6 +1,6 @@
 # Battle royale on the Wanderseed
 
-The seat reports say it plainly: a visitor walks a minute to a lane and leaves. On 2026-10-02
+The 5v5 opens on a minute's walk to a lane before the first fight. On 2026-10-02
 the maintainer asked for a battle royale, a big one, fifty players, and settled every choice
 of it in one sitting (`docs/plan-royale.md` holds them all). This records the decisions the
 code rests on.
@@ -74,3 +74,182 @@ to steer by but the nearest fight. This overrides **Creatures** above for the bi
   each show 4 s long. A takedown on the Lodestar counts double and pays a piece; snuffing out a
   run pays up to three pieces. The 30 s leader show it replaces is gone.
 - **Bots answer them** from the same public signals a person reads (`src/sim/royale/bot/calls.ts`).
+
+## Amended: an Arrival meets a fair first fight (2026-10-08)
+
+A drop-in usually comes down in the standing Respawn match while it runs, where no escort ever
+lands. The quiet spot put a drop-in 25 m from every champion, so its first fight came late and
+on nobody's terms. The seat itself ignored level: a seat taken minutes in could be level 3 with
+nearly every champion above it, and a playthrough's first foe was a level 6 with 2572 health
+against its 1487. And a
+Respawn return set 4 m inside an edge still closing came back burning; one Arrival landed 1 m
+inside a closing edge with a foe 1.3 m away. This overrides the Arrival's quiet spot in Respawn;
+One life's Arrival and every One life rule are unchanged.
+
+- **The seat.** A drop-in still takes a bot playing the champion it picked first, a standing
+  one before one down, never one out for good; within that, in Respawn, the seat whose level is
+  nearest the field's (the lower median of every champion's, the fallen too), then the higher
+  level, then the lowest unit id (`server/royale_join.ts`).
+- **The level.** A Respawn drop-in comes down at least one level under the field's lower median
+  (every other seat's, the fallen too), its points spent and its ultimate ranked from level 6 by
+  the usual rule, never below its own level. The levels lifted offer no Graft: the Arrival's
+  Bough stays the one offer (`src/sim/royale/levels.ts`).
+- **The spot.** A Respawn drop-in comes down 9 to 11 m (inside a champion's 12 m sight) from a
+  bot's seat that is standing, out of its Grace and off any pad, out of combat, no higher in
+  level than the drop-in, and deep enough inside the light, the softest first: the skill it plays
+  now (its sharpening included), then its health share, its level, the lower id. A foe with
+  anyone else within 12 m is passed over, six foes are weighed, eight draws each, and a draw is
+  kept deep enough inside the light, in the foe's sight both ways (no bush between them, no rock
+  on the line, `src/sim/vision.ts` inMutualSight), with nobody but the foe within 12 m of it.
+  With none, the quiet spot as before (`src/sim/royale/drop.ts`). The foe holds its fire only
+  while the Grace lasts, so the person strikes first; the bot fights on sight after that, as
+  every bot does.
+- **The light it stands in.** While the Dusk closes, a Respawn return and an Arrival are set
+  down in the cap it closes to, which lies inside the closing one, so a fresh champion is not
+  overtaken before the phase ends; while it holds, the light now (`src/sim/royale/score.ts`
+  returnCap). This holds for every seat, the bots' too.
+- **Rules 5.** The planet's rules version moves from 4 to 5; a replay records the seat taken as
+  before ('bot_off') and re-simulates the Arrival from the match's stream.
+- **Measured** (`node scripts/royale_report.mjs --seeds 4 --variant respawn --dropin
+  60,180,300,420`, against the same report on the rules before): a fair foe for 14 of the 16
+  drop-ins (all of those at 1:00 and 3:00), the nearest enemy at landing 10 m against 28 m, the
+  first hit 4 s after landing at the median against 10 s, a takedown within the first minute for
+  9 of 16 against 5 of 16. The first life is shorter at the median, 25 s against 33 s (31.5 s
+  against 35 s over seeds 1 to 12, 50 s against 42 s on average): on seeds 1 to 4 the fair foe
+  ended none of them, the champions drawn to the fight from just past 12 m did.
+- **In sight** (the same day, on merging the tranche). Over seeds 1 to 12, 7 of the 43 fair
+  landings saw no enemy at all, the foe in a bush or behind a rock; a playthrough's drop-ins met
+  nobody. The spot now asks for the foe's sight both ways: 43 of the 48 drop-ins see an enemy
+  on landing (36 before, none on the quiet spot), a takedown within the first minute for 28 of
+  48 (26 on the quiet spot), the first life 28 s at the median and 47 s on average (35 s and 42 s
+  on the quiet spot).
+
+## Amended: a Grace that waits for the person, and assists that pay (2026-10-08)
+
+After the fair first fight, only a takedown's last hit learned anything: a seat could make two
+dozen assists and stay at level 3 all match, while about two Respawn
+takedowns in five go to a champion who dealt under a quarter of the damage (the royale report's
+steals). And the server began an Arrival's three second Grace as the seat was taken, while a slow
+client keeps its joining card over the match until its first frame, up to four seconds
+(`src/game/first_frame.ts` FIRST_FRAME_WAIT_MS): a slow client could first show the world with the
+Grace over and its foe ten meters off. This overrides the Grace's length for a Respawn Arrival
+and Respawn's experience; One life and every Respawn return are unchanged.
+
+- **The Grace waits for the person.** A Respawn Arrival's Grace lasts three seconds at least,
+  then until the seat's first order of any kind (a move, an attack-move, a Stop), six seconds
+  at most; its own first attack, cast or sigil still ends it at once. Nothing the client says
+  is trusted: the orders are the seat's own and recorded, so a replay re-simulates the Grace,
+  and the 'loaded' message stays the seat report's. A bot orders on its first decision, so a
+  bot playing the seat ends its Grace at three seconds and never waits on a load. The
+  champions in sight read its latest end (`ObsRoyale.graced`) as the shimmer does
+  (`src/sim/royale/grace.ts`).
+- **Assists pay.** In Respawn every champion with an assist on a takedown (it hit the fallen
+  within the sim's ten second assist window, `src/sim/rewards.ts` assistersOf, the 5v5's assist
+  gold unchanged) learns 0.15 of what the takedown would have paid it, weighed by its own level
+  as the last hit is, so about seven assists learn a takedown's worth; a fallen helper too, and
+  the levels an assist passes offer their Grafts. A Respawn takedown has 3.8 assists on average,
+  so the last hit's scale goes from 0.75 to 0.45 of the 5v5's bounty. One life pays the last
+  hit alone (`src/sim/royale/assists.ts`, `levels.ts`).
+- **Rules 6.** The planet's rules version moves from 5 to 6.
+- **Measured** (`node scripts/royale_report.mjs --variant respawn --dropin 60,180,300,420`
+  over seeds 1 to 24, split over processes with `--dump` and `--merge`, against the same report
+  on rules 5). The final level median goes from 9 to 10, the tenth percentile from 5 to 8, the
+  ninetieth stays 13; the seats with at most three takedowns end at level 8 against 4. The
+  drop-in's first life is 36 s at the median against 34 s (39 s against 28 s on seeds 1 to 12,
+  the seeds the tranche before was measured on), with 10 of 96 first lives under 16 s against
+  15. The stand-in's median life is 18.3 s against 19.9 s, the bots fight 66.5 percent of the
+  seconds an enemy is in reach against 65.9, the steals are 40.5 percent against 37.6. Four
+  pairings of the two numbers were measured (0.35 and 0.2, 0.3 and 0.25, 0.5 and 0.1, 0.45 and
+  0.15); every one held the level median at 9 or 10 and raised the drop-in's first life, and
+  the last alone kept the stand-in's median life within a tenth of before (the others: 17.0 to
+  17.3 s). A bootstrap over matches puts the drop-in's change between -8 and +9 s and the
+  stand-in's between -4 and +1 s at 90 percent: the report's medians move that much from one
+  set of seeds to the next.
+- **A slow load** (`--load 4`: the drop-in gives no order for four seconds after its Arrival,
+  seeds 1 to 12). On rules 5 the report's bots never struck in the second between the Grace's
+  end and the first order (the first hurt came 12 s after the Arrival at the median), so the
+  waiting Grace alone moves no number there (31 s against 33 s for the first life, within the
+  noise): it closes a window the bots happen not to use and a person does see. The whole of
+  rules 6 at that load: the first life 34 s against 33 s, the stand-in's median life 21.2 s
+  against 17.0 s, the fighting share 66.4 percent on both. A local
+  playthrough on a loaded box had the joining card come down 3.45 s after the Arrival with
+  2.55 s of Grace left, where rules 5 had ended it half a second before the world showed.
+
+## Amended: the Respawn wait picks the return (2026-10-08)
+
+The 5 s Respawn wait held nothing but a count. A return set at the edge of the light came
+back within 10 m of a champion 41 percent of the time (over seeds 1 and 2 of fifty house bots,
+415 of 1,014 returns and 389 of 980). This gives the wait a choice; One life is unchanged.
+
+- **The globe in the wait.** A second after a Respawn champion falls, the camera rises to the
+  drop's globe, faced to the light it comes back in (the cap the Dusk closes to while it
+  closes, score.ts returnCap), the fall marked on it. A tap or a click on it picks where it
+  comes back (the death wash says "Tap the globe to choose where you come back" on a phone,
+  "Click the globe..." on a desktop); the last pick wins. The globe sits right of the middle and
+  the wash's lines move left of it, its recap and life lines whole, clear of the Graft cards and,
+  on a phone, standing on the folded Graft chip; the thumb controls stand down meanwhile. When
+  the champion stands again the camera dives down to it as after the drop
+  (`src/ui/royale_return.ts`, `src/render/planet_stage.ts`).
+- **The rule.** The pick is the 'drop' command and action, taken while dead in Respawn's play
+  (Sim.pickDrop), recorded and replayed like the drop's. The return is set down at the pick
+  brought inside that light at an Arrival's depth, on walkable ground, and at least 10 m from
+  every champion standing; when the pick is not such a point, the nearest of eight rings 3 m
+  apart around it that holds one gives its point farthest from everyone, and with none the edge
+  of the light as before. Each wait picks afresh; no pick, the return is as before
+  (`src/sim/royale/return_pick.ts`). The return keeps its Grace.
+- **The bots.** A dead Respawn seat is asked its decision once a wait, on its first decision
+  slot after the fall (and on every slot while a Graft offer is open), through the same
+  observation, which reads the pick back in its `drop` (`mode.ts` wantsDeadDecision). The house
+  brain picks nothing and comes back at the edge, where a person who taps nothing comes back
+  (`bot/brain.ts`): measured with the whole tranche (below), a pick beside a Seedfall landing
+  within 20 s of the return, or across the light from the fall, crowded the returns into the
+  fights and shortened every seat's lives; and asked on every slot until it picked, the dead
+  seats cost some 15,000 observations a match for a pick the brain does not make.
+- **Measured** over fifty house bots, seeds 1 to 3: 30 percent of the returns are picked (339 of
+  1,069, 296 of 1,023, 331 of 1,094), none of them within 10 m of a champion (11 m at the
+  median), none outside the light; the dead seats' decisions cost about 15,000 more
+  observations a match, some 3 percent of the sim's time. Four stand-in seats played by the
+  bots' brain among them, seeds 1 to 4, per life after a return: with no pick (the edge), 19 s
+  at the median, the first hit after 5.9 s, 0.86 takedowns; picking where it fell, 12 s, 2.6 s,
+  0.71; picking the far side of the light from its fall, 18.5 s, 4.0 s, 1.60. The pick is a real
+  choice: back into the same fight is quick and short, a fresh side of the light pays.
+- **Measured with the whole tranche** (the waiting Grace, the paid assists, the Burr, the pick;
+  `node scripts/royale_report.mjs --variant respawn --dropin 60,180,300,420`, seeds 1 to 24, a
+  Dain drop-in in both, against rules 5). With the house brain picking beside a Seedfall, the
+  stand-in's median life fell from 17.9 s to 15.0 s and the steals rose from 37 to 45 percent;
+  picking across the light from the fall, 13.7 s and 43 percent; picking nothing, 18.3 s and 41
+  percent, the bots fighting 67.4 percent of the seconds an enemy is in reach (66.2 before), the
+  final level median 10 (9), the drop-in's first life 31 s at the median (26). Left open: the
+  drop-ins found a fair first fight 84 percent of the time (93 before), those joining at 7:00
+  half the time (79 percent), and took their first takedown after 23 s at the median (18): the
+  field's levels sit closer together and the Burr keeps more bots in a fight, so fewer soft bots
+  out of combat stand at or under the drop-in's level (`grace.ts` fairFoes).
+
+## Amended: the Last light, and the Death beat's killer (2026-10-08)
+
+A Respawn ranking was mostly settled before the end: the last minutes asked nothing new of a
+seat a few takedowns behind. And the Death beat, designed to follow the killer for the first
+second of the wait, held on the fallen body instead: a dead champion sees nothing, so the
+killer's record left the snapshot on the fall. One life is unchanged.
+
+- **The Last light** (CONTEXT.md). From the start of the Dusk's last closing (528 s after
+  landing, the last 72 s of the 600) until the light goes out, a Respawn takedown counts twice
+  on the score: a plain one 2, the Lodestar 4, a settled Burr times its own factor too, for
+  people and bots alike (it is scoring, not behaviour). The sim tells it once, as it begins
+  (`royale_last_light`, step 'double'); the screen calls "LAST LIGHT" in the spotlight with a
+  sound of its own, then "Takedowns count double until the light goes out", and a small "x2"
+  stands beside the rank line while it lasts. The window is read off the match clock
+  (`src/sim/royale/last_light.ts`), so nothing new enters the checkpoint or the wire. No death
+  is final: the final seconds first planned for it, and the wire's `fi` block, are removed.
+- **The Death beat's killer.** Through the Respawn wait the fallen seat alone is sent, in the
+  mode block's `wa`, its killer's unit id, champion, skin, team, point and health, while the
+  killer stands (the carrier of the Burr hung by this very fall; nothing for a fall nobody
+  landed). The mirror draws the body from it (`src/net/watch_body.ts`) and hands it over to the
+  killer's own record once it is back in sight, so the camera follows it until the globe rises
+  (`src/game/death_beat.ts`). No observation reads it: the bots see nothing new.
+- **Rules 7.** The planet's rules version moves from 6 to 7.
+- **Measured** (`node scripts/royale_report.mjs --seeds 6`, both variants, against the same
+  report on rules 6). Respawn: the bots fight 65.2 percent of the seconds an enemy is in reach
+  against 65.4, the steals stay 42.9 percent, the stand-in's median life stays 15.7 s, the final
+  level median stays 10. The winners change on five of the six seeds (the Lodestar and the marks
+  follow the score). One life is identical, match for match.

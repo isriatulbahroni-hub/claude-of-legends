@@ -12,10 +12,11 @@
 import { attacksFrom } from './game/attack_notes';
 import { type KillNote, type Presentation, startPresentation } from './game/boot';
 import { creatureNowFrom, riseCreatureNow } from './game/creature_now';
+import { drawnQuality } from './game/drawn_quality';
 import { FIRST_FRAME_WAIT_MS, untilDrawn } from './game/first_frame';
 import { nextStep, type PostMatchAction } from './game/flow';
 import { registerForgedAssets } from './game/forged_visuals';
-import { frameRate } from './game/frame_rate';
+import { frameRate, watchFrames } from './game/frame_rate';
 import { requestGameFullscreen } from './game/fullscreen';
 import { parseJoinCode } from './game/invite';
 import { appNav, installNav, sectionFromHash } from './game/nav';
@@ -63,6 +64,7 @@ import {
   matchEndOnce,
   matchEndReporter,
   STAYED_MS,
+  trackAgain,
   trackStep,
 } from './net/stats';
 import { whenChampionModelsReady } from './render/champions';
@@ -71,7 +73,7 @@ import type { RenderTerrain } from './render/terrain';
 import { installVersionedLoading } from './render/versioned_loading';
 import { attachBot } from './sim/content/bots';
 import { type HouseSeat, houseSeats } from './sim/content/bots/house';
-import { CHAMPION_LIST, DEFAULT_CHAMPION_ID } from './sim/content/champions';
+import { CHAMPION_LIST } from './sim/content/champions';
 import { contentFingerprint } from './sim/content/fingerprint';
 import type { GameMap } from './sim/content/map';
 import { assemblePlanet } from './sim/content/planet';
@@ -116,7 +118,7 @@ import { showReloadNotice } from './ui/reload_notice';
 import { buildReplayBar, type ReplayBar } from './ui/replay_bar';
 import { replayRefusal } from './ui/replay_notice';
 import { showRoyaleJoining, showRoyalePick } from './ui/royale_pick';
-import { initialPick, type RoyalePick } from './ui/royale_pick_rules';
+import { FIRST_ROYALE_CHAMPION, initialPick, type RoyalePick } from './ui/royale_pick_rules';
 import { attachTurnAsk } from './ui/turn_ask';
 import type { IWorld } from './world_api';
 
@@ -387,8 +389,8 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
     const layer = appNav().push('match', () => exit('menu'));
     layer.guard(() => pres.toggleEscapeMenu());
     let guarded = true;
-    // A match is on screen, which is as far down the funnel as a visitor
-    // with no account can get. Practice and the Forge test drive both land
+    // A match is on screen, the 'played' step of the counter's steps
+    // (src/net/stats.ts). Practice and the Forge test drive both land
     // here; the replay viewer below deliberately does not, since watching
     // is not playing.
     trackStep('played');
@@ -436,12 +438,14 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
         const golds: number[] = [];
         const casts: { unitId: number; key?: AbilityKey }[] = [];
         const hits: { targetId: number; amount: number }[] = [];
+        const misses: { unitId: number; targetId: number }[] = [];
         const events = sim.tick();
         for (const ev of events) {
           if (ev.type === 'death') kills.push({ unitId: ev.unitId, killerId: ev.killerId });
           else if (ev.type === 'gold' && ev.unitId === self.id) golds.push(ev.amount);
           else if (ev.type === 'cast') casts.push({ unitId: ev.unitId, key: ev.key });
           else if (ev.type === 'sigil') casts.push({ unitId: ev.unitId });
+          else if (ev.type === 'miss') misses.push({ unitId: ev.unitId, targetId: ev.targetId });
           else if (ev.type === 'damage' && ev.sourceId === self.id && ev.targetId !== self.id)
             hits.push({ targetId: ev.targetId, amount: ev.amount });
         }
@@ -452,6 +456,7 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
           hits,
           attacks: attacksFrom(events),
           voidmaulSlams: voidmaulSlamsFrom(events),
+          misses,
         });
       }
       requestAnimationFrame(frame);
@@ -602,12 +607,14 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
       }
       const kills: { unitId: number; killerId: number }[] = [];
       const casts: { unitId: number; key?: AbilityKey }[] = [];
+      const misses: { unitId: number; targetId: number }[] = [];
       const events = sim.tick();
       for (const ev of events) {
         if (silent) continue;
         if (ev.type === 'death') kills.push({ unitId: ev.unitId, killerId: ev.killerId });
         else if (ev.type === 'cast') casts.push({ unitId: ev.unitId, key: ev.key });
         else if (ev.type === 'sigil') casts.push({ unitId: ev.unitId });
+        else if (ev.type === 'miss') misses.push({ unitId: ev.unitId, targetId: ev.targetId });
       }
       if (!silent)
         pres.onWorldTick({
@@ -617,6 +624,7 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
           hits: [],
           attacks: attacksFrom(events),
           voidmaulSlams: voidmaulSlamsFrom(events),
+          misses,
         });
       checkDrift();
     };
@@ -798,9 +806,11 @@ async function runSpectate(matchId: number, team: TeamId): Promise<PostMatchActi
           if (changed && view) {
             const kills: { unitId: number; killerId: number }[] = [];
             const casts: { unitId: number; key?: AbilityKey }[] = [];
+            const misses: { unitId: number; targetId: number }[] = [];
             for (const e of msg.events) {
               if (e.e === 'death') kills.push({ unitId: e.unitId, killerId: e.killerId });
               else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
+              else if (e.e === 'miss') misses.push({ unitId: e.unitId, targetId: e.targetId });
             }
             view.onWorldTick({
               kills,
@@ -809,6 +819,7 @@ async function runSpectate(matchId: number, team: TeamId): Promise<PostMatchActi
               hits: [],
               attacks: attacksFrom(msg.events),
               voidmaulSlams: voidmaulSlamsFrom(msg.events),
+              misses,
             });
           }
           break;
@@ -1165,7 +1176,7 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
         // once, so the time to the echo is the round trip this page lives.
         case 'probe':
           if (ws.readyState === ws.OPEN) {
-            ws.send(JSON.stringify({ t: 'probe', n: msg.n, fps: frameRate() }));
+            ws.send(JSON.stringify({ t: 'probe', n: msg.n, fps: frameRate(), q: drawnQuality() }));
           }
           break;
         case 'player_back':
@@ -1209,10 +1220,12 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
             const golds: number[] = [];
             const casts: { unitId: number; key?: AbilityKey }[] = [];
             const hits: { targetId: number; amount: number }[] = [];
+            const misses: { unitId: number; targetId: number }[] = [];
             for (const e of msg.events) {
               if (e.e === 'death') kills.push({ unitId: e.unitId, killerId: e.killerId });
               else if (e.e === 'gold') golds.push(e.amount);
               else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
+              else if (e.e === 'miss') misses.push({ unitId: e.unitId, targetId: e.targetId });
               else if (e.e === 'dmg') hits.push({ targetId: e.targetId, amount: e.amount });
             }
             pres?.onWorldTick({
@@ -1222,6 +1235,7 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
               hits,
               attacks: attacksFrom(msg.events),
               voidmaulSlams: voidmaulSlamsFrom(msg.events),
+              misses,
             });
           }
           break;
@@ -1315,7 +1329,7 @@ async function pickForRoyale(variant: RoyaleVariant): Promise<RoyalePick | null>
       CHAMPION_LIST.map((c) => c.id),
       (id) => SKINS[id]?.length ?? 1,
       SIGIL_LIST.map((s) => s.id),
-      DEFAULT_CHAMPION_ID,
+      FIRST_ROYALE_CHAMPION,
     );
     const picker = showRoyalePick(container, {
       variant,
@@ -1394,6 +1408,9 @@ async function runRoyale(
     const world = new ClientWorld((msg) => send(msg), loaded.map);
     let pres: Presentation | null = null;
     let ends: MatchEndReporter | null = null;
+    // When the match came on screen (performance.now), for the seconds it
+    // was held (src/net/stats.ts MatchState).
+    let openedAt = 0;
     // The card between Play and the first snapshot, Cancel its way out.
     const joining = showRoyaleJoining(container, variant, () => finish('menu'));
     let opened = false;
@@ -1413,6 +1430,9 @@ async function runRoyale(
       ends?.report();
       ends?.dispose();
       ends = null;
+      // Play again from the end card: the counter's one sign of a second
+      // match.
+      if (action === 'again' && shownResult !== null) trackAgain({ mode: 'royale', variant });
       joining.remove();
       pres?.dispose();
       pres = null;
@@ -1455,9 +1475,12 @@ async function runRoyale(
         const id = window.setTimeout(run, ms);
         return () => window.clearTimeout(id);
       }).then(() => joining.remove());
+      openedAt = performance.now();
       ends = matchEndReporter({ mode: 'royale', variant }, () => ({
         winner: world.winner,
         seconds: world.time,
+        held: (performance.now() - openedAt) / 1000,
+        dropIn: droppedIn,
       }));
       if (!matchEnded && pendingResult === null) {
         layer.guard(() => pres?.toggleEscapeMenu());
@@ -1522,9 +1545,11 @@ async function runRoyale(
             const kills: KillNote[] = [];
             const casts: { unitId: number; key?: AbilityKey }[] = [];
             const hits: { targetId: number; amount: number }[] = [];
+            const misses: { unitId: number; targetId: number }[] = [];
             for (const e of msg.events) {
               if (e.e === 'death') kills.push(royaleKill(e));
               else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
+              else if (e.e === 'miss') misses.push({ unitId: e.unitId, targetId: e.targetId });
               else if (e.e === 'dmg') hits.push({ targetId: e.targetId, amount: e.amount });
             }
             pres.onWorldTick({
@@ -1534,6 +1559,7 @@ async function runRoyale(
               hits,
               attacks: attacksFrom(msg.events),
               voidmaulSlams: voidmaulSlamsFrom(msg.events),
+              misses,
               royale: royaleNotes(msg.events),
             });
           }
@@ -1549,7 +1575,7 @@ async function runRoyale(
           pres?.showPing(msg.x, msg.z, msg.from, msg.team);
           break;
         case 'probe':
-          send({ t: 'probe', n: msg.n, fps: frameRate() });
+          send({ t: 'probe', n: msg.n, fps: frameRate(), q: drawnQuality() });
           break;
         case 'player_joined':
           pres?.pushChat('System', msg.team, `${msg.name} joined the match.`);
@@ -1631,6 +1657,9 @@ async function boot(): Promise<void> {
   // sends it. Before anything else, so it is in place when the tracker's
   // deferred tag runs after this module.
   installStats();
+  // The page's frames counted from here (src/game/frame_rate.ts): the
+  // menus' light ones tell the quality ladder the screen's refresh.
+  watchFrames();
   // Half a minute later, if this page is still in front of somebody: the
   // line between a visitor who looked and a click that left before the
   // art had drawn. A tab in the background does not count: nobody is

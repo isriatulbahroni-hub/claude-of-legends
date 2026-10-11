@@ -45,10 +45,13 @@ describe("the landing's New banner", () => {
   it('names the planet and says what one does there, in one line', () => {
     expect(NEW_TAG).toBe('New');
     expect(NEW_TITLE).toBe('The Wanderseed');
+    // What the gold button gives: a drop into the match under way, set down
+    // by a fair first fight, never a landing of one's choosing.
     expect(NEW_LINE).toBe(
-      'Fifty champions on a small planet you can walk all the way round. Land where you like, ' +
-        'loot, stay in the light.',
+      'Fifty champions on a small planet you can walk all the way round. Drop into a match ' +
+        'under way, a fair fight a few steps off; loot, and stay in the light.',
     );
+    expect(NEW_LINE).not.toMatch(/where you like/);
   });
 
   it('stands at the top of the Play now card, right over the gold button that plays it', () => {
@@ -66,9 +69,10 @@ describe("the landing's New banner", () => {
 describe('the news of the battle royale', () => {
   const entry = NEWS.find((e) => e.day === '2026-10-03');
 
-  it('is the newest entry, so the landing shows it', () => {
+  it('was the newest entry on its day, so the landing showed it', () => {
     expect(entry).toBeDefined();
-    expect(newestOf(NEWS, Date.parse('2026-10-03T12:00:00Z'))).toBe(entry);
+    const byThen = NEWS.filter((e) => e.day <= '2026-10-03');
+    expect(newestOf(byThen, Date.parse('2026-10-03T12:00:00Z'))).toBe(entry);
     expect(entry?.image).toBe('wanderseed.webp');
     expect(entry?.link?.to).toBe('play');
   });

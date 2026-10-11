@@ -5,7 +5,8 @@ A 5v5 three-lane MOBA in the browser. One deterministic simulation, an authorita
 ## Language
 
 **Champion**:
-A playable character a participant controls for the whole match. Ten exist at launch.
+A playable character a participant controls for the whole match. Ten existed at launch;
+Nisk, the eleventh, joined after.
 _Avoid_: hero, character, class
 
 **Participant**:
@@ -112,7 +113,11 @@ how its teams are counted, ADR 0030)
 
 **Respawn**:
 The battle royale variant where a death costs five seconds: the champion comes back at the edge
-of the light with everything it had, and the most takedowns when the last light goes out wins.
+of the light (of the light it closes to, while the Dusk closes) with everything it had, and the
+most takedowns when the last light goes out wins. A takedown's experience goes to its last hit,
+and a share of it to every champion with an assist on it. During the wait the globe shows, and a
+tap on it picks where the champion comes back instead: inside that light, at least ten meters
+from every champion standing, the nearest such point to the pick.
 What Play now launches.
 _Avoid_: loop mode, deathmatch
 
@@ -159,7 +164,7 @@ One of the utility spells a participant picks two of at champion select. Launch 
 _Avoid_: utility spell, and the names other MOBAs give this pick
 
 **Sapdraught**:
-The one consumable: bought at the fountain for 50 gold, carried in a bag slot, drunk anywhere alive for 150 health over 10 seconds. One runs at a time; damage does not stop it, and a drink neither starts nor cancels a recall. Never in the battle royale.
+The one consumable: bought at the fountain for 50 gold, carried in a bag slot, drunk anywhere alive for 150 health over 10 seconds. At most two carried; one runs at a time; damage does not stop it, and a drink neither starts nor cancels a recall. Never in the battle royale.
 _Avoid_: potion, flask, and the names other games give theirs
 
 **Decision budget**:
@@ -342,6 +347,38 @@ marked, then detonates once more after a fixed delay. A telegraph by constructio
 read the marked ground); standing on it is the mistake. Torv's Faultline is its owner.
 _Avoid_: echo, replay, second wall
 
+**Fumble**:
+A crowd control: while it lasts, its victim's basic attacks miss. The swing is spent and
+nothing lands, no damage and no on-hit; the victim's spells still work. Every viewer reads it
+as a chip and a swirl over the head, and a miss as "Miss". The Resolve shortens it like the
+other crowd control; structures shrug it off. Nisk's Pepper Dart is its owner. Not the blind,
+which dims sight.
+_Avoid_: blind (that dims sight), dazed, miss chance
+
+**Charge**:
+One use in an ability's store. A spell cast from charges spends one per cast; one comes back
+every so many seconds (shortened by rank like a cooldown) until the store is full, and the
+spell's cooldown is only the beat between two casts. The store opens with one charge when the
+spell is learned. The button shows the count. Nisk's Sourpods are the only spell with them.
+_Avoid_: ammo, stack (a mark's and a Sprout's word)
+
+**Sourpod**:
+A hidden pod Nisk plants with its ultimate: it arms after a second, lies three minutes (five
+of one Nisk at most), and bursts into a slowing cloud of poison when an enemy champion steps
+on it. Its own team always sees it. An enemy team never sees it by walking near it, only while
+one of that team's own reveal zones covers it (Ashvyn's Eclipse Rain), and then every seat of
+the team does; a minion neither sees it for its team nor bursts it. The cloud a burst leaves
+is seen like any zone. People and bots see it by the one rule. It works on the planet too. In
+code, the primitive is a trap (src/sim/traps.ts).
+_Avoid_: mine, ward, trap in game text
+
+**Lurk**:
+Hiding by stillness: a champion whose passive lurks is hidden from its enemies once it has
+kept still, or kept to one brush, for a beat, until it acts, moves in the open or leaves the
+brush; taking damage restarts the count. Its own side sees it half see-through. Nisk's Lie
+Low is the one passive that lurks (src/sim/lurk.ts).
+_Avoid_: invisibility (players read "Hidden", the status chip's word)
+
 **Mastery**:
 A purely cosmetic per-champion rank derived from a player's recorded online matches on that champion (server/mastery.ts thresholds). Shown on the career profile with a title per rank; never affects gameplay, matchmaking, or rating.
 _Avoid_: champion points, grind level
@@ -396,8 +433,8 @@ To take a bot's seat in a public match already under way (ADR 0025), which is wh
 the public queue does when nobody is waiting in it and such a match has people in it, early
 enough. The champion comes as the bot left it, in the seat's assigned lane, which the
 newcomer is told on arrival; the seat is never rated or recorded. In a battle royale under
-way the seat is not handed over in place: it makes an Arrival, keeping the bot's level and
-pieces but none of its score or run.
+way the seat is not handed over in place: it makes an Arrival, keeping the bot's pieces, and
+its level unless Respawn lifts it to the field's, but none of its score or run.
 _Avoid_: late join, hot join, backfill
 
 **Home**:
@@ -486,7 +523,7 @@ what people remember about it.
 _Avoid_: slug, normalized name, canonical name
 
 **Roster**:
-The ten champions shipped with the game (`docs/design/roster.md`), as opposed to forged
+The eleven champions shipped with the game (`docs/design/roster.md`), as opposed to forged
 champions. The roster browser is the screen that lists champions.
 _Avoid_: base champions, default cast
 
@@ -552,9 +589,10 @@ done or once said long enough, what a player does on their own counts as done, t
 remembers what is done, and
 the player can hide the guide for good (the settings bring it back). The shop's suggested item, the
 next step of the build a house bot of that champion follows, is lit for everyone. The battle
-royale has a list of its own, under the same rules and the same Hide guide: open a cache, stay in
-the light (standing in the Dusk takes the card from any other step), what a takedown gives, fly a
-launch pad, and the ultimate ready at level 6.
+royale has a list of its own, under the same rules and the same Hide guide: attack and cast at an
+enemy champion, open a cache, stay in the light (standing in the Dusk, or about to be overtaken by
+it, takes the card from any other step), what a takedown gives, fly a launch pad, and the ultimate
+ready at level 6.
 _Avoid_: tutorial (that is a scripted match), tips, coach (the bot seat's)
 
 **Quick pick**:
@@ -1068,7 +1106,10 @@ the people's times the bots': two with a human on the other team, one and a half
 only on the seat's own, one alone; and half for a seat whose opposing lane seats play the Gentle
 player, which the match's start decides. Deaths cost nothing, and a seat left to a bot earns
 nothing more for its player. Never spent, and distinct from the rating, which only rated matches
-move, and from laurels and embers.
+move, and from laurels and embers. Respawn's end card also climbs the points a browser's battle
+royale seats have earned as levels, kept in that browser alone: Level 2 at 50 points, each next
+level a little further, the bar running from the last one reached to the next. Plain numbered
+levels, never named after the ladder or anyone on it, and not a champion's level.
 _Avoid_: score (the scoreboard's word), XP (the champion's), rating
 
 **Ladder**:
@@ -1160,6 +1201,14 @@ three longest runs only), shown to everyone every fifteen seconds. Ending the ru
 it out and pays pieces.
 _Avoid_: on fire, killing spree, heating up
 
+**Burr**:
+Respawn's score to settle: whoever takes a champion down carries that champion's Burr for
+sixty seconds, seen by nobody but the champion it was taken from (a bearing at the screen's
+edge, a line on the wash of the death, a red light where the carrier stands on the globe of the
+wait). Taking the carrier down while it lasts counts double
+and pays a piece; a later takedown of the same champion moves the Burr to the new taker.
+_Avoid_: bounty, nemesis, vendetta, revenge mark, grudge
+
 **Reprieve**:
 One life's one comeback: a champion that falls during the calm comes back once, eight
 seconds later at the edge of the light with sixty percent of its health. The fall still
@@ -1168,8 +1217,9 @@ revive already carries.)
 _Avoid_: second wind, gulag, redeploy, extra life
 
 **Last light**:
-Respawn's last closing of the Dusk, until the light goes out at the end of the match: a
-takedown counts double, and in its last fifteen seconds a death is final.
+Respawn's last closing of the Dusk, until the light goes out at the end of the match (its
+last 72 seconds): a takedown counts double on the score, a Lodestar's four, for people and
+bots alike, and the rank line shows "x2" while it lasts. No death is final.
 _Avoid_: sudden death, final circle
 
 **Hastening**:
@@ -1180,15 +1230,20 @@ _Avoid_: quickening, zone speedup
 
 **Arrival**:
 A battle royale drop-in's coming down: the seat a person takes from its bot in play lands
-fresh (full health and mana, everything ready) at a quiet spot inside the light, its tally
-from zero, and in its Grace.
+fresh (full health and mana, everything ready), its tally from zero, in its Grace. In Respawn
+it comes down at least one level under the middle of the field, a few steps from a fair first
+fight (a bot out of combat, the softest in reach, no higher in level, in sight of each other,
+nobody else near), else at a quiet spot, and its Grace waits for the person's first order; in
+One life at a quiet spot.
 _Avoid_: spawn, deploy
 
 **Grace**:
 The three seconds a champion just come down (an Arrival, a Respawn return) can be neither
-hurt nor targeted; its own first attack, cast or sigil ends it early. Not the Calm, which is
-the whole field's. A word of the code for now: players see the Untouchable status, and the
-word needs an IP check before any player reads it (another game's respawn points carry it).
+hurt nor targeted; its own first attack, cast or sigil ends it early. A Respawn Arrival's waits
+for the person, whose screen may still be loading: past its three seconds it lasts until the
+seat's first order of any kind, six seconds at most. Not the Calm, which is the whole field's.
+A word of the code for now: players see the Untouchable status, and the word needs an IP check
+before any player reads it (another game's respawn points carry it).
 _Avoid_: spawn protection, invulnerability
 
 **Pad slam**:
@@ -1197,6 +1252,11 @@ twenty-five meters: it hurts and slows the enemies standing there.
 _Avoid_: ground pound
 
 **Death beat**:
-The two and a half seconds the camera holds on whoever took a One life champion down,
-before following them.
+The camera on whoever took a champion down, right after the fall. In One life, the two and a
+half seconds it holds on them, before following them. In Respawn, the first second of the wait,
+before the globe rises: it follows them, the fallen seat alone being sent their champion and
+where they stand through the wait, so their body is drawn though a fallen champion sees nothing;
+it holds on where the champion fell when nobody landed the fall or they are down too. On the
+globe the Burr's red light shows where they stand, and the camera is back on the champion as
+it returns. No bot's observation reads any of it.
 _Avoid_: kill cam, death recap

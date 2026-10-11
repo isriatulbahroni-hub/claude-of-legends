@@ -6,6 +6,7 @@
 // the escape, the kite. Every distance a chord (src/sim/geo.ts).
 
 import type { AbilityDef } from '../../combat/casting';
+import { BURR_MARGIN, BURR_TARGET_PULL } from '../../content/bots/royale_skills';
 import { ITEMS } from '../../content/items';
 import { addScaled, dirTo, dist, dot, norm, scale, unit, type Vec3 } from '../../geo';
 import { abilityRange, CHAMPION_ATTACK_RANGE, hardCCd, readySigil } from '../../playbook/micro';
@@ -86,10 +87,22 @@ export function isGraced(sense: Sense, id: number): boolean {
   return false;
 }
 
+// Whether an enemy carries the bot's own Burr (ObsRoyale.burr).
+export function carriesBurr(sense: Sense, id: number): boolean {
+  return sense.burr !== null && sense.burr.id === id;
+}
+
+// How much under its nerve the bot fights its Burr's carrier: BURR_MARGIN,
+// none for anyone else.
+export function burrMargin(sense: Sense, target: ObsUnit): number {
+  return carriesBurr(sense, target.id) ? BURR_MARGIN : 0;
+}
+
 // The target: a hard-CC'd enemy in reach first, else the best of health
 // and distance within `reach` (the skill's chase unless told, or a reach
-// per enemy); null when none is worth it. Never one standing in the dark,
-// never one in its Grace.
+// per enemy), the Burr's carrier pulled BURR_TARGET_PULL ahead; null when
+// none is worth it. Never one standing in the dark, never one in its
+// Grace.
 export function pickTarget(
   sense: Sense,
   reach: number | ((e: ObsUnit) => number) = sense.skill.chase,
@@ -104,7 +117,8 @@ export function pickTarget(
     // Never into the dark, while there is light to stay in.
     if (sense.now.radius > 0 && !insideCap(sense.now, at)) continue;
     const ccd = hardCCd(e, sense.obs.time) && d <= CHAMPION_ATTACK_RANGE;
-    const score = (ccd ? -10 : 0) + e.hpFrac * TARGET_HP_WEIGHT + d * TARGET_M_WEIGHT;
+    const pull = carriesBurr(sense, e.id) ? BURR_TARGET_PULL : 0;
+    const score = (ccd ? -10 : 0) + e.hpFrac * TARGET_HP_WEIGHT + d * TARGET_M_WEIGHT - pull;
     if (score < bestScore || (score === bestScore && best !== null && e.id < best.id)) {
       best = e;
       bestScore = score;
@@ -127,6 +141,19 @@ export function aimAt(sense: Sense, target: ObsUnit, def: AbilityDef, rng: Rng):
   const at = p3(target);
   const spec = def.spec;
   let aim = at;
+  if (spec.kind === 'trap' && !hardCCd(target, sense.obs.time)) {
+    // A pod goes where the target will stand when it arms, within reach.
+    const v = { x: target.vx ?? 0, y: target.vy ?? 0, z: target.vz ?? 0 };
+    const speed = norm(v);
+    if (speed > 0.05) {
+      aim = along(at, scale(v, 1 / speed) as Vec3, speed * (spec.armDelay + 0.25), R);
+    }
+    const d = dist(sense.me, aim);
+    if (d > def.castRange) {
+      const dir = dirTo(sense.me, aim);
+      if (dir) aim = along(sense.me, dir as Vec3, def.castRange, R);
+    }
+  }
   if (spec.kind === 'skillshot' && !hardCCd(target, sense.obs.time)) {
     const v = { x: target.vx ?? 0, y: target.vy ?? 0, z: target.vz ?? 0 };
     const speed = norm(v);

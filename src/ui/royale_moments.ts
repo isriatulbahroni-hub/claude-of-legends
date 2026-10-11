@@ -17,6 +17,7 @@ import type {
   RoyaleVariant,
   SnapClamor,
   SnapDusk,
+  SnapMark,
   SnapSeedfall,
   WirePoint,
 } from '../net/royale_wire';
@@ -37,6 +38,7 @@ export type MomentSfx =
   | 'chime'
   | 'gong'
   | 'boom'
+  | 'lastlight'
   | 'multikill';
 
 // One call: what to show, what to play, and how big.
@@ -59,6 +61,42 @@ export interface MomentCall {
   // The announcement holds its line for its whole moment (holdMs), and
   // what is announced meanwhile waits its turn (ui/hud.ts announce).
   keep?: boolean;
+  // One quiet line of the kill feed instead of a banner (news from afar,
+  // newsCall): no spotlight, no sound.
+  feed?: boolean;
+}
+
+// The news of a mark (the Lodestar, an Ablaze run, a slayer, a run snuffed
+// out) is a centered banner only when it names the viewer or its champion
+// stands within NEWS_NEAR_M of them; the rest is one quiet line in the
+// feed. A playtest's banners were mostly about strangers on the far side
+// of the planet, said over the viewer's own fight.
+export const NEWS_NEAR_M = 40;
+
+// Whether a champion is near enough for its news to be a banner: unknown
+// where it stands is far; an unknown viewer (no body yet) hears it all as
+// before.
+export function newsNear(viewer: Point | null, champion: Point | null): boolean {
+  if (!viewer) return true;
+  if (!champion) return false;
+  return arcDistance(viewer, champion) <= NEWS_NEAR_M;
+}
+
+// A call as the news reaches the viewer: itself when near, else one quiet
+// line of the feed with its words and color and nothing else.
+export function newsCall(call: MomentCall, near: boolean): MomentCall {
+  return near ? call : { text: call.text, color: call.color, feed: true };
+}
+
+// The point a champion's latest mark was shown at (SnapRoyale mk), the
+// best guess the mirror has for a champion out of sight; null for none.
+export function lastMarkPoint(
+  mk: readonly SnapMark[] | undefined,
+  unitId: number,
+): { x: number; y: number; z: number } | null {
+  let best: SnapMark | null = null;
+  for (const m of mk ?? []) if (m[0] === unitId && (!best || m[5] > best[5])) best = m;
+  return best ? { x: best[2], y: best[3], z: best[4] } : null;
 }
 
 // A run of takedowns without dying, by variant: the rung that shows the
@@ -177,7 +215,7 @@ export class RoyaleMoments {
   }
 
   // The mode's notes: the run the viewer snuffed out, the Seedfalls called
-  // and landing. A batch's Seedfalls make one call (Respawn's two seeds
+  // and landing, Respawn's Last light beginning. A batch's Seedfalls make one call (Respawn's two seeds
   // land together): the call kept on its line with the seconds to the
   // landing, `time` the match's clock, and the landing's line without a
   // sound, since the impact's boom is played by distance
@@ -202,6 +240,8 @@ export class RoyaleMoments {
         landsAt = Math.min(landsAt, n.landsAt);
       } else if (n.kind === 'seedfall_land') {
         landed += 1;
+      } else if (n.kind === 'last_light' && this.variant === 'respawn') {
+        calls.push(...LAST_LIGHT_CALLS);
       }
     }
     if (called > 0) {
@@ -226,6 +266,26 @@ export class RoyaleMoments {
     return calls;
   }
 }
+
+// Respawn's Last light beginning (src/sim/royale/last_light.ts): its name
+// in the spotlight with its call, then what it changes, kept on its line.
+export const LAST_LIGHT_COLOR = '#ffd36b';
+export const LAST_LIGHT_CALLS: readonly MomentCall[] = [
+  {
+    text: 'LAST LIGHT',
+    color: LAST_LIGHT_COLOR,
+    spotlight: true,
+    holdMs: 3000,
+    sfx: 'lastlight',
+    duckMs: RUN_DUCK_MS,
+  },
+  {
+    text: 'Takedowns count double until the light goes out',
+    color: LAST_LIGHT_COLOR,
+    keep: true,
+    holdMs: 4200,
+  },
+];
 
 function countWord(n: number): string {
   return n === 2 ? 'Two' : n === 3 ? 'Three' : String(n);
@@ -304,7 +364,9 @@ export interface FeedContext {
   leader?(unitId: number): boolean;
 }
 
-export type FeedTier = 'own' | 'lead' | 'near' | 'fold';
+// 'news' is a mark's news from afar (newsCall): a line of the near rows
+// that is no death.
+export type FeedTier = 'own' | 'lead' | 'near' | 'news' | 'fold';
 
 export function feedTier(k: { unitId: number; killerId: number }, ctx: FeedContext): FeedTier {
   const ids = [k.unitId];
@@ -331,20 +393,29 @@ export function feedLife(tier: FeedTier): number {
 }
 
 // The lines a new one pushes out, by index into `tiers` (newest first, the
-// new one included): the oldest near lines past FEED_NEAR_MAX, then the
-// oldest lines past FEED_MAX, a near one before the viewer's or the
-// leader's. A near line pushed out joins the fold.
+// new one included): the oldest near lines (deaths or news) past
+// FEED_NEAR_MAX, then the oldest lines past FEED_MAX, a near one before
+// the viewer's or the leader's. A near death pushed out joins the fold
+// (foldsOut); a news line just goes.
 export function feedOverflow(tiers: readonly FeedTier[]): number[] {
   const out = new Set<number>();
+  const isNear = (i: number): boolean => tiers[i] === 'near' || tiers[i] === 'news';
   const standing = (): number[] => tiers.map((_, i) => i).filter((i) => !out.has(i));
-  const near = standing().filter((i) => tiers[i] === 'near');
+  const near = standing().filter(isNear);
   for (const i of near.slice(FEED_NEAR_MAX)) out.add(i);
   while (standing().length > FEED_MAX) {
     const rest = standing();
-    const oldestNear = rest.filter((i) => tiers[i] === 'near').pop();
+    const oldestNear = rest.filter(isNear).pop();
     out.add(oldestNear ?? (rest[rest.length - 1] as number));
   }
   return [...out].sort((a, b) => a - b);
+}
+
+// Whether a line pushed out of the feed counts in "+N elsewhere": a near
+// death does; news is no death, and the own and the leader's lines are
+// the feed's to keep.
+export function foldsOut(tier: FeedTier): boolean {
+  return tier === 'near';
 }
 
 // How many deaths the feed folded within its last `windowMs` (wall clock,

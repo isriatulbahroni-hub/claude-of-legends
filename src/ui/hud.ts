@@ -15,16 +15,24 @@ import { playSfx } from '../game/sfx';
 import type { CastTouch } from '../game/touch';
 import { followThumbScale, followUiScale, SETTINGS_EVENT } from '../game/ui_scale';
 import type { PointsReason } from '../net/protocol';
-import type { RoyaleNote } from '../net/royale_client';
+import { ownGraceFloor, type RoyaleNote } from '../net/royale_client';
 import type { RoyaleResult } from '../net/royale_wire';
 import { trackStep } from '../net/stats';
 import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
 import { championPortraitUrl } from '../render/portraits';
 import type { Status } from '../sim/combat/status';
 import { CAMPS } from '../sim/content/camps';
-import { effectiveItemCost, ITEM_LIST, ITEMS } from '../sim/content/items';
+import {
+  CONSUMABLE_LIST,
+  DRAUGHT_CARRY,
+  effectiveItemCost,
+  ITEM_LIST,
+  ITEMS,
+  mayCarryDraught,
+} from '../sim/content/items';
 import { ASPECT_IDS, ASPECTS, type AspectId, CREATURES } from '../sim/content/rings';
 import { SIGILS } from '../sim/content/sigils';
+import { draughtLeft } from '../sim/draught';
 import type { FavorStacks } from '../sim/favors';
 import { withinFountain } from '../sim/fountain';
 import type { RingClock } from '../sim/rings';
@@ -44,11 +52,13 @@ import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
 import { abilityIconUrl, passiveIconUrl, sigilIconUrl } from './ability_icons';
 import { accountOffer, OFFER_CALL } from './account_offer';
+import { chargeFace } from './charge_face';
 import {
   AuraWatch,
   boonChipFace,
   type ChipFace,
   favorChipFace,
+  graceWaitChip,
   statusChip,
   statusKey,
   wrathChipFace,
@@ -78,7 +88,7 @@ import {
   stepsFinished,
   stepsStart,
 } from './first_steps';
-import { HINTS_START, type HintsClock, hintsHold, stepHints } from './hints_fade';
+import { feedTopUnderHints, type HintsClock, hintsHold, hintsStart, stepHints } from './hints_fade';
 import { buildLadderBox, type LadderBox } from './ladder_box';
 import {
   closeLaneCard,
@@ -118,6 +128,8 @@ import {
   wrathChipText,
 } from './objective_line';
 import { firstPointsText, pointsWord, popText } from './points_text';
+import { BURR_COLOR, burrWashLine } from './royale_burr';
+import { GoalTrack } from './royale_goal';
 import { RoyaleHud, type RoyaleKill } from './royale_hud';
 import {
   ANNOUNCE_TOP_PX,
@@ -128,6 +140,15 @@ import {
   STEPS_MAX_W_PX,
   STEPS_TOP_PX,
 } from './royale_layout';
+import { RoyaleLife, SeenChampions } from './royale_life';
+import { respawnTally, royaleSting } from './royale_result';
+import {
+  RETURN_GLOBE_HALF_VH,
+  RETURN_WASH_GAP_VH,
+  RETURN_WASH_PHONE_BOTTOM_PX,
+  returnGlobeOn,
+  returnHint,
+} from './royale_return';
 import {
   hideRoyaleSteps,
   type RoyaleStepsState,
@@ -136,9 +157,10 @@ import {
   royaleStepsStart,
   stepRoyaleSteps,
 } from './royale_steps';
-import { LOOT_EMPTY, LOOT_LABEL, royaleHints } from './royale_text';
+import { LOOT_EMPTY, LOOT_LABEL, royaleHints, royaleRecap } from './royale_text';
 import { renderScoreboardTeam } from './scoreboard_table';
 import { buildSettingsPanel } from './settings_panel';
+import { shopSections } from './shop_sections';
 import { suggestedItem } from './shop_suggestion';
 import { rankable } from './slot_tap';
 import { teamLook } from './team_look';
@@ -288,6 +310,13 @@ const CSS = `
   color: #fff; display: flex; align-items: center; justify-content: center;
   font-size: 15px; font-weight: 600;
 }
+/* The count of a spell cast from charges, in the corner the key leaves. */
+.hud-slot-charges {
+  position: absolute; left: 2px; top: 2px; min-width: 15px; height: 15px; padding: 0 3px;
+  border-radius: 8px; background: rgba(20, 32, 12, 0.88); border: 1px solid #b89b3e;
+  color: #f2e6b0; font-size: 11px; font-weight: 800; line-height: 13px;
+  display: flex; align-items: center; justify-content: center; z-index: 1;
+}
 .hud-slot-pips {
   position: absolute; left: 3px; right: 3px; bottom: 2px;
   display: flex; gap: 2px; justify-content: center;
@@ -311,6 +340,7 @@ const CSS = `
   border: 1px solid #3a4f28; color: #c9d8ae; font-size: 10px; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
 }
+.hud-inv-slot.waiting { opacity: 0.45; filter: grayscale(1); }
 .hud-hints {
   position: absolute; left: 12px; bottom: 12px; font-size: 10px; color: #93a87c;
   text-shadow: 0 1px 2px #000; max-width: 240px; line-height: 1.6;
@@ -770,6 +800,28 @@ const CSS = `
 .hud-overlay.modal { z-index: 41; pointer-events: auto; }
 .hud-overlay-title { font-size: 52px; font-weight: 800; letter-spacing: 2px; }
 .hud-overlay-sub { font-size: 16px; margin-top: 6px; }
+/* A Respawn death's life line, under the subtitle (ui/royale_life.ts). */
+.hud-overlay-life { font-size: 14px; margin-top: 6px; color: #e6dcb8;
+  font-variant-numeric: tabular-nums; }
+/* Who carries the Burr of a Respawn death, under the life line
+   (ui/royale_burr.ts): a thorn's red, the next life's target. */
+.hud-overlay-burr { font-size: 15px; font-weight: 700; margin-top: 8px; color: ${BURR_COLOR};
+  text-shadow: 0 1px 4px #000; }
+/* The Respawn wait's globe (ui/royale_return.ts): it stands in the middle
+   (render/planet_drop.ts RETURN_GLOBE_RIGHT), the wash's lines move into
+   the column left of it, the shade thins toward it, and its line says what
+   a tap or a click on it does. */
+.hud-overlay.returning {
+  padding-right: calc(50 * var(--vw, 1vw) + ${RETURN_GLOBE_HALF_VH + RETURN_WASH_GAP_VH} * var(--vh, 1vh));
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.3) 25%,
+    rgba(0, 0, 0, 0.04) 40%); }
+.hud-overlay.returning > * {
+  max-width: calc(50 * var(--vw, 1vw) - ${RETURN_GLOBE_HALF_VH + RETURN_WASH_GAP_VH} * var(--vh, 1vh));
+  text-align: center; text-wrap: balance; }
+.hud-overlay-hint { font-size: 15px; font-weight: 700; margin-top: 8px; color: #ffe3a0; }
+/* The thumb controls stand down meanwhile: their box under the right thumb
+   took the tap meant for the globe, and a dead champion casts nothing. */
+.hud.thumbs.wait-globe .hud-slots { visibility: hidden; }
 .hud-menu-btn {
   pointer-events: auto; margin-top: 10px; padding: 10px 26px; border-radius: 6px;
   border: 1px solid #466030; background: #1d2a14; color: #d8e6c0;
@@ -811,6 +863,17 @@ const CSS = `
 .hud.compact .hud-end-card { max-height: none; margin-top: 8px; padding: 8px 10px; gap: 8px; }
 .hud.compact .hud-overlay-title { font-size: 26px; letter-spacing: 1px; }
 .hud.compact .hud-overlay-sub { font-size: 12.5px; margin-top: 2px; }
+.hud.compact .hud-overlay-life { font-size: 11.5px; margin-top: 3px; }
+/* A phone: the Burr's line in two short lines, clear of the feed at the
+   right, and the wash raised by their height, clear of the notices under
+   it (ui/royale_layout.ts compactNotesBox). */
+.hud.compact .hud-overlay-burr { font-size: 11.5px; margin-top: 4px; max-width: 250px;
+  line-height: 1.2; text-wrap: balance; }
+.hud.compact .hud-overlay:not(.returning):has(> .hud-overlay-burr:not([hidden])) { padding-bottom: 36px; }
+.hud.compact .hud-overlay-hint { font-size: 12.5px; margin-top: 3px; }
+.hud.compact .hud-overlay.returning { justify-content: flex-end;
+  padding-bottom: ${RETURN_WASH_PHONE_BOTTOM_PX}px; }
+.hud.compact .hud-overlay.returning .hud-overlay-title { font-size: 20px; }
 .hud.compact .hud-end-rating { font-size: 13px; margin-top: 2px; min-height: 0; }
 .hud.compact .hud-end-join { margin-top: 8px; font-size: 11.5px; }
 .hud.compact .hud-menu-btn { margin-top: 6px; padding: 8px 18px; font-size: 13px; }
@@ -964,11 +1027,22 @@ ${compactTapsCss()}
 .hud.compact .hud-announce { font-size: 20px; top: 62px; }
 .hud.compact .hud-spot { font-size: 32px; top: 96px; letter-spacing: 2px; }
 .hud.compact .hud-spot.top { font-size: 44px; letter-spacing: 3px; }
-.hud.compact .hud-feed { font-size: 11px; left: calc(12px + var(--safe-left, env(safe-area-inset-left, 0px))); }
+/* A coach seat's bar (ui/coach_bar.ts) holds the top left on a phone and
+   leaves on the stage where the feed reads clear of it. */
+.hud.compact .hud-feed {
+  font-size: 11px; left: calc(12px + var(--safe-left, env(safe-area-inset-left, 0px)));
+  top: var(--coach-feed-top, 12px);
+}
 /* With the thumbs the touch bar (ui/touch_bar.ts) holds the left edge, and
    the feed ran down over its Menu and Shop buttons: it starts past the
    column, where the coach bar starts too. */
-.hud.thumbs .hud-feed { left: calc(84px + var(--safe-left, env(safe-area-inset-left, 0px))); }
+/* The controls hint stands under the feed's first line there, and the feed
+   reads under the hint while it is up (ui/hints_fade.ts feedTopUnderHints),
+   or under a coach seat's bar when that reaches lower. */
+.hud.thumbs .hud-feed {
+  left: calc(84px + var(--safe-left, env(safe-area-inset-left, 0px)));
+  top: max(var(--coach-feed-top, 12px), var(--hints-feed-top, 12px));
+}
 .hud.compact .hud-hints {
   font-size: 9px; max-width: 170px; line-height: 1.45;
   left: calc(12px + env(safe-area-inset-left, 0px));
@@ -1144,7 +1218,14 @@ export class Hud {
   private readonly xpText: HTMLElement;
   private readonly slots = new Map<
     AbilityKey,
-    { root: HTMLElement; cd: HTMLElement; pips: HTMLElement; up: HTMLElement }
+    {
+      root: HTMLElement;
+      cd: HTMLElement;
+      pips: HTMLElement;
+      up: HTMLElement;
+      // The count of a spell cast from charges (charge_face.ts).
+      charges: HTMLElement;
+    }
   >();
   private readonly sigilSlots: { root: HTMLElement; cd: HTMLElement }[] = [];
   private readonly invSlots: HTMLElement[] = [];
@@ -1242,8 +1323,11 @@ export class Hud {
   // The controls hint and its fade clock (ui/hints_fade.ts): seconds of
   // uncovered screen, null hold on a mouse where it stays.
   private readonly hintsEl: HTMLElement;
-  private hintsClock: HintsClock = HINTS_START;
+  private hintsClock: HintsClock;
   private readonly hintsHold: number | null;
+  // The feed's place under the thumbs hint last written (feedTopUnderHints),
+  // so a frame writes the style only when it moves.
+  private feedUnderHints: number | null = null;
   // What the browser answered the landscape ask (setLandscapeLocked), and
   // whether the phone is upright: with the setting for the rotated view
   // (game/rotated_view.ts), what decides whether the turn wall stands.
@@ -1304,6 +1388,22 @@ export class Hud {
   // (ui/royale_steps.ts), in a match on the Wanderseed; null in a 5v5.
   private readonly royale: RoyaleHud | null;
   private royaleSteps: RoyaleStepsState | null = null;
+  // Respawn's wash (ui/royale_life.ts): the life that just ended, under
+  // the subtitle, and the champions last seen, for the killer's recap.
+  private readonly royaleVariant: RoyaleVariant | null;
+  private readonly royaleLife = new RoyaleLife();
+  private readonly royaleSeen = new SeenChampions();
+  private readonly deathLife: HTMLElement;
+  // Who carries the Burr of a Respawn death (ui/royale_burr.ts).
+  private readonly deathBurr: HTMLElement;
+  // The Respawn wait's globe line (ui/royale_return.ts returnHint).
+  private readonly deathHint: HTMLElement;
+  // The best Respawn tally this browser kept before this match's card,
+  // read once (game/settings.ts royaleBest).
+  private royaleBestBefore: number | null = null;
+  // The points this browser's battle royale seats earned before this match
+  // and since, for the end card's goal (ui/royale_goal.ts); null in a 5v5.
+  private readonly royaleGoal: GoalTrack | null;
 
   constructor(
     container: HTMLElement,
@@ -1327,6 +1427,13 @@ export class Hud {
     this.guest = guest;
     this.mode = mode;
     this.guideMode = guide;
+    this.royaleVariant = royale;
+    this.royaleGoal = royale
+      ? new GoalTrack(
+          () => getSettings().royaleGoal,
+          (total) => updateSettings({ royaleGoal: total }),
+        )
+      : null;
 
     const style = document.createElement('style');
     style.textContent = CSS;
@@ -1349,6 +1456,7 @@ export class Hud {
     this.portrait =
       typeof window.matchMedia === 'function' ? window.matchMedia('(orientation: portrait)') : null;
     this.hintsHold = hintsHold(coarsePointer, thumbs);
+    this.hintsClock = hintsStart(guide);
     // The first steps, for a person on the seat: what this browser has
     // done, unless the player hid the guide. A coach or a replay viewer
     // meets none, and that is not remembered as hidden.
@@ -1492,6 +1600,9 @@ export class Hud {
       slot.appendChild(cd);
       const pips = el('div', 'hud-slot-pips');
       slot.appendChild(pips);
+      const charges = el('div', 'hud-slot-charges');
+      charges.style.display = 'none';
+      slot.appendChild(charges);
       const up = el('div', 'hud-slot-up', '+');
       up.style.display = 'none';
       up.addEventListener('click', (e) => {
@@ -1553,7 +1664,7 @@ export class Hud {
         if (thumbs && e.pointerType === 'touch') this.castTouch?.abilityCancel(key);
       });
       slots.appendChild(slot);
-      this.slots.set(key, { root: slot, cd, pips, up });
+      this.slots.set(key, { root: slot, cd, pips, up, charges });
     }
     for (const [i, keyLabel] of (['D', 'F'] as const).entries()) {
       const slot = el('div', 'hud-slot');
@@ -1642,8 +1753,12 @@ export class Hud {
         if (!itemDef) return royale ? [...LOOT_EMPTY] : [];
         const lines = describeItem(itemDef, statLabel(itemDef.stats));
         // Nothing to sell it for in a battle royale: no gold, no fountain.
-        return royale ? lines : [...lines, 'Right-click to sell (70 percent back, at fountain).'];
+        if (royale) return lines;
+        if (itemDef.drink) lines.push(`Click or press ${i + 1} to drink it.`);
+        return [...lines, 'Right-click to sell (70 percent back, at fountain).'];
       });
+      // A click on a Sapdraught drinks it, anywhere.
+      slot.addEventListener('click', () => this.drinkSlot(i));
       // Right-click sells at the fountain for 70 percent of the price.
       slot.addEventListener('contextmenu', (e) => {
         e.preventDefault();
@@ -1736,8 +1851,9 @@ export class Hud {
     this.targetFrame.append(this.targetPortrait, targetBody);
 
     // The shop: a large centered window (clear of the minimap) laid out like
-    // the genre expects. Components on top, finished items below with their
-    // recipes visible on the card, and a detail pane showing the full build
+    // the genre expects. Components and drinks on top (ui/shop_sections.ts),
+    // finished items below with their recipes visible on the card, and a
+    // detail pane showing the full build
     // path, the discounted price, and a Buy button.
     this.shop = el('div', 'hud-shop');
     const shopHead = el('div', 'hud-shop-head');
@@ -1791,18 +1907,7 @@ export class Hud {
       for (const item of items) cards.appendChild(makeCard(item));
       shopGrid.appendChild(cards);
     };
-    addSection(
-      'Components',
-      ITEM_LIST.filter((i) => i.tier === 1),
-    );
-    addSection(
-      'Finished items, built from two components',
-      ITEM_LIST.filter((i) => i.tier === 2),
-    );
-    addSection(
-      'Legendary upgrades, built from a finished item',
-      ITEM_LIST.filter((i) => i.tier === 3),
-    );
+    for (const section of shopSections()) addSection(section.title, section.items);
     this.shopDetail = el('div', 'hud-shop-detail');
     shopBody.append(shopGrid, this.shopDetail);
     this.shop.append(shopHead, shopBody);
@@ -1906,7 +2011,20 @@ export class Hud {
     this.deathOverlay = el('div', 'hud-overlay');
     this.deathSub = el('div', 'hud-overlay-sub');
     this.deathTitle = el('div', 'hud-overlay-title', 'SLAIN');
-    this.deathOverlay.append(this.deathTitle, this.deathSub);
+    this.deathLife = el('div', 'hud-overlay-life');
+    this.deathLife.hidden = true;
+    this.deathHint = el('div', 'hud-overlay-hint');
+    this.deathHint.hidden = true;
+    this.deathBurr = el('div', 'hud-overlay-burr');
+    this.deathBurr.hidden = true;
+    // In reading order: who, this life, the Burr, then the globe's line.
+    this.deathOverlay.append(
+      this.deathTitle,
+      this.deathSub,
+      this.deathLife,
+      this.deathBurr,
+      this.deathHint,
+    );
 
     this.endOverlay = el('div', 'hud-overlay modal');
     this.endTitle = el('div', 'hud-overlay-title');
@@ -1998,10 +2116,10 @@ export class Hud {
       turnLeave,
     );
 
+    root.append(turnWall, bottom);
+    // Only a person on the seat meets the controls hint (hintsStart).
+    if (!this.hintsClock.faded) root.appendChild(hints);
     root.append(
-      turnWall,
-      bottom,
-      hints,
       kda,
       this.teamScore.el,
       this.targetFrame,
@@ -2068,6 +2186,7 @@ export class Hud {
   showPoints(delta: number, total: number, reason: PointsReason): void {
     this.pointsSeen = true;
     this.pointsEarned += delta;
+    this.royaleGoal?.earn(delta);
     this.endLadder.setEarned(this.pointsEarned);
     this.pauseLadder.setEarned(this.pointsEarned);
     this.pointsBox.classList.add('on');
@@ -2122,13 +2241,30 @@ export class Hud {
       extras.push(this.endOffer);
     }
     extras.push(this.endFeedback.root);
-    this.royale.showResult(result, extras);
+    // Respawn's best (game/settings.ts royaleBest): the one kept before
+    // this match goes on the card, and this seat's tally is kept after it
+    // when higher. Read once, so a card drawn again says the same.
+    const respawn = result.v === 'respawn';
+    if (this.royaleBestBefore === null) this.royaleBestBefore = getSettings().royaleBest;
+    const best = this.royaleBestBefore;
+    this.royale.showResult(result, extras, {
+      assists: own?.assists ?? 0,
+      best: respawn ? best : 0,
+      goal: this.scores() ? (this.royaleGoal?.model() ?? null) : null,
+    });
+    if (respawn && respawnTally(result) > getSettings().royaleBest) {
+      updateSettings({ royaleBest: respawnTally(result) });
+    }
     this.deathOverlay.classList.remove('open');
-    // Heard once, when it came.
+    // Heard once, when it came: Respawn's middle of the field hears
+    // nothing (ui/royale_result.ts royaleSting).
     if (!this.endPlayed) {
       this.endPlayed = true;
-      playSfx(won ? 'victory' : 'defeat');
-      announceVoice(won ? 'victory' : 'defeat', true);
+      const sting = royaleSting(result);
+      if (sting) {
+        playSfx(sting);
+        announceVoice(sting, true);
+      }
     }
     this.syncOverlay();
   }
@@ -2266,6 +2402,24 @@ export class Hud {
       this.hintsHold,
     );
     if (this.hintsClock.faded) this.hintsEl.classList.add('faded');
+    this.placeFeedUnderHints();
+  }
+
+  // Measured only while the feed has a line to place, the few seconds a
+  // kill shows in the hint's first seconds; the safe area moves the hint,
+  // so its edge is read where it stands.
+  private placeFeedUnderHints(): void {
+    const thumbs = this.stepsInput === 'thumbs';
+    if (thumbs && !this.hintsClock.faded && this.feed.childElementCount === 0) return;
+    const top = feedTopUnderHints(
+      thumbs,
+      this.hintsClock.faded,
+      thumbs ? this.hintsEl.offsetTop + this.hintsEl.offsetHeight : 0,
+    );
+    if (top === this.feedUnderHints) return;
+    this.feedUnderHints = top;
+    if (top === null) this.rootEl.style.removeProperty('--hints-feed-top');
+    else this.rootEl.style.setProperty('--hints-feed-top', `${top}px`);
   }
 
   private stepNudge(): void {
@@ -2409,7 +2563,7 @@ export class Hud {
     const id = next.current;
     const visible = id !== null && !view.covered && !view.dead;
     if (id !== null && visible) {
-      const line = royaleStepLine(id, this.stepsInput);
+      const line = royaleStepLine(id, this.stepsInput, getSettings().leftClickMoves);
       if (this.stepsLineEl.textContent !== line) this.stepsLineEl.textContent = line;
       this.stepsEl.classList.toggle('below', this.nudgeEl.classList.contains('on'));
     }
@@ -2691,6 +2845,11 @@ export class Hud {
       this.toast('You must be at your fountain to buy.');
       return;
     }
+    if (ITEMS[itemId]?.drink && !mayCarryDraught(u.items)) {
+      playSfx('deny');
+      this.toast(`You carry ${DRAUGHT_CARRY} drinks already.`);
+      return;
+    }
     const cost = effectiveItemCost(itemId, u.items);
     if (u.gold < cost) {
       playSfx('deny');
@@ -2699,6 +2858,17 @@ export class Hud {
     }
     if (this.world.buyItem(this.selfId, itemId)) playSfx('buy');
     this.update();
+  }
+
+  // Drinks the Sapdraught in bag slot `slot` (a click on it, its number
+  // key, the touch bar's Drink); a slot holding anything else does nothing.
+  drinkSlot(slot: number): void {
+    if (this.royale) return;
+    const u = this.world.units.get(this.selfId);
+    const itemId = u?.items[slot];
+    if (!u || u.dead || !itemId || !ITEMS[itemId]?.drink) return;
+    if (this.world.drinkItem(this.selfId, slot)) this.update();
+    else this.toast('A drink is already working.');
   }
 
   // A bright pulse on the mana bar so "why did my key do nothing" has a
@@ -2752,12 +2922,26 @@ export class Hud {
       mk('hud-detail-name', def.name),
       mk(
         'hud-detail-tier',
-        def.tier === 1 ? 'Component' : def.tier === 2 ? 'Finished item' : 'Legendary upgrade',
+        def.drink
+          ? 'Drink'
+          : def.tier === 1
+            ? 'Component'
+            : def.tier === 2
+              ? 'Finished item'
+              : 'Legendary upgrade',
       ),
     );
     head.append(bigIcon, title);
     d.appendChild(head);
-    d.appendChild(mk('hud-detail-stats', statLabel(def.stats)));
+    d.appendChild(
+      mk(
+        'hud-detail-stats',
+        def.drink
+          ? `${def.drink.heal} health over ${def.drink.seconds} s. Click it in your bag, ` +
+              'or press its number, to drink it anywhere.'
+          : statLabel(def.stats),
+      ),
+    );
 
     const buildIcon = (itemId: string, owned: boolean): HTMLElement => {
       const item = ITEMS[itemId];
@@ -2819,10 +3003,12 @@ export class Hud {
     buy.type = 'button';
     buy.className = 'hud-buy';
     buy.textContent = `Buy (${eff}g)`;
-    buy.disabled = !shopOk || u.gold < eff;
+    const full = def.drink !== undefined && !mayCarryDraught(u.items);
+    buy.disabled = !shopOk || u.gold < eff || full;
     buy.addEventListener('click', () => this.tryBuy(def.id));
     d.appendChild(buy);
     if (!shopOk) d.appendChild(mk('hud-buy-why', 'Return to your fountain to buy.'));
+    else if (full) d.appendChild(mk('hud-buy-why', `You carry ${DRAUGHT_CARRY} already.`));
     else if (u.gold < eff)
       d.appendChild(mk('hud-buy-why', `You need ${Math.ceil(eff - u.gold)} more gold.`));
   }
@@ -2967,14 +3153,36 @@ export class Hud {
         this.deathRecap =
           k.killerId === k.unitId || k.killerId === 0
             ? 'Burned by the Dusk'
-            : `Taken down by ${royale.killerName(k)}`;
+            : this.royaleVariant === 'respawn'
+              ? this.respawnRecap(k, royale)
+              : `Taken down by ${royale.killerName(k)}`;
       } else if (k.killerId === this.selfId && champion) {
+        this.royaleLife.tookDown();
         playSfx('kill');
         this.announce(`You took down ${royale.victimName(k)}`, '#ffd94a');
         if (!spoken) announceVoice('self_kill', true, true);
       }
       royale.play(calls);
     }
+  }
+
+  // Respawn's recap: who, and how close it was. The killer's body is read
+  // as last seen (ui/royale_life.ts SeenChampions), the death having taken
+  // the sight that showed it, and frozen in the line.
+  private respawnRecap(k: RoyaleKill, royale: RoyaleHud): string {
+    const time = this.world.time;
+    const body = this.royaleSeen.body(k.killerId, this.world.units.get(k.killerId), time);
+    const def = body ? this.world.championDef(body.championId) : null;
+    return royaleRecap(
+      royale.killerName(k),
+      body && def
+        ? {
+            champion: def.name,
+            level: body.level,
+            hpShare: body.maxHp > 0 ? body.hp / body.maxHp : 0,
+          }
+        : null,
+    );
   }
 
   // Called once per world tick.
@@ -3225,8 +3433,14 @@ export class Hud {
       shown.push([s, key, n]);
     }
     this.auraWatch.step(standing);
+    // A Respawn Arrival's Grace counts to its floor, then waits on a move.
+    const graceFrom = this.royale ? ownGraceFloor(this.world.royaleView?.(), this.selfId) : null;
     for (const [s, key, n] of shown) {
-      chip(`status-${s.kind}-${n}`, statusChip(s, this.world.time, this.auraWatch.held(key)), null);
+      const face =
+        s.kind === 'untargetable' && graceFrom !== null
+          ? graceWaitChip(graceFrom, this.world.time)
+          : statusChip(s, this.world.time, this.auraWatch.held(key));
+      chip(`status-${s.kind}-${n}`, face, null);
     }
     this.reconcileChips(wanted);
 
@@ -3236,7 +3450,16 @@ export class Hud {
       if (!slot) continue;
       const rank = effectiveRank(u, key);
       const maxRank = key === 'R' ? ULT_MAX_RANK : BASIC_MAX_RANK;
-      const remaining = (u.cooldowns[key] ?? 0) - this.world.time;
+      const face = chargeFace(
+        def?.abilities[key],
+        u.charges[key],
+        u.cooldowns[key] ?? 0,
+        this.world.time,
+      );
+      const remaining = face.remaining;
+      const showCount = face.count !== null && rank > 0;
+      slot.charges.style.display = showCount ? 'flex' : 'none';
+      if (showCount) setText(slot.charges, String(face.count));
       if (rank <= 0) {
         slot.cd.style.display = 'flex';
         // R waits on champion level; basics wait on a skill point.
@@ -3279,11 +3502,14 @@ export class Hud {
       }
     }
 
+    const drinking = draughtLeft(u, this.world.time) > 0;
     for (let i = 0; i < this.invSlots.length; i++) {
       const itemId = u.items[i];
       const slot = this.invSlots[i]!;
       const def = itemId ? ITEMS[itemId] : undefined;
       slot.classList.toggle('full', itemId !== undefined);
+      // A Sapdraught waits greyed while another is being drunk.
+      slot.classList.toggle('waiting', def?.drink !== undefined && drinking);
       if (def) {
         setText(slot, '');
         slot.style.backgroundImage = `url(${itemIconUrl(def)})`;
@@ -3317,11 +3543,12 @@ export class Hud {
             : 'Click an item to inspect it; Buy or double-click to purchase.'
           : 'Browse anywhere; buying needs your fountain.';
       this.shopGoldText.textContent = `${Math.floor(u.gold)}g`;
-      for (const item of ITEM_LIST) {
+      for (const item of [...ITEM_LIST, ...CONSUMABLE_LIST]) {
         const btn = this.itemButtons.get(item.id);
         if (btn) {
           const cost = effectiveItemCost(item.id, u.items);
-          btn.classList.toggle('cant', !shopOk || u.gold < cost);
+          const full = item.drink !== undefined && !mayCarryDraught(u.items);
+          btn.classList.toggle('cant', !shopOk || u.gold < cost || full);
           btn.classList.toggle('sel', item.id === this.shopSelected);
           btn.classList.toggle('suggested', item.id === suggestion);
         }
@@ -3421,6 +3648,12 @@ export class Hud {
       // The battle royale's own wash (ui/royale_hud.ts), gone once its end
       // screen stands; and its own end screen, from the server's result.
       this.royale.update();
+      const time = this.world.time;
+      const inPlay = this.world.royaleView?.()?.st === 'play';
+      // A life begun: the last death's recap is done with, or the next
+      // wash would open on it until its own note comes.
+      if (this.royaleLife.step(time, inPlay, u.dead, selfRow)) this.deathRecap = '';
+      this.royaleSeen.note(this.world.units.values(), this.selfId, time);
       const dead = u.dead && !this.royale.resultShown();
       this.deathOverlay.classList.toggle('open', dead);
       if (dead) {
@@ -3428,6 +3661,24 @@ export class Hud {
         if (this.deathTitle.textContent !== words.title) this.deathTitle.textContent = words.title;
         setText(this.deathSub, this.deathRecap ? `${this.deathRecap} · ${words.sub}` : words.sub);
       }
+      // Respawn only: what the life that just ended held.
+      const life = dead && this.royaleVariant === 'respawn' ? this.royaleLife.line(selfRow) : null;
+      if (life !== null) setText(this.deathLife, life);
+      if (this.deathLife.hidden !== (life === null)) this.deathLife.hidden = life === null;
+      const view = this.world.royaleView?.() ?? null;
+      // And who carries the Burr of it: the next life's target.
+      const burr = dead
+        ? burrWashLine(view, time, (id) => this.world.seat?.(id)?.name ?? null)
+        : null;
+      if (burr !== null) setText(this.deathBurr, burr);
+      if (this.deathBurr.hidden !== (burr === null)) this.deathBurr.hidden = burr === null;
+      // The wait's globe: the lines up top, and what a tap on it does.
+      const globe = dead && view !== null && returnGlobeOn(view, u, time);
+      this.deathOverlay.classList.toggle('returning', globe);
+      this.rootEl.classList.toggle('wait-globe', globe);
+      const hint = globe ? returnHint(this.coarsePointer, view?.bk !== undefined) : null;
+      if (hint !== null) setText(this.deathHint, hint);
+      if (this.deathHint.hidden !== (hint === null)) this.deathHint.hidden = hint === null;
       this.syncOverlay();
       return;
     }

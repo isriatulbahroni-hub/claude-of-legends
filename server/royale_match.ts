@@ -3,8 +3,9 @@
 // team; the people who started it on the champions they picked, bots on the
 // rest. A newcomer takes a bot's seat (ADR 0025), a bot playing the
 // champion they picked when there is one: once the match is in play the
-// champion arrives fresh at a quiet spot, in its Grace, its tally from zero
-// (CONTEXT.md: Arrival; src/sim/royale/grace.ts). A
+// champion arrives fresh (in Respawn beside a fair first fight, else at a
+// quiet spot), in its Grace, its tally from zero (CONTEXT.md: Arrival;
+// src/sim/royale/grace.ts). A
 // person who leaves hands the seat to the mode's bot, held for them when the
 // connection only dropped. Transport-agnostic: the service hands it what a
 // socket said and sends what it answers.
@@ -18,6 +19,7 @@ import {
   type RoyaleRecord,
 } from '../src/net/replay';
 import type { RoyaleResult, RoyaleVariant, SeatLabel } from '../src/net/royale_wire';
+import { takesReturnPick } from '../src/sim/royale/return_pick';
 import {
   freshStats,
   noteMoments,
@@ -27,7 +29,7 @@ import {
   withoutOrderNumber,
 } from './match';
 import { applyRoyaleCommand, ROYALE_VERBS } from './royale_commands';
-import { chooseBotSeat } from './royale_join';
+import { chooseBotSeat, lowerMedian } from './royale_join';
 import { RoyalePoints } from './royale_points';
 import { finalPlaces, type RankedSeat, royaleRanking, royaleResult } from './royale_ranking';
 import { type RoyalePerson, royaleSeats } from './royale_seats';
@@ -52,6 +54,12 @@ export interface RoyalePlayer {
   ackAt: number;
   // Took a bot's seat after the start (ADR 0025).
   dropIn: boolean;
+  // Respawn, a drop-in into the match in play: when they landed, and every
+  // seat's score then. The rank line and the end card count from there
+  // (server/royale_ranking.ts windowStanding), so a seat that came in late
+  // is ranked on what it played, not against whole-match scores. Null for
+  // a seat from the drop; a rejoin gets back the one it left with.
+  window: { from: number; base: Map<number, number> } | null;
   // The caches list, and the scoreboard with every seat's name and bot
   // mark, reached this person at least once.
   cachesSent: boolean;
@@ -69,6 +77,9 @@ interface SeatState {
   bot: boolean;
   // The person whose dropped connection this seat waits for, by owner.
   heldFor: number | null;
+  // A drop-in's window while the seat waits for them: their rejoin keeps
+  // counting since they landed, not since the drop.
+  heldWindow?: RoyalePlayer['window'];
 }
 
 // A battle royale's replay (src/net/replay.ts ReplayRecord with the mode's
@@ -197,6 +208,15 @@ export class RoyaleMatch {
     const u = this.sim.units.get(unitId);
     const stats = freshStats(this.sim.tickCount, u?.pos.x ?? 0, u?.pos.z ?? 0);
     if (u?.pos.y !== undefined) stats.lastY = u.pos.y;
+    const r = this.sim.royale;
+    const arrived = dropIn && r.stage === 'play';
+    // The seat came down fresh (the Arrival): what it scores from here
+    // falls inside every other drop-in's window.
+    if (arrived) {
+      const score = r.scores.get(unitId) ?? 0;
+      for (const other of this.players.values()) other.window?.base.set(unitId, score);
+      for (const held of this.seats.values()) held.heldWindow?.base.set(unitId, score);
+    }
     const player: RoyalePlayer = {
       clientId: person.clientId,
       owner: person.owner,
@@ -210,6 +230,10 @@ export class RoyaleMatch {
       ack: 0,
       ackAt: 0,
       dropIn,
+      window:
+        arrived && this.variant === 'respawn'
+          ? { from: this.sim.time, base: new Map(r.scores) }
+          : null,
       cachesSent: false,
       scoreSent: false,
       resultSent: false,
@@ -225,21 +249,26 @@ export class RoyaleMatch {
   }
 
   // A newcomer takes a bot's seat (ADR 0025), with the sigils and skin they
-  // chose; in play, the champion's Arrival (Sim.beginArrival): fresh at a
-  // quiet spot inside the light, in its Grace, its score, kills, deaths and
-  // assists from zero, recorded so a replay re-simulates it on the same
-  // tick. During the drop the seat simply lands with everyone. Null when no
-  // seat is left to take.
+  // chose; in play, the champion's Arrival (Sim.beginArrival): fresh inside
+  // the light (in Respawn at the field's level, beside a fair first fight),
+  // in its Grace, its score, kills, deaths and assists from zero, recorded
+  // so a replay re-simulates it on the same tick. During the drop the seat
+  // simply lands with everyone. Null when no seat is left to take.
   takeBotSeat(person: RoyalePerson): RoyalePlayer | null {
     const candidates = [...this.seats.values()].filter((s) => this.takeable(s));
+    // Respawn's seat is the one nearest the field's level (royale_join.ts).
+    const levels: number[] = [];
+    for (const u of this.sim.units.values()) if (u.kind === 'champion') levels.push(u.level);
     const unitId = chooseBotSeat(
       candidates.map((s) => ({
         unitId: s.unitId,
         championId: this.sim.units.get(s.unitId)?.championId ?? s.championId,
         dead: this.sim.units.get(s.unitId)?.dead === true,
         out: this.isOut(s.unitId),
+        level: this.sim.units.get(s.unitId)?.level ?? 1,
       })),
       person.pick.championId,
+      this.variant === 'respawn' ? lowerMedian(levels) : undefined,
     );
     const s = unitId === null ? undefined : this.seats.get(unitId);
     if (unitId === null || !s) return null;
@@ -271,6 +300,7 @@ export class RoyaleMatch {
     if (s) {
       s.bot = true;
       s.heldFor = hold ? p.owner : null;
+      s.heldWindow = hold ? p.window : null;
       this.standIn(p.unitId);
       this.record({ k: this.sim.tickCount, u: p.unitId, e: 'bot_on' });
       this.reidentify(p.unitId);
@@ -278,7 +308,9 @@ export class RoyaleMatch {
     return p;
   }
 
-  // The seat held for `person` (a dropped connection) is theirs again.
+  // The seat held for `person` (a dropped connection) is theirs again; a
+  // drop-in's window with it (a phone put away and taken out again keeps
+  // its count since landing).
   rejoin(person: RoyalePerson, unitId: number): RoyalePlayer | null {
     const s = this.seats.get(unitId);
     if (!s || s.heldFor !== person.owner || !s.bot) return null;
@@ -288,19 +320,31 @@ export class RoyaleMatch {
     s.heldFor = null;
     s.name = person.name;
     this.reidentify(unitId);
-    return this.seat(person, unitId, false);
+    const window = s.heldWindow ?? null;
+    s.heldWindow = null;
+    const p = this.seat(person, unitId, false);
+    p.window = window;
+    return p;
   }
 
   // The reservation on a seat ran out: a newcomer may take it.
   release(unitId: number): void {
     const s = this.seats.get(unitId);
-    if (s) s.heldFor = null;
+    if (s) {
+      s.heldFor = null;
+      s.heldWindow = null;
+    }
   }
 
-  // The landing point a person picked during the drop.
+  // The landing point a person picked during the drop, or in Respawn's
+  // play the point they picked to come back at while dead (src/sim/royale/
+  // return_pick.ts): a pick the sim would refuse is not recorded.
   pickDrop(clientId: number, x: unknown, y: unknown, z: unknown): void {
     const p = this.players.get(clientId);
-    if (!p || this.sim.royale.stage !== 'drop') return;
+    if (!p) return;
+    const r = this.sim.royale;
+    const dead = this.sim.units.get(p.unitId)?.dead === true;
+    if (r.stage !== 'drop' && !takesReturnPick(r.variant, r.stage, dead)) return;
     const at = wirePoint(x, z, y);
     if (!at || at.y === undefined) return;
     p.lastCommandAt = this.sim.tickCount;
@@ -389,6 +433,7 @@ export class RoyaleMatch {
         people: this.players.size,
         caches,
         ...(finalPlace !== undefined ? { finalPlace } : {}),
+        ...(p.window ? { windowBase: p.window.base } : {}),
       },
     );
   }
@@ -415,9 +460,15 @@ export class RoyaleMatch {
   resultFor(clientId: number): RoyaleResult | null {
     const p = this.players.get(clientId);
     if (!p) return null;
-    const result = royaleResult(this.sim.royale, this.rankedSeats(), p.unitId);
+    const r = this.sim.royale;
+    const result = royaleResult(r, this.rankedSeats(), p.unitId, p.window?.base ?? null);
+    // Respawn: how long the seat was the person's, for the end card's
+    // "in 6:12".
+    if (this.variant === 'respawn') {
+      result.held = Math.max(0, Math.round(this.sim.time - (p.window?.from ?? r.dropEndsAt)));
+    }
     // The Grafts the seat took, in order, for the end card.
-    const grafts = this.sim.royale.grafts.get(p.unitId);
+    const grafts = r.grafts.get(p.unitId);
     if (grafts && grafts.length > 0) result.grafts = [...grafts];
     return result;
   }

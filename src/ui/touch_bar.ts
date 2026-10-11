@@ -9,12 +9,17 @@
 // (game/match_stage.ts), which trade edges when the stage is turned.
 
 import { MIN_TAP_PX } from '../game/ui_scale';
+import { draughtSlot } from '../sim/content/items';
+import { draughtLeft } from '../sim/draught';
+import type { Unit } from '../sim/unit';
 
 // The recall and the shop are absent in a battle royale (ADR 0031), and
-// so are their buttons.
+// so are their buttons. Drink shows only while a Sapdraught is carried,
+// greyed while one is being drunk.
 export interface TouchBarActions {
   onRecall?(): void;
   onToggleShop?(): void;
+  onDrink?(): void;
   onToggleMenu(): void;
   onRecenterCamera(): void;
 }
@@ -39,33 +44,69 @@ export const TOUCH_BAR_CSS = `
 .touchbar.left {
   right: auto; left: calc(8px + var(--safe-left, env(safe-area-inset-left, 0px))); top: 38%;
 }
+/* On the right, Drink sits beside the bottom button so the column keeps its
+   height between the score box and the minimap; on the left the column has
+   the room, and beside it is the stick's. */
+.touchbar-btn.drink { position: absolute; bottom: 0; right: calc(100% + 8px); }
+.touchbar.left .touchbar-btn.drink { position: static; }
+.touchbar-btn.drink.busy { opacity: 0.45; filter: grayscale(1); }
 `;
 
-// Returns a teardown removing the bar and its stylesheet, like the HUD's.
+// The Drink button's look for the champion: hidden with no Sapdraught
+// carried (or dead), greyed while a draught still runs, else ready.
+export type DrinkButton = 'hidden' | 'busy' | 'ready';
+
+export function drinkButton(me: Unit | undefined, time: number): DrinkButton {
+  if (!me || me.dead || draughtSlot(me.items) === -1) return 'hidden';
+  return draughtLeft(me, time) > 0 ? 'busy' : 'ready';
+}
+
+export interface TouchBar {
+  // Shows the Drink button as `drinkButton` says; the match calls it every tick.
+  setDrink(look: DrinkButton): void;
+  // Removes the bar and its stylesheet, like the HUD's teardown.
+  dispose(): void;
+}
+
 export function buildTouchBar(
   container: HTMLElement,
   actions: TouchBarActions,
   opts: { side?: 'left' | 'right' } = {},
-): () => void {
+): TouchBar {
   const style = document.createElement('style');
   style.textContent = TOUCH_BAR_CSS;
   document.head.appendChild(style);
   const root = document.createElement('div');
   root.className = opts.side === 'left' ? 'touchbar left' : 'touchbar';
-  const add = (label: string, onTap: () => void): void => {
+  const add = (label: string, onTap: () => void): HTMLButtonElement => {
     const btn = document.createElement('button');
     btn.className = 'touchbar-btn';
     btn.textContent = label;
     btn.addEventListener('click', onTap);
     root.appendChild(btn);
+    return btn;
   };
   add('Menu', actions.onToggleMenu);
   if (actions.onToggleShop) add('Shop', actions.onToggleShop);
   if (actions.onRecall) add('Recall', actions.onRecall);
   add('Center', actions.onRecenterCamera);
+  const drink = actions.onDrink ? add('Drink', actions.onDrink) : null;
+  if (drink) {
+    drink.classList.add('drink');
+    drink.style.display = 'none';
+  }
+  let drinkLook: DrinkButton = 'hidden';
   container.appendChild(root);
-  return () => {
-    root.remove();
-    style.remove();
+  return {
+    setDrink(look) {
+      if (!drink || look === drinkLook) return;
+      drinkLook = look;
+      drink.style.display = look === 'hidden' ? 'none' : '';
+      drink.classList.toggle('busy', look === 'busy');
+    },
+    dispose() {
+      root.remove();
+      style.remove();
+    },
   };
 }

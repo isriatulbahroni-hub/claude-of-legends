@@ -89,6 +89,7 @@ export class FakeRoyaleSim implements RoyaleSim {
       seedfalls: [],
       risings: [],
       marks: [],
+      burrs: new Map(),
       clamors: [],
       wrathHolder: null,
       offers: new Map(),
@@ -234,6 +235,10 @@ export class FakeRoyaleSim implements RoyaleSim {
   isPointVisible(team: number, x: number, z: number, y?: number): boolean {
     const p = { x, y, z };
     return this.sightOf(team).some((s) => dist(s.pos, p) <= SIGHT);
+  }
+
+  zoneSeen(team: number, z: Zone): boolean {
+    return z.team === team || this.isPointVisible(team, z.pos.x, z.pos.z, z.pos.y);
   }
 
   scoreboard(): readonly ScoreRow[] {

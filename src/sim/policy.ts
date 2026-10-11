@@ -29,8 +29,10 @@ export const POLICY_CONTRACT_VERSION = 0;
 // A visible status on a champion, the on-screen state ring made observable
 // (additive v0 block). Curated to what a human viewer reads off the screen;
 // internal bookkeeping statuses (marks, empowers, buff stats) stay hidden.
+// 'fumble' (its attacks miss, CONTEXT.md: Fumble) is an additive v0 kind:
+// a policy that does not know it reads past it.
 export interface ObsStatus {
-  kind: 'stun' | 'root' | 'airborne' | 'slow' | 'shield';
+  kind: 'stun' | 'root' | 'airborne' | 'slow' | 'shield' | 'fumble';
   until: number;
 }
 
@@ -111,6 +113,10 @@ export interface ObsZone {
   radius: number;
   friendly: boolean;
   detonateAt: number | null;
+  // A hidden pod (additive v0 field, CONTEXT.md: Sourpod): it bursts when
+  // an enemy champion steps on it. An enemy pod is listed only while one
+  // of the team's reveal zones covers it, never for standing close.
+  trap?: true;
 }
 
 // A temporary ability wall (additive v0 block). Walls are terrain: both
@@ -168,9 +174,17 @@ export interface ObsSelf {
   level: number;
   gold: number;
   dead: boolean;
-  // Cooldown, mana, and rank gates resolved; the decision budget is not
-  // part of readiness (a ready ability can still be budget-rejected).
+  // Cooldown, mana, rank and charge gates resolved; the decision budget is
+  // not part of readiness (a ready ability can still be budget-rejected).
   abilityReady: Record<AbilityKey, boolean>;
+  // The charges in store of the abilities cast from charges (additive v0
+  // field, CONTEXT.md: Charge), only for those keys: the count on the
+  // button a person reads. Absent when the kit carries none.
+  abilityCharges?: Partial<Record<AbilityKey, number>>;
+  // The own champion's visible statuses (additive v0 field), the chips a
+  // person reads under their own portrait: a fumble tells it its attacks
+  // will miss. Absent when there are none.
+  statuses?: readonly ObsStatus[];
   // Effective ability ranks (R reads 0 until champion level 6) and unspent
   // skill points. Additive v0 fields, like `invulnerable` on ObsUnit.
   abilityRanks: Record<AbilityKey, number>;
@@ -279,6 +293,17 @@ export interface ObsMark {
   shownAt: number;
 }
 
+// The seat's own Burr (additive v0 block, CONTEXT.md: Burr): the champion
+// that last took it down, its level, until when taking it down pays, and
+// where it stands while it stands (absent while it is dead). Only the
+// seat it was taken from reads it.
+export interface ObsBurr {
+  id: number;
+  level: number;
+  until: number;
+  at?: { x: number; y: number; z: number };
+}
+
 // A takedown ringing out (additive v0 block, CONTEXT.md: Clamor): where and
 // when, for CLAMOR_S.
 export interface ObsClamor {
@@ -316,7 +341,9 @@ export interface ObsRoyale {
     at: { x: number; y: number; z: number };
     to: { x: number; y: number; z: number };
   }[];
-  // The seat's own landing pick during the drop, null before it picks.
+  // The seat's own landing pick during the drop, and in Respawn's play its
+  // pick of where it comes back while dead (royale/return_pick.ts); null
+  // before it picks.
   drop: { x: number; y: number; z: number } | null;
   // The cache this seat is opening and since when, null when none.
   opening: { cacheId: number; since: number } | null;
@@ -339,6 +366,8 @@ export interface ObsRoyale {
   seedfalls?: readonly ObsSeedfall[];
   risings?: readonly ObsRising[];
   marks?: readonly ObsMark[];
+  // The seat's own Burr while it lasts (Respawn), absent otherwise.
+  burr?: ObsBurr;
   clamors?: readonly ObsClamor[];
   arriving?: boolean;
   graced?: readonly { id: number; until: number }[];
@@ -454,7 +483,8 @@ export type Action =
   // wave freeze stands on. An intention like move, outside the budget.
   | { kind: 'stop' }
   // The battle royale's landing pick during the drop (additive v0 action):
-  // the same pick a person makes on the globe (Sim.pickDrop).
+  // the same pick a person makes on the globe (Sim.pickDrop); in Respawn,
+  // a dead seat's pick of where it comes back, likewise.
   | { kind: 'drop'; x: number; y: number; z: number }
   // The battle royale's Graft pick (additive v0 action): one of the open
   // offer's three cards, the same pick a person makes. Free like 'level'

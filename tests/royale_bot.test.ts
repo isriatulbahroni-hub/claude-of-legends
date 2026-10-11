@@ -9,6 +9,7 @@
 // a dead Respawn seat's pick of where to come back.
 
 import { describe, expect, it } from 'vitest';
+import type { AbilityDef } from '../src/sim/combat/casting';
 import {
   AMBUSH_WAIT_S,
   CALL_WALK_SPEED,
@@ -32,15 +33,18 @@ import {
   RISING_LEVEL,
   ROAM_GOAL_M,
   ROYALE_SKILLS,
+  type RoyaleSkillId,
   SEEDFALL_LATE_S,
   SEEDFALL_STANDOFF_M,
   STEAL_BODY_HP,
   STEAL_M,
+  sharpenedSkill,
   WARY_M,
   WARY_STEP_M,
 } from '../src/sim/content/bots/royale_skills';
 import { CHAMPIONS } from '../src/sim/content/champions';
 import { dirTo, dist, type Vec3 } from '../src/sim/geo';
+import { POD_WARY_M } from '../src/sim/playbook/micro';
 import type {
   Action,
   Observation,
@@ -61,7 +65,6 @@ import {
   nerveOf,
   paceAlive,
   paceNerve,
-  RESPAWN_PICK_S,
   ROOM_M,
   risingInDark,
   SETTLE_M,
@@ -725,6 +728,35 @@ describe('the calm and the sharpening', () => {
     expect(effectiveSkill(gentle, at(0, 3)).id).toBe('normal');
     expect(effectiveSkill(normal, at(0, 5)).id).toBe('normal');
   });
+
+  // The rule in one place (royale_skills.ts sharpenedSkill): the mode reads
+  // it off its state for an Arrival's first foe (royale/grace.ts), the bot
+  // off its observation.
+  it('sharpens a seat by the same table off its score and phase alone', () => {
+    const table: [RoyaleSkillId, number, number, RoyaleSkillId][] = [
+      ['gentle', 1, 0, 'gentle'],
+      ['gentle', 2, 0, 'normal'],
+      ['gentle', 4, 0, 'strong'],
+      ['normal', 3, 0, 'normal'],
+      ['normal', 4, 0, 'strong'],
+      ['strong', 0, 0, 'strong'],
+      ['gentle', 0, 2, 'gentle'],
+      ['gentle', 0, 3, 'normal'],
+      ['normal', 0, 5, 'normal'],
+      ['gentle', 4, 5, 'strong'],
+    ];
+    for (const [id, score, phase, out] of table) {
+      expect(sharpenedSkill(id, score, phase)).toBe(out);
+    }
+    for (const id of ['gentle', 'normal', 'strong'] as const) {
+      for (let score = 0; score <= 6; score++) {
+        for (let phase = 0; phase <= 6; phase++) {
+          const r = royale({ score, dusk: { ...wholeDusk(sph(1, 0, 0)), phase } });
+          expect(effectiveSkill(ROYALE_SKILLS[id], r).id).toBe(sharpenedSkill(id, score, phase));
+        }
+      }
+    }
+  });
 });
 
 describe('the calls', () => {
@@ -923,30 +955,17 @@ describe('a dead Respawn seat', () => {
       normal,
     );
 
-  it('picks to come back beside a Seedfall landing within 20 s of its return', () => {
+  // A pick beside a Seedfall crowded the returns into the fights (the
+  // royale report, seeds 1 to 24: the stand-in's median life 15.0 s
+  // against 18.3 s with none): it comes back at the edge, as a person who
+  // taps nothing on the globe.
+  it('picks nothing, a Seedfall landing as it comes back or not', () => {
     const back = 20 + RESPAWN_S;
-    const pick = dead(back + RESPAWN_PICK_S);
-    expect(pick.kind).toBe('drop');
-    expect(dist(point2(pick), at)).toBeLessThan(0.01);
-    expect(dead(back - RESPAWN_PICK_S).kind).toBe('drop');
-    expect(dead(back + RESPAWN_PICK_S + DT).kind).toBe('noop');
-    expect(dead(back + RESPAWN_PICK_S, { variant: 'one_life' }).kind).toBe('noop');
-  });
-
-  it('picks the point inside the light nearest a Seedfall outside it', () => {
-    const d: DuskState = { ...phase1, now: { center: here, radius: 12 } };
-    const pick = dead(30, { dusk: d });
-    expect(pick.kind).toBe('drop');
-    expect(insideCap(d.now, point2(pick))).toBe(true);
-    expect(dist(point2(pick), at)).toBeLessThan(dist(here, at));
+    expect(dead(back).kind).toBe('noop');
+    expect(dead(back + 10).kind).toBe('noop');
+    expect(dead(back, { variant: 'one_life' }).kind).toBe('noop');
   });
 });
-
-function point2(a: Action): Vec3 {
-  if (a.kind !== 'drop') throw new Error(`no drop in ${a.kind}`);
-  return { x: a.x, y: a.y, z: a.z };
-}
-
 describe("One life's pace", () => {
   it('reads the pace off the minutes since the landing', () => {
     const r = royale();
@@ -1376,5 +1395,95 @@ describe('the Risings and the hunted', () => {
     // A slayer, at full health after its creature, is no threat to flee.
     const slayer = obs(here, { royale: { marks: [mark(7, at, { kind: 'slayer' })] } });
     expect(callOf(slayer, gentle)).toBeNull();
+  });
+});
+
+describe('pods and the fumble on the planet', () => {
+  it('plants a pod where the enemy will stand when it arms, within its reach', () => {
+    const at = along(here, east, 4, R);
+    const v = north;
+    const e = enemy(9, at, { vx: v.x * 3.7, vy: v.y * 3.7, vz: v.z * 3.7 });
+    const r: AbilityDef = {
+      name: 'Test pod',
+      manaCost: 0,
+      cooldown: 1,
+      castRange: 6,
+      spec: {
+        kind: 'trap',
+        radius: 0.9,
+        duration: 60,
+        armDelay: 1,
+        maxLive: 3,
+        burst: { radius: 2, duration: 1 },
+      },
+    };
+    if (r.spec.kind !== 'trap') throw new Error('a pod');
+    const sense = buildSense(obs(here, { units: [e] }), royale(), layout, strong);
+    const lead = 3.7 * (r.spec.armDelay + 0.25);
+    const ahead = along(at, v, lead, R);
+    let err = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const aim = aimAt(sense, e, r, new Rng(seed));
+      expect(dist(here, aim)).toBeLessThanOrEqual(r.castRange + strong.aimError + 1e-6);
+      err += dist(aim, ahead);
+    }
+    expect(err / 20).toBeLessThan(0.5);
+  });
+
+  it('rounds a pod it sees instead of walking onto it', () => {
+    // A cache east, and a pod on the straight way to it.
+    const cacheAt = along(here, east, 8, R);
+    const cache = { id: 3, x: cacheAt.x, y: cacheAt.y, z: cacheAt.z, golden: false };
+    const pod = along(here, east, 1.8, R);
+    const rim = 0.9;
+    const bare = obs(here, { royale: { caches: [cache] } });
+    const withPod: Observation = {
+      ...bare,
+      zones: [
+        {
+          x: pod.x,
+          y: pod.y,
+          z: pod.z,
+          radius: rim,
+          friendly: false,
+          detonateAt: null,
+          trap: true,
+        },
+      ],
+    };
+    // With no pod there, the walk to the cache leads across where it lies.
+    const walk = decide(bare, new Rng(2), layout, gentle);
+    expect(walk.kind).toBe('move');
+    expect(dist(point(walk), cacheAt)).toBeLessThan(0.01);
+    expect(dist(here, pod) + dist(pod, cacheAt) - dist(here, cacheAt)).toBeLessThan(0.01);
+    // The pod in sight: another step, one that clears its rim and the
+    // margin a bot keeps from it.
+    const round = decide(withPod, new Rng(2), layout, gentle);
+    expect(round.kind).toBe('move');
+    expect(round).not.toEqual(walk);
+    expect(dist(point(round), pod)).toBeGreaterThan(rim + POD_WARY_M);
+  });
+
+  it('gives ground while its attacks would miss, instead of swinging', () => {
+    const at = along(here, east, 3, R);
+    const e = enemy(9, at);
+    const spent = { Q: false, W: false, E: false, R: false };
+    const fumbling = obs(
+      here,
+      { units: [e] },
+      {
+        struckAt: 19.8,
+        abilityReady: spent,
+        sigilReady: [false, false],
+        statuses: [{ kind: 'fumble', until: 21 }],
+      },
+    );
+    expect(decide(fumbling, new Rng(1), layout, strong).kind).not.toBe('attack');
+    const plain = obs(
+      here,
+      { units: [e] },
+      { struckAt: 19.8, abilityReady: spent, sigilReady: [false, false] },
+    );
+    expect(decide(plain, new Rng(1), layout, strong).kind).toBe('attack');
   });
 });

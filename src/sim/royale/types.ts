@@ -79,7 +79,11 @@ export const CLAMOR_S = 3;
 // the planet's rules move with each tranche of play changes without moving the
 // 5v5's REPLAY_VERSION or the content fingerprint, and a royale replay loader
 // refuses a record made under other rules. Bumped once per merged tranche.
-export const ROYALE_RULES_VERSION = 4;
+// 8: Nisk joins the pool the house seats are dealt from, with its planet
+// tuning and build.
+// 9: an enemy pod is seen only under the seat's own reveal zone, never by
+// walking near it (traps.ts): what the bots see of a pod changes their play.
+export const ROYALE_RULES_VERSION = 9;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {
@@ -179,15 +183,22 @@ export interface MarkState {
   shownAt: number;
 }
 
+// A Burr (CONTEXT.md; burr.ts): the champion that last took its owner down,
+// and until when taking it down pays.
+export interface BurrState {
+  carrierId: number;
+  until: number;
+}
+
 // A Clamor (CONTEXT.md): where a takedown rang out and when.
 export interface ClamorState {
   pos: Vec3;
   at: number;
 }
 
-// Respawn's Last light as its events tell it: the heads-up, the double
-// takedowns, the final seconds where a death is final.
-export type LastLightStep = 'heads_up' | 'double' | 'final';
+// Respawn's Last light as its events tell it (last_light.ts): the double
+// takedowns beginning.
+export type LastLightStep = 'double';
 
 export interface RoyaleState {
   variant: RoyaleVariant;
@@ -219,6 +230,8 @@ export interface RoyaleState {
   risings: RisingState[];
   // Champions shown to everyone (marks.ts).
   marks: MarkState[];
+  // Respawn: each seat's Burr, by its owner's unit id (burr.ts).
+  burrs: Map<number, BurrState>;
   // Takedowns still ringing out, for CLAMOR_S each (clamors.ts).
   clamors: ClamorState[];
   // Who carries the Wrath on the planet, and until when.

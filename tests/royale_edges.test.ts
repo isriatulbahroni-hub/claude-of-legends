@@ -30,6 +30,7 @@ import {
   SEEDFALL_STALE_S,
   seedfallPointed,
 } from '../src/ui/royale_edges';
+import { cardsCoverBox } from '../src/ui/royale_grafts';
 
 // A phone held sideways: the top bar, the ability bar and the minimap's
 // corner kept clear.
@@ -115,7 +116,7 @@ describe('the arrows', () => {
   });
 
   it('rank a Seedfall over a Rising over the Wrath over the Lodestar over Ablaze', () => {
-    expect(EDGE_PRIORITY).toEqual(['seedfall', 'rising', 'wrath', 'lodestar', 'ablaze']);
+    expect(EDGE_PRIORITY).toEqual(['seedfall', 'burr', 'rising', 'wrath', 'lodestar', 'ablaze']);
     const off = { x: -500, y: 200 };
     const arrows = edgeArrows(
       [
@@ -128,6 +129,20 @@ describe('the arrows', () => {
       VIEW,
     );
     expect(arrows.map((a) => a.key)).toEqual(['sf', 'ri', 'wr']);
+  });
+
+  it("rank the own Burr's carrier after a Seedfall and before a Rising, its seconds left read", () => {
+    const off = { x: -500, y: 200 };
+    const arrows = edgeArrows(
+      [
+        target({ ...off, key: 'ri', kind: 'rising', distance: 10 }),
+        target({ ...off, key: 'burr', kind: 'burr', distance: 42, secondsLeft: 37.2 }),
+        target({ ...off, key: 'sf', kind: 'seedfall', distance: 90 }),
+      ],
+      VIEW,
+    );
+    expect(arrows.map((a) => a.key)).toEqual(['sf', 'burr', 'ri']);
+    expect(arrows[1]!.label).toBe('42 m \u00b7 0:38');
   });
 
   it('take the nearest first within a kind', () => {
@@ -492,5 +507,63 @@ describe('the distance lines of arrows side by side', () => {
         expect(apart(line(at[i]!, 84), line(at[j]!, 84))).toBe(true);
       }
     }
+  });
+});
+
+describe('the arrows and the open Graft cards', () => {
+  // The line under a dial as it stands, slid in from the side.
+  const lineOf = (p: { x: number; y: number; labelDx: number }, w: number): EdgeRect => ({
+    left: p.x + p.labelDx - w / 2,
+    top: p.y + LABEL_TOP,
+    right: p.x + p.labelDx + w / 2,
+    bottom: p.y + LABEL_TOP + LABEL_H,
+  });
+  const hit = (a: EdgeRect, b: EdgeRect): boolean =>
+    a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+
+  it('never set a line on the open cards, a phone ("139 m · 0:53" on their title) or a desktop', () => {
+    const sizes = [
+      [844, 390, true],
+      [960, 540, false],
+      [1280, 720, false],
+      [1920, 1080, false],
+    ] as const;
+    const widths = [84, 60, 92];
+    for (const [w, h, compact] of sizes) {
+      const view: EdgeView = { width: w, height: h, top: 14, right: 26, bottom: 38, left: 26 };
+      const ring = compact ? compactRing(view) : undefined;
+      const cards = cardsCoverBox(w, compact);
+      const bar = { left: w / 2 - 150, top: h - 170, right: w / 2 + 150, bottom: h };
+      for (let k = 0; k < 36; k++) {
+        const a = (k / 36) * 2 * Math.PI;
+        for (const n of [1, 2, 3]) {
+          const targets = Array.from({ length: n }, (_, i) =>
+            target({
+              key: `sf${i}`,
+              x: w / 2 + 3000 * Math.cos(a + i * 0.3),
+              y: h / 2 + 3000 * Math.sin(a + i * 0.3),
+              distance: 139 + i,
+              secondsLeft: 53,
+            }),
+          );
+          const arrows = edgeArrows(targets, view, ring);
+          const at = layoutArrows(arrows, widths, [bar], view, ring, [cards]);
+          for (const [i, p] of at.entries()) {
+            if (!p.labelShown) continue;
+            expect(hit(lineOf(p, widths[i]!), cards), `${w} ${k} ${n}: ${i}`).toBe(false);
+          }
+        }
+      }
+    }
+  });
+
+  it('keep their lines where nothing covers them', () => {
+    const view: EdgeView = { width: 844, height: 390, top: 14, right: 26, bottom: 38, left: 26 };
+    const ring = compactRing(view);
+    const arrows = edgeArrows([target({ x: 422, y: -3000, distance: 139 })], view, ring);
+    expect(layoutArrows(arrows, [84], [], view, ring)[0]!.labelShown).toBe(true);
+    // Straight up on a phone, the ring's top stands on the open cards.
+    const [p] = layoutArrows(arrows, [84], [], view, ring, [cardsCoverBox(844, true)]);
+    expect(p!.labelShown && hit(lineOf(p!, 84), cardsCoverBox(844, true))).toBe(false);
   });
 });

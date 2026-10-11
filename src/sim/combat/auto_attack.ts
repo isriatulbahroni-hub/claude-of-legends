@@ -20,6 +20,7 @@ import {
   attackSpeedBonusPct,
   breakStealth,
   consumeEmpower,
+  isFumbled,
   isStealthed,
   isStunned,
   isUntargetable,
@@ -86,6 +87,7 @@ const STRIKE_GRACE = 2;
 function beginWindup(ctx: CombatCtx, u: Unit, target: Unit): void {
   breakStealth(u);
   const voidmaulSlam = prepareVoidmaulSlam(u, target);
+  u.actedAt = ctx.time;
   // Presentation hook: renderers play a swing animation off this event.
   ctx.events.push({
     type: 'attack',
@@ -104,6 +106,13 @@ function beginWindup(ctx: CombatCtx, u: Unit, target: Unit): void {
 }
 
 function strike(ctx: CombatCtx, u: Unit, target: Unit): void {
+  // A fumbling striker misses (CONTEXT.md: Fumble): the swing is spent and
+  // nothing lands, no damage, no rider, no on-hit, and an armed empower
+  // waits for a strike that connects.
+  if (isFumbled(u, ctx.time)) {
+    ctx.events.push({ type: 'miss', unitId: u.id, targetId: target.id });
+    return;
+  }
   let ad = u.stats.ad;
   // The health slice a tower shot adds on top of its attack damage, rising
   // with heat; zero for every other striker.

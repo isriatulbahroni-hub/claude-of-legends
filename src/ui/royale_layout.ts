@@ -97,6 +97,31 @@ export function feedBox(width: number): ScreenBox {
   };
 }
 
+// A phone's feed: at the right, COMPACT_FEED_TOP_PCT percent of the screen
+// down and COMPACT_FEED_TOP_PX more, clear of the map in the corner; with
+// the thumb controls, whose map stands at the top right, at
+// THUMBS_FEED_TOP_PX. Two kept lines and the fold, each line its height
+// and its gap.
+export const COMPACT_FEED_TOP_PCT = 40;
+export const COMPACT_FEED_TOP_PX = 58;
+export const THUMBS_FEED_TOP_PX = 178;
+export const COMPACT_FEED_LINE_H_PX = 24;
+export const COMPACT_FEED_LINES = 3;
+
+export function compactFeedTop(height: number, thumbs: boolean): number {
+  return thumbs ? THUMBS_FEED_TOP_PX : (height * COMPACT_FEED_TOP_PCT) / 100 + COMPACT_FEED_TOP_PX;
+}
+
+export function compactFeedBox(width: number, height: number, thumbs: boolean): ScreenBox {
+  const top = compactFeedTop(height, thumbs);
+  return {
+    left: width - FEED_RIGHT_PX - FEED_MAX_W_PX,
+    top,
+    right: width - FEED_RIGHT_PX,
+    bottom: top + COMPACT_FEED_LINES * COMPACT_FEED_LINE_H_PX,
+  };
+}
+
 // A seat changing hands (ui/seat_lines.ts) is one line of the feed: the
 // person's name, then the words, never cut; on a desktop the words a
 // little smaller (SEAT_WORDS_EM), a phone's at the feed's size, its column

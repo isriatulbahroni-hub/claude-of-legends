@@ -189,6 +189,32 @@ export function cardsCoverBox(width: number, compact: boolean): ScreenBox {
   };
 }
 
+// The Later button alone, centered under the row, at most LATER_W_PX
+// wide: the room either side of it under the row is free (the feed
+// stands there while the cards are open, ui/royale_cards_room.ts).
+export const LATER_W_PX = 96;
+
+export function laterBox(width: number, compact: boolean): ScreenBox {
+  const row = cardsBox(width, compact);
+  return {
+    left: width / 2 - LATER_W_PX / 2,
+    top: row.bottom,
+    right: width / 2 + LATER_W_PX / 2,
+    bottom: row.bottom + (compact ? PHONE_LATER_H_PX : LATER_H_PX),
+  };
+}
+
+// The title's line over the row, as wide as the row.
+export function titleBox(width: number, compact: boolean): ScreenBox {
+  const row = cardsBox(width, compact);
+  return {
+    left: row.left,
+    top: compact ? PHONE_TOP_PX : DESK_TOP_PX,
+    right: row.right,
+    bottom: row.top,
+  };
+}
+
 // What steps aside while the cards are open: the first steps' card and
 // the controls' hints, which the cards' row stands over (at 960x540 the
 // card's right end, on a phone the whole card and the thumbs' hints) and

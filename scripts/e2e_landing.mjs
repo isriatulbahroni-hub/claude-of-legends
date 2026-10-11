@@ -314,6 +314,7 @@ async function measure(page) {
       next: text('.own-next'),
       tiles: tileTexts,
       banner: box(document.querySelector('.pg-new')) !== null,
+      presence: box(document.querySelector('.pg-presence')) !== null,
       accountCard: gold && !gold.hidden ? text('.pg-card.gold > h2') : null,
       week: box(document.querySelector('.pg-way-week')) ? text('.pg-way-week-text') : null,
       weekFaces: box(document.querySelector('.pg-way-week-faces'))
@@ -342,7 +343,10 @@ function checkLayout(m, size, label) {
       `${at}: the name's bottom ${Math.round(m.name.bottom)} <= ${size.nameBottom}`,
     );
   }
-  const playBottom = PRESENCE ? size.viewport.height : size.playBottom;
+  // Someone on, as the fixture's PRESENCE=1 or as a real stack shows it:
+  // the presence line stands over the button, which then has to stay
+  // inside the first screen rather than inside the tighter target.
+  const playBottom = PRESENCE || m.presence ? size.viewport.height : size.playBottom;
   check(
     m.play.bottom <= playBottom && m.play.top >= 0,
     `${at}: the gold button's bottom ${Math.round(m.play.bottom)} <= ${playBottom}`,

@@ -262,8 +262,8 @@ between the two. Over seeds 1 to 24 of the royale report (`node scripts/royale_r
 lives were ended by a champion other than the enemy nearest at landing (the fair foe when one
 was found), and that enemy fell to another champion in 46 percent of them, to the drop-in in
 22. Played slower (`--dropin-skill gentle --dropin-lag 0.25`: the gentle brain's eye and aim,
-each order a quarter second late, the round trip to a server whose client does not foresee
-its own champion on the planet), 58 percent took a champion down within the first minute and
+each order a quarter second late, the round trip to the server, whose client then did not
+foresee its own champion on the planet), 58 percent took a champion down within the first minute and
 51 percent in their first life. A fight the drop-in ends sooner leaves the others less time
 to come to it. This adds a rule to Respawn; One life is unchanged.
 

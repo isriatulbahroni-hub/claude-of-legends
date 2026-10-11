@@ -51,8 +51,9 @@
 // normal) plays each drop-in with that skill's brain instead: a newcomer's
 // slower eye and looser aim (content/bots/royale_skills.ts); --dropin-lag
 // 0.25 (seconds, default 0) lands each of its orders that much later, in
-// whole decision slots: a person's round trip to the server, whose client
-// does not foresee its own champion on the planet.
+// whole decision slots: a person's round trip to the server, which the
+// planet's prediction (ADR 0028) hides from the drawing of the own
+// champion but not from the server's tick the order lands on.
 // Every seat's assists and level at the end are kept too: the compare
 // line gives the level median of the seats with at most FEW_TAKEDOWNS
 // takedowns (a person who helps and seldom lands the last hit) and their

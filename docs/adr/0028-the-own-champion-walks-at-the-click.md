@@ -95,7 +95,8 @@ as on the plane, with the same predictor, and still nothing on the wire or in th
   the snapshot moved anything, the chased unit included, so a chase no longer hops at each
   snapshot. A correction past 4 m is shown as a jump only when the server moved the champion
   farther than a walk could; any other (an order the server dropped, a turn it could not know
-  over a long trip) slides out, however far. Before the first answer, every snapshot that has not
+  over a long trip) slides out, up to 12 m (past that, a connection that stalled for seconds,
+  the champion is shown where the walk now has it). Before the first answer, every snapshot that has not
   answered the oldest order says it lands later still, so from far away the first click walks at
   its pace from the start and catches nothing up once answered.
 

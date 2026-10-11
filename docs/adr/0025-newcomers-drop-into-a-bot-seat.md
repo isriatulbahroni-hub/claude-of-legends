@@ -14,7 +14,10 @@ match itself is now the meeting place.
   (`server/drop_in.ts`, `Match.takeBotSeat`). The liveliest such match wins, then the youngest.
   The newcomer joins the side with fewer people on it, so two strangers meet as opponents, and
   takes a house bot before a ranked one. The champion comes as the bot left it: its level, its
-  gold, its items. Everyone in the match is told who joined.
+  gold, its items. Everyone in the match is told who joined, the spectators too, by a line of
+  the kill feed (`server/seat_change.ts`, `src/ui/seat_lines.ts`), and likewise who left with
+  a house bot playing on; the name the match shows is all the line carries, and no replay
+  records it.
 - **Never rated, never recorded.** A seat taken mid-match earns no rating, no Record, no
   laurels and no leaver penalty for whoever took it: they did not play the match from the
   start. A Guest dropping in makes the match unrated for everyone, as ADR 0024 already rules

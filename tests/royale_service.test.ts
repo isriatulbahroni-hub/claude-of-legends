@@ -13,10 +13,13 @@ import {
   ROYALE_LINGER_MS,
   ROYALE_MATCH_WEIGHT,
   ROYALE_REJOIN_GRACE_MS,
+  ROYALE_SCORE_EVERY_TICKS,
   type RoyaleClient,
   RoyaleService,
 } from '../server/royale_service';
 import type { SeatReport } from '../server/seat_report';
+import { starOrchard } from '../server/star_orchard';
+import { ClientWorld } from '../src/net/client_world';
 import type { ClientMsg, ServerMsg } from '../src/net/protocol';
 import type { RoyaleResult } from '../src/net/royale_wire';
 import { CHAMPION_LIST } from '../src/sim/content/champions';
@@ -577,6 +580,122 @@ describe('the seat changing hands on the wire', () => {
     const again = h.last(1, 'snap')!.units.find((u) => u.i === other.id)!;
     expect(again).toMatchObject({ k: 'champion', n: 'bob' });
     expect(again.b).toBeUndefined();
+  });
+});
+
+describe('a seat changing hands, told to the match', () => {
+  // A mirror of the match as a person's tab holds it (src/net/client_world.ts).
+  const mirror = (h: ReturnType<typeof harness>, id: number): ClientWorld => {
+    const world = new ClientWorld(
+      () => undefined,
+      starOrchard().map,
+      null,
+      () => 0,
+    );
+    for (const s of h.sent) if (s.to === id) world.applyServer(s.msg);
+    return world;
+  };
+  // Steps to a tick off the scoreboard's own cadence, so a scoreboard sent
+  // on the next one is the seat change's.
+  const offCadence = (h: ReturnType<typeof harness>): void => {
+    const sim = h.fake.sims.at(-1)!;
+    while (sim.tickCount % ROYALE_SCORE_EVERY_TICKS !== ROYALE_SCORE_EVERY_TICKS / 2) h.step(1);
+  };
+
+  it('tells everyone else in the match who dropped in, by name, never the joiner', () => {
+    const h = harness();
+    const a = h.connect(1, 'alice');
+    const c = h.connect(3, 'carol', true);
+    h.enter(a);
+    h.enter(c);
+    h.step(5);
+    const b = h.connect(2, 'Wanderer 3433', true);
+    h.enter(b);
+    const team = h.last(2, 'match_start')!.team;
+    for (const id of [1, 3]) {
+      expect(h.last(id, 'player_joined')).toEqual({
+        t: 'player_joined',
+        name: 'Wanderer 3433',
+        team,
+      });
+    }
+    // Carol heard of nobody before; the joiner hears of nobody at all.
+    expect(h.to(3, 'player_joined')).toHaveLength(1);
+    expect(h.to(2, 'player_joined')).toEqual([]);
+    // The name shown and the seat's team: no id, no account, no Guest key.
+    const told = JSON.stringify(h.last(1, 'player_joined'));
+    expect(told).not.toMatch(/-2\b|clientId|owner|accountId|unitId/);
+  });
+
+  it('sends the scoreboard at once, the seat named for its person with no bot mark', () => {
+    const h = harness();
+    const a = h.connect(1, 'alice');
+    h.enter(a);
+    offCadence(h);
+    const b = h.connect(2, 'bob');
+    h.enter(b);
+    const seatId = h.last(2, 'match_start')!.selfUnitId;
+    const before = h.to(1, 'score').length;
+    h.step(1);
+    expect(h.to(1, 'score').length).toBe(before + 1);
+    const row = h.last(1, 'score')!.rows.find((r) => r.unitId === seatId)!;
+    expect(row.player).toBe('bob');
+    expect(row.b).toBeUndefined();
+    // The tab already in reads the seat as a person's: the mark is gone.
+    expect(mirror(h, 1).seat(seatId)).toEqual({ name: 'bob', bot: false });
+  });
+
+  it('tells the others when the person leaves, and the bot mark comes back', () => {
+    const h = harness();
+    const a = h.connect(1, 'alice');
+    const b = h.connect(2, 'bob');
+    h.enter(a);
+    h.enter(b);
+    h.step(1);
+    const seatId = h.last(2, 'match_start')!.selfUnitId;
+    expect(mirror(h, 1).seat(seatId)?.bot).toBe(false);
+    offCadence(h);
+    h.say(b, { t: 'leave' });
+    expect(h.last(1, 'player_left')).toEqual({
+      t: 'player_left',
+      name: 'bob',
+      team: h.last(2, 'match_start')!.team,
+    });
+    h.step(1);
+    expect(h.last(1, 'score')!.rows.find((r) => r.unitId === seatId)?.b).toBe(1);
+    expect(mirror(h, 1).seat(seatId)).toEqual({ name: 'bob', bot: true });
+  });
+
+  it('tells the others of a dropped connection and of its return, never the one returning', () => {
+    const h = harness();
+    const a = h.connect(1, 'alice');
+    const b = h.connect(2, 'bob');
+    h.enter(a);
+    h.enter(b);
+    h.step(1);
+    h.service.disconnect(b);
+    expect(h.last(1, 'player_left')?.name).toBe('bob');
+    const again = h.connect(4, 'bob');
+    (again as { accountId: number }).accountId = 2;
+    expect(h.service.rejoin(again)).toBe(true);
+    expect(h.last(1, 'player_back')).toMatchObject({ t: 'player_back', name: 'bob' });
+    expect(h.to(4, 'player_back')).toEqual([]);
+    expect(h.to(4, 'player_left')).toEqual([]);
+  });
+
+  it('tells nobody once the match is over', () => {
+    const h = harness();
+    const a = h.connect(1, 'alice');
+    const b = h.connect(2, 'bob');
+    h.enter(a, 'one_life');
+    h.enter(b, 'one_life');
+    h.runTo(Number.POSITIVE_INFINITY);
+    const entry = [...h.service.matches.values()][0]!;
+    expect(entry.match.over).toBe(true);
+    expect(entry.match.players.has(2)).toBe(true);
+    h.say(b, { t: 'leave' });
+    expect(entry.match.players.has(2)).toBe(false);
+    expect(h.to(1, 'player_left')).toEqual([]);
   });
 });
 

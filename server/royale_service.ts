@@ -21,6 +21,7 @@ import { RoyaleMatch, type RoyalePlayer, type RoyaleReplay } from './royale_matc
 import { respawnSeatTally } from './royale_ranking';
 import { type RoyalePerson, type RoyalePick, royalePick } from './royale_seats';
 import type { RoyaleSimFactory } from './royale_sim';
+import { type ChangedSeat, type SeatChange, seatChangeSends } from './seat_change';
 import { buildSeatReport, type SeatEnd, type SeatReport, type SeenQuality } from './seat_report';
 
 // What a match of fifty champions costs the server, counted in 5v5
@@ -103,6 +104,9 @@ interface RoyaleEntry {
   // Whether a person ever held a seat in it: a match the house bots
   // played alone keeps no replay.
   hadPeople: boolean;
+  // A seat changed hands since the last tick: the scoreboard, every seat's
+  // name and bot mark, goes to everyone with the next one.
+  seatChanged: boolean;
 }
 
 interface Reservation {
@@ -260,10 +264,7 @@ export class RoyaleService {
       const p = entry.match.takeBotSeat(person);
       if (p) {
         this.seat(client, entry, p, true);
-        for (const other of entry.match.players.values()) {
-          if (other.clientId === client.id) continue;
-          send(other.clientId, { t: 'player_joined', name: p.name, team: p.team });
-        }
+        this.tellSeat(entry, 'joined', p, client.id);
         this.deps.log(`royale ${entry.match.id}: ${client.name} dropped in`);
         return;
       }
@@ -299,6 +300,7 @@ export class RoyaleService {
       failures: 0,
       reported: new Set(),
       hadPeople: clients.length > 0,
+      seatChanged: false,
     };
     this.matches.set(id, entry);
     for (const c of clients) {
@@ -323,6 +325,22 @@ export class RoyaleService {
       teams: entry.match.sim.teamCount,
       royale: { v: entry.match.variant, seats: entry.match.seatCount },
     });
+  }
+
+  // A seat changed hands: everyone else in the match reads who, and the
+  // scoreboard with the seat's new name and bot mark follows at once.
+  private tellSeat(
+    entry: RoyaleEntry,
+    change: SeatChange,
+    seat: ChangedSeat,
+    about: number | null,
+  ): void {
+    const audience = [...entry.match.players.keys()];
+    const playing = !entry.match.over;
+    for (const s of seatChangeSends(change, seat, audience, about, playing)) {
+      this.deps.send(s.to, s.msg);
+    }
+    entry.seatChanged = true;
   }
 
   private unseat(clientId: number): void {
@@ -393,15 +411,7 @@ export class RoyaleService {
     const left = entry.match.leave(client.id, false);
     this.unseat(client.id);
     this.reservations.delete(client.accountId);
-    if (left && !entry.match.over) {
-      for (const other of entry.match.players.values()) {
-        this.deps.send(other.clientId, {
-          t: 'player_left',
-          name: left.name,
-          team: left.team,
-        });
-      }
-    }
+    if (left) this.tellSeat(entry, 'left', left, client.id);
     this.noteEmpty(entry);
   }
 
@@ -419,13 +429,7 @@ export class RoyaleService {
         unitId: left.unitId,
         until: this.deps.now() + ROYALE_REJOIN_GRACE_MS,
       });
-      for (const other of entry.match.players.values()) {
-        this.deps.send(other.clientId, {
-          t: 'player_left',
-          name: left.name,
-          team: left.team,
-        });
-      }
+      this.tellSeat(entry, 'left', left, client.id);
     }
     this.picks.delete(client.id);
     this.noteEmpty(entry);
@@ -443,10 +447,7 @@ export class RoyaleService {
     const p = entry.match.rejoin(this.person(client, this.pickOf(client)), r.unitId);
     if (!p) return false;
     this.seat(client, entry, p, false);
-    for (const other of entry.match.players.values()) {
-      if (other.clientId === client.id) continue;
-      this.deps.send(other.clientId, { t: 'player_back', name: p.name, team: p.team });
-    }
+    this.tellSeat(entry, 'back', p, client.id);
     this.deps.log(`royale ${entry.match.id}: ${client.name} reconnected`);
     return true;
   }
@@ -496,16 +497,17 @@ export class RoyaleService {
       m.notePoints(cid, msg.delta);
       send(cid, msg);
     });
-    // The scoreboard every few seconds, and to a person just seated at once:
-    // the names the kill feed and the nameplates read.
-    let score = m.sim.tickCount % ROYALE_SCORE_EVERY_TICKS === 0 ? m.buildScore() : null;
+    // The scoreboard every few seconds, to a person just seated, and to
+    // everyone once a seat changed hands: the names and bot marks the kill
+    // feed and the nameplates read, a seat out of sight's included.
+    const toAll = m.sim.tickCount % ROYALE_SCORE_EVERY_TICKS === 0 || entry.seatChanged;
+    entry.seatChanged = false;
+    let score = toAll ? m.buildScore() : null;
     for (const p of m.players.values()) {
       const snap = m.snapshotFor(p.clientId);
       if (snap) send(p.clientId, snap);
       if (!score && !p.scoreSent) score = m.buildScore();
-      if (score && (!p.scoreSent || m.sim.tickCount % ROYALE_SCORE_EVERY_TICKS === 0)) {
-        send(p.clientId, score);
-      }
+      if (score && (!p.scoreSent || toAll)) send(p.clientId, score);
       p.scoreSent = true;
     }
     // Out for good (One life): the result now, the end screen's Play again.

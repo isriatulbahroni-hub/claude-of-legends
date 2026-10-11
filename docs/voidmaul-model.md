@@ -182,7 +182,10 @@ Each valid hostile body overlapping the disk is damaged once. The original
 target receives the full physical strike and champion health bite; secondary
 targets receive 65% of each. Both use the ordinary mitigation, shield, death
 and kill-credit pipeline. Moving outside the committed disk dodges the strike;
-an interrupted or invalidated windup cannot create an impact. The slam
+an interrupted or invalidated windup cannot create an impact. A Voidmaul
+that fumbles at its contact (CONTEXT.md: Fumble) misses like any striker:
+the swing is spent and the sequence moves on, but no impact, damage or
+stones follow, only the `miss` event. The slam
 resolves directly rather than spawning the previous delayed homing bolt.
 Other creatures retain their existing attacks.
 

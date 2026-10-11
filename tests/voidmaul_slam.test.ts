@@ -302,6 +302,33 @@ describe('Voidmaul committed area slam', () => {
     expect(boss.pendingAttack!.voidmaulSlam!.kind).toBe('slam');
   });
 
+  it('lands nothing when the Voidmaul fumbles at its contact, like any striker (CONTEXT.md: Fumble)', () => {
+    const { boss, target, ctx, step, add } = fixture();
+    const nearby = add(voidmaulSlamPoint(boss, target.pos));
+    step(0);
+    expect(boss.pendingAttack!.voidmaulSlam!.kind).toBe('slam');
+    // Nisk's Pepper Dart lands mid-windup: the swing is spent on nothing.
+    boss.statuses.push({ kind: 'fumble', until: 2 });
+    step(VOIDMAUL_SLAM_WINDUP_S);
+    expect(boss.pendingAttack).toBeNull();
+    expect(target.hp).toBe(1000);
+    expect(nearby.hp).toBe(1000);
+    expect(ctx.events.filter((e) => e.type === 'damage')).toHaveLength(0);
+    expect(ctx.events.filter((e) => e.type === 'voidmaul_slam')).toHaveLength(0);
+    expect(ctx.events.filter((e) => e.type === 'miss')).toEqual([
+      { type: 'miss', unitId: boss.id, targetId: target.id },
+    ]);
+    // No rock breaks, so no rain comes down after it.
+    expect(boss.stoneRains ?? []).toHaveLength(0);
+    for (let t = 1.8; t < 3.3; t += 0.05) step(t);
+    expect(target.hp).toBe(1000);
+    expect(nearby.hp).toBe(1000);
+    // The swing was spent: the next one is the crush.
+    expect(boss.voidmaulAttackCount).toBe(1);
+    step(4);
+    expect(boss.pendingAttack!.voidmaulSlam!.kind).toBe('crush');
+  });
+
   it('keeps each creature’s sequence independent when two wind up on the same tick', () => {
     const { boss, ctx, step, add } = fixture();
     boss.voidmaulAttackCount = 1;

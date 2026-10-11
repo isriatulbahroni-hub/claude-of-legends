@@ -6,7 +6,7 @@ import type { CombatCtx } from '../sim_context';
 import type { Vec2 } from '../types';
 import { hostile, type Unit } from '../unit';
 import { dealDamage } from './damage';
-import { isUntargetable } from './status';
+import { isFumbled, isUntargetable } from './status';
 import { throwStones } from './voidmaul_stones';
 
 export interface VoidmaulSlamEvent {
@@ -91,6 +91,14 @@ export function resolveVoidmaulSlam(
   targetId: number,
   plan: VoidmaulSlamPlan,
 ): void {
+  // A fumbling Voidmaul misses like every striker (CONTEXT.md: Fumble,
+  // auto_attack.ts strike): the swing is spent, so the sequence moves on,
+  // and nothing lands, no hit, no splash, no stones.
+  if (isFumbled(u, ctx.time)) {
+    u.voidmaulAttackCount = (u.voidmaulAttackCount ?? 0) + 1;
+    ctx.events.push({ type: 'miss', unitId: u.id, targetId });
+    return;
+  }
   const point = copy(plan.point);
   ctx.events.push({
     type: 'voidmaul_slam',

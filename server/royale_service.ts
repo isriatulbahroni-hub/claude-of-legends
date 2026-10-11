@@ -527,9 +527,10 @@ export class RoyaleService {
   // The last light went out, or the last champion stands: every person
   // still in hears their result, a Respawn one with the best their line
   // held before it, raised by this seat's tally (ADR 0033). Respawn then
-  // closes at once and tells each person the match ended; nobody is moved. The end screen's Play the next
-  // match enters anew with the same pick, into the match kept running for
-  // visitors (keepOneOpen) with an Arrival, fresh and graced. Moving the
+  // closes at once and tells each person the match ended; nobody is
+  // moved. The end screen's Play the next match enters anew with the same
+  // pick, into the match kept running for visitors (keepOneOpen) with an
+  // Arrival, fresh and graced. Moving the
   // people at once landed their champion behind the end screen, where it
   // stood idle and was taken down (the second playtest, 2026-10-04); and a
   // tab left open plays no match for nobody.

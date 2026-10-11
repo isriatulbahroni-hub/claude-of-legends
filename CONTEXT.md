@@ -1233,8 +1233,8 @@ A battle royale drop-in's coming down: the seat a person takes from its bot in p
 fresh (full health and mana, everything ready), its tally from zero, in its Grace. In Respawn
 it comes down at least one level under the middle of the field, a few steps from a fair first
 fight (a bot out of combat, the softest in reach, no higher in level, in sight of each other,
-nobody else near), else at a quiet spot, and its Grace waits for the person's first order; in
-One life at a quiet spot.
+nobody else near), else at a quiet spot, its Grace waits for the person's first order, and it
+carries its Upstart; in One life at a quiet spot.
 _Avoid_: spawn, deploy
 
 **Grace**:
@@ -1245,6 +1245,15 @@ seat's first order of any kind, six seconds at most. Not the Calm, which is the 
 A word of the code for now: players see the Untouchable status, and the word needs an IP check
 before any player reads it (another game's respawn points carry it).
 _Avoid_: spawn protection, invulnerability
+
+**Upstart**:
+A Respawn champion come down into the running match with no takedown to its name: a drop-in
+at its Arrival, whose tally starts from zero, or any seat, a bot's as a person's, back from a
+fall before it has taken anybody down. Its hits on champions land half again as hard until its
+first takedown, its fall, or thirty seconds after it came down. Nothing shows it, on a screen
+or to a bot. The match's landing gives none, every seat starting level there; One life has
+none.
+_Avoid_: newcomer buff, catch-up bonus, rookie edge, comeback mechanic
 
 **Pad slam**:
 The hit a launch pad's flight makes where it comes down, after the flyer steered it within

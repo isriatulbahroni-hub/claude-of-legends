@@ -253,3 +253,54 @@ killer's record left the snapshot on the fall. One life is unchanged.
   against 65.4, the steals stay 42.9 percent, the stand-in's median life stays 15.7 s, the final
   level median stays 10. The winners change on five of the six seeds (the Lodestar and the marks
   follow the score). One life is identical, match for match.
+
+## Amended: the Upstart (2026-10-11)
+
+The fair first fight set a drop-in a few steps from a soft bot, but the fight seldom stayed
+between the two. Over seeds 1 to 24 of the royale report (`node scripts/royale_report.mjs
+--variant respawn --dropin 60,180,300,420`, 96 drop-ins), 97 percent of the drop-ins' first
+lives were ended by a champion other than the enemy nearest at landing (the fair foe when one
+was found), and that enemy fell to another champion in 46 percent of them, to the drop-in in
+22. Played slower (`--dropin-skill gentle --dropin-lag 0.25`: the gentle brain's eye and aim,
+each order a quarter second late, the round trip to a server whose client does not foresee
+its own champion on the planet), 58 percent took a champion down within the first minute and
+51 percent in their first life. A fight the drop-in ends sooner leaves the others less time
+to come to it. This adds a rule to Respawn; One life is unchanged.
+
+- **The Upstart** (CONTEXT.md). A Respawn champion that comes down into the running match with
+  no takedown on its tally deals half again as much damage to champions until its first
+  takedown, its fall, or 30 s after it came down, its Grace included. Coming down is a
+  drop-in's Arrival, whose tally starts from zero, or a return from a fall. The rule reads the
+  tally, not who plays the seat: a bot back from a fall before its first takedown carries it
+  as a person does, and so does a person's seat played by a bot. The match's landing gives
+  none, every seat standing level there. It rides on the champion's damage to champions
+  (Unit.dmgScale, the planet's tuning, read once in `src/sim/combat/damage.ts`), scaled as it
+  begins and set back to the very number it was as it ends; the mode keeps each one in its
+  checkpoint, so a replay re-simulates it (`src/sim/royale/upstart.ts`).
+- **Nothing shows it.** No screen draws it and no observation reads it, the seat's own
+  included: a person and a bot read a fight as before, the Upstart's hits only land harder. The
+  bots decide as before and fight on sight.
+- **The spot was weighed and left** (seeds 1 to 12, the slower drop-in, against 60 percent
+  taking a champion down within the minute on rules 9). Fair foes with nobody else within
+  24 m before those with nobody within 12 m: 50 percent. The drop-in at the field's lower
+  median instead of a level under it: 65 percent, within the noise. A shield worth 40 percent
+  of the health on every Respawn Arrival and return: 60 percent, the bots fighting 61.0 percent
+  of the seconds an enemy is in reach against 67.7 and the stand-in's median life 24.7 s
+  against 15.2. The Upstart for 60 s instead of 30: 79 percent, the stand-in's median life
+  18.8 s.
+- **Rules 10.** The planet's rules version moves from 9 to 10.
+- **Measured** (`node scripts/royale_report.mjs --variant respawn --dropin 60,180,300,420`
+  over seeds 1 to 24, against the same report on rules 9; a bootstrap over seeds gives the 90
+  percent bounds). A takedown within the first minute for 87 of 96 drop-ins against 72 (+10 to
+  +21 points), a takedown in the first life for 72 against 53 (+9 to +30 points), the first
+  life 29 s at the median against 28; the enemy nearest at landing falls to the drop-in in 31
+  percent of the first lives against 22. The stand-in's median life is 16.9 s against 16.8,
+  the bots fight 66.7 percent of the seconds an enemy is in reach against 67.6, the steals are
+  39.5 percent against 38.7, the final level median stays 10. A match begins some 93
+  Upstarts, all but the four Arrivals returns before a first takedown, and about a quarter of
+  them take a champion down. The slower drop-in (`--dropin-skill gentle
+  --dropin-lag 0.25`): a takedown within the first minute for 67 of 96 against 56, in the first
+  life for 59 against 49, the first life 41 s at the median against 31; the stand-in's median
+  life 18.4 s against 16.8 (-1.3 to +4.0 s: two runs on rules 9 differ by -2.0 to +1.7 s), the
+  bots fighting 67.3 percent against 67.9, the steals 38.1 percent against 38.0. One life
+  (`--variant one_life --dropin 60`, seeds 1 to 24) is identical, match for match.

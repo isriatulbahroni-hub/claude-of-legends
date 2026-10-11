@@ -48,6 +48,7 @@ export const NEWS: readonly NewsEntry[] = [
         'mark a couple of seconds later and hurts whoever is under it, so a fight with the ' +
         'Voidmaul is a fight with the ground too.',
     ],
+    image: 'voidmaul.webp',
     link: { label: 'Play a match', to: 'play' },
   },
   {

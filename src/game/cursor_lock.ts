@@ -14,6 +14,8 @@
 // fullscreen holds. Touch devices and browsers without pointer lock are
 // left alone.
 
+import { wheelDeltas } from './wheel_step';
+
 export interface Point {
   x: number;
   y: number;
@@ -43,6 +45,32 @@ export function cursorImageOf(css: string): CursorImage | null {
   const url = m[1] ?? m[2] ?? m[3] ?? '';
   if (!url) return null;
   return { url, hotX: Number(m[4] ?? 0), hotY: Number(m[5] ?? 0) };
+}
+
+// Which native event moves the virtual cursor. Firefox fires no mousemove
+// under the lock while a button is held, the press having been cancelled
+// (every press is, below, so the browser's own menu and focus stay put):
+// the cursor froze through every held press, a right button held to steer,
+// a drag on the minimap. Its pointermove comes through, movement and all.
+// A pointermove with movement makes pointermove the source from then on;
+// before one, mousemove moves the cursor, so a browser whose pointermove
+// carries none still works, and one motion is never counted twice.
+export class MotionSource {
+  private pointer = false;
+
+  // Whether a native move of `type` by (dx, dy) moves the cursor.
+  takes(type: 'pointermove' | 'mousemove', dx: number, dy: number): boolean {
+    if (type === 'mousemove') return !this.pointer;
+    if (dx !== 0 || dy !== 0) this.pointer = true;
+    return this.pointer;
+  }
+}
+
+// The pointer id a synthetic event carries: the native one, else the
+// mouse's last seen (Firefox numbers the mouse 0, Chrome 1), so a handler
+// that captures the pointer names one the browser knows.
+export function pointerIdOf(native: { pointerId?: number }, mouseId: number): number {
+  return typeof native.pointerId === 'number' ? native.pointerId : mouseId;
 }
 
 // The events a locked pointer must not let through with frozen
@@ -102,6 +130,8 @@ export function installCursorLock(root: HTMLElement, doc: Document = document): 
   let vx = win.innerWidth / 2;
   let vy = win.innerHeight / 2;
   let hovered: Element | null = null;
+  const motion = new MotionSource();
+  let mouseId = 1;
 
   const cursor = doc.createElement('div');
   cursor.className = 'cursor-lock';
@@ -134,7 +164,7 @@ export function installCursorLock(root: HTMLElement, doc: Document = document): 
     shiftKey: native.shiftKey,
     altKey: native.altKey,
     metaKey: native.metaKey,
-    pointerId: 1,
+    pointerId: pointerIdOf(native as { pointerId?: number }, mouseId),
     pointerType: 'mouse',
     isPrimary: true,
   });
@@ -191,21 +221,23 @@ export function installCursorLock(root: HTMLElement, doc: Document = document): 
   const onNative = (e: Event): void => {
     if (!locked || synthetic.has(e)) return;
     e.stopImmediatePropagation();
-    if (e.type === 'mousemove') {
-      moveTo(e as MouseEvent);
+    const pointer = e as Partial<PointerEvent>;
+    if (pointer.pointerType === 'mouse' && typeof pointer.pointerId === 'number') {
+      mouseId = pointer.pointerId;
+    }
+    if (e.type === 'pointermove' || e.type === 'mousemove') {
+      const m = e as MouseEvent;
+      if (pointer.pointerType === 'touch') return;
+      if (motion.takes(e.type, m.movementX, m.movementY)) moveTo(m);
       return;
     }
     if (e.type === 'wheel') {
       const w = e as WheelEvent;
       const under = doc.elementFromPoint(vx, vy);
       if (!under) return;
-      const ev = new WheelEvent('wheel', {
-        ...init(w),
-        deltaX: w.deltaX,
-        deltaY: w.deltaY,
-        deltaZ: w.deltaZ,
-        deltaMode: w.deltaMode,
-      });
+      // The mode read before the deltas, so a Firefox wheel's copy keeps
+      // its lines (wheel_step.ts).
+      const ev = new WheelEvent('wheel', { ...init(w), ...wheelDeltas(w) });
       synthetic.add(ev);
       if (!under.dispatchEvent(ev)) e.preventDefault();
       return;

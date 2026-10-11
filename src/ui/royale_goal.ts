@@ -73,6 +73,11 @@ export interface GoalModel {
   line: string;
 }
 
+// A count as the own panel writes it ("1,000").
+export function goalCount(n: number): string {
+  return n.toLocaleString('en-US');
+}
+
 export function goalModel(before: number, earned: number): GoalModel {
   const from = Math.max(0, Math.min(GOAL_MAX_POINTS, Math.floor(before)));
   const gain = Math.max(0, Math.floor(earned));
@@ -82,7 +87,9 @@ export function goalModel(before: number, earned: number): GoalModel {
   const reached = step.level > was.level ? step.level : null;
   const left = step.to - after;
   const got =
-    gain === 0 ? 'No points this match' : `+${gain} ${gain === 1 ? 'point' : 'points'} this match`;
+    gain === 0
+      ? 'No points this match'
+      : `+${goalCount(gain)} ${gain === 1 ? 'point' : 'points'} this match`;
   return {
     level: step.level,
     next: step.level + 1,
@@ -92,7 +99,7 @@ export function goalModel(before: number, earned: number): GoalModel {
     earned: gain,
     left,
     title: reached !== null ? `Level ${reached} reached` : `Level ${step.level}`,
-    line: `${got} · ${left} more to Level ${step.level + 1}`,
+    line: `${got} · ${goalCount(left)} more to Level ${step.level + 1}`,
   };
 }
 

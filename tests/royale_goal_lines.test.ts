@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LandingOwn } from '../src/net/landing';
 import { levelTile } from '../src/ui/own_panel';
+import { levelText } from '../src/ui/points_text';
 import {
   GOAL_HEAD_START,
   GOAL_MAX_POINTS,
@@ -115,6 +116,59 @@ describe('the level said before the card', () => {
       expect(tile.line).toBe(`${pointsText(line.left)} to Level ${line.next}`);
       expect(tile.share).toBeCloseTo(line.share, 9);
     }
+  });
+});
+
+describe('every place the level shows, for the same points', () => {
+  // Totals at the first level, on a level's first point, mid-level, a
+  // point short of the next, and far up the curve, where the points the
+  // next level wants run past a thousand (Level 39 runs from 19,475 to
+  // 20,475).
+  const totals = [0, 49, 50, 155, 349, 19_475, 19_800];
+
+  it('says the same level and the same points to the next', () => {
+    for (const points of totals) {
+      const step = goalStep(points);
+      const own: LandingOwn = {
+        name: 'Wanderer 0421',
+        named: false,
+        account: false,
+        rank: 3,
+        points,
+        level: step,
+        best: 0,
+        above: null,
+        since: 0,
+      };
+      // The own panel's tile, the words every other place repeats.
+      const tile = levelTile(own);
+      const wants = tile.line;
+      const left = wants.replace(/ points? to Level \d+$/, '');
+      // The wash of a Respawn death and the home's greeting.
+      const line = goalLine(points);
+      expect(line.text).toBe(`Level ${tile.value} · ${wants}`);
+      expect(goalWelcome({ points, best: 0, picked: true })?.text).toBe(line.text);
+      // The pause menu's and the end screen's ladder box.
+      expect(levelText(points)).toBe(line.text);
+      // The note under a pop that lands on this total without a new level.
+      if (points > step.from)
+        expect(goalPopNote(points - 1, points)).toBe(`${left} to Level ${line.next}`);
+      // Respawn's end card, its bar and its Play the next match, for a
+      // match that brought the line here without a new level.
+      const card = goalModel(step.from, points - step.from);
+      expect(card.level).toBe(line.level);
+      expect(card.line.endsWith(` · ${left} more to Level ${line.next}`)).toBe(true);
+      expect(nextMatchNote(card)).toBe(wants);
+    }
+  });
+
+  it('writes a thousand and more as the panel does', () => {
+    expect(goalLine(19_475).text).toBe('Level 39 · 1,000 points to Level 40');
+    expect(goalPopNote(19_000, 19_475)).toBe('Level 39 reached');
+    expect(goalPopNote(19_475, 19_476)).toBe('999 to Level 40');
+    expect(goalPopNote(19_474, 19_475)).toBe('Level 39 reached');
+    expect(goalModel(19_475, 0).line).toBe('No points this match · 1,000 more to Level 40');
+    expect(goalModel(0, 1_200).line).toMatch(/^\+1,200 points this match · /);
   });
 });
 

@@ -11,7 +11,7 @@
 // it: its own panel shows the level. ui/royale_goal_line.ts draws the line
 // with its small bar.
 
-import { GOAL_MAX_POINTS, type GoalModel, goalShare, goalStep } from './royale_goal';
+import { GOAL_MAX_POINTS, type GoalModel, goalCount, goalShare, goalStep } from './royale_goal';
 
 // Where a total stands: the level, the next one, the points still wanted
 // for it, how full the level's bar is (0 to 1, the first from its head
@@ -27,9 +27,9 @@ export interface GoalLine {
 const whole = (points: number): number =>
   Number.isFinite(points) ? Math.max(0, Math.min(GOAL_MAX_POINTS, Math.floor(points))) : 0;
 
-// "70 points", "1 point".
+// "70 points", "1 point", "1,000 points": as the own panel writes them.
 export function pointsText(n: number): string {
-  return `${n} ${n === 1 ? 'point' : 'points'}`;
+  return `${goalCount(n)} ${n === 1 ? 'point' : 'points'}`;
 }
 
 // "Level 3 · 70 points to Level 4".
@@ -53,7 +53,7 @@ export function goalPopNote(before: number, after: number): string {
   const was = goalStep(whole(before));
   const now = goalStep(whole(after));
   if (now.level > was.level) return `Level ${now.level} reached`;
-  return `${now.to - whole(after)} to Level ${now.level + 1}`;
+  return `${goalCount(now.to - whole(after))} to Level ${now.level + 1}`;
 }
 
 // The pop's note once an award has landed on the match's count

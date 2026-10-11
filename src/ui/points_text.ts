@@ -7,7 +7,7 @@
 // from server/.
 
 import type { PointsReason } from '../net/protocol';
-import { goalStep } from './royale_goal';
+import { goalLine } from './royale_goal_lines';
 
 // The word after the number in the pop. A last hit is the common case and
 // says only its number: the gold popping on the minion already says why.
@@ -71,12 +71,10 @@ export function placeText(place: LadderPlace): string {
 }
 
 // Under the place: the level the line's points stand at and how far the
-// next one is, on the curve the own panel and the end card climb
-// (ui/royale_goal.ts goalStep).
+// next one is, on the curve the own panel and the end card climb, in the
+// very words of the wash of a Respawn death (ui/royale_goal_lines.ts).
 export function levelText(points: number): string {
-  const step = goalStep(points);
-  const left = Math.max(1, step.to - Math.floor(Math.max(0, points)));
-  return `Level ${step.level} · ${pointsCount(left)} to Level ${step.level + 1}`;
+  return goalLine(points).text;
 }
 
 // Under the line: what the name box is for, for a Guest; what the name is,

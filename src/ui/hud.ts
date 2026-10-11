@@ -173,6 +173,7 @@ import {
 } from './royale_steps';
 import { LOOT_EMPTY, LOOT_LABEL, royaleHints, royaleRecap } from './royale_text';
 import { renderScoreboardTeam } from './scoreboard_table';
+import { SEAT_LINE_MS, type SeatLine, seatLinesPast } from './seat_lines';
 import { buildSettingsPanel } from './settings_panel';
 import { shopSections } from './shop_sections';
 import { suggestedItem } from './shop_suggestion';
@@ -2777,6 +2778,26 @@ export class Hud {
     this.chatLog.appendChild(line);
     while (this.chatLog.children.length > 6) this.chatLog.firstChild?.remove();
     window.setTimeout(() => line.remove(), 12000);
+  }
+
+  // A seat changing hands (ui/seat_lines.ts): a line of the kill feed, the
+  // battle royale's or the 5v5's, the name in its team's color.
+  pushSeatLine(line: SeatLine): void {
+    if (this.royale) {
+      this.royale.seatLine(line);
+      return;
+    }
+    const entry = document.createElement('div');
+    entry.className = 'hud-feed-entry seat-line';
+    const who = document.createElement('span');
+    who.textContent = line.name;
+    who.style.color = TEAM_TEXT_COLORS[this.look(line.team)] ?? '#c9d8ae';
+    const words = document.createElement('span');
+    words.textContent = ` ${line.words}`;
+    entry.append(who, words);
+    this.feed.appendChild(entry);
+    for (const old of seatLinesPast([...this.feed.querySelectorAll('.seat-line')])) old.remove();
+    window.setTimeout(() => entry.remove(), SEAT_LINE_MS);
   }
 
   // The rings' edges: a creature rose, or fell to a team. Whose favor it

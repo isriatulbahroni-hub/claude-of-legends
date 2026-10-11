@@ -164,6 +164,7 @@ import { isRoyaleNewcomer, RoyaleVeterans } from './royale_join';
 import { RoyaleService } from './royale_service';
 import type { RoyaleSimFactory } from './royale_sim';
 import { sealChampion, unsealChampion } from './seal';
+import { type ChangedSeat, matchSeatSends, type SeatChange } from './seat_change';
 import {
   buildSeatReport,
   countryOf,
@@ -1147,16 +1148,24 @@ function walkOutOfMatch(
     }
   }
   const left = entry.match.handleDisconnect(client.id);
-  if (left) {
-    for (const cid of entry.match.players.keys()) {
-      send(cid, { t: 'player_left', name: left.name, team: left.team });
-    }
-  }
+  if (left) tellSeat(entry, 'left', left, client.id);
   const anyConnected = [...entry.match.players.keys()].some((cid) => clients.has(cid));
   if (!anyConnected && entry.abandonedAt === null) {
     entry.abandonedAt = Date.now();
     console.log(`match ${matchId} abandoned: holding for rejoin grace`);
   }
+}
+
+// A seat changed hands: everyone else in the match reads who, the people
+// playing and the spectators, and the scoreboard follows
+// (server/seat_change.ts).
+function tellSeat(
+  entry: MatchEntry,
+  change: SeatChange,
+  seat: ChangedSeat & { coach?: boolean },
+  about: number,
+): void {
+  for (const s of matchSeatSends(entry.match, change, seat, about)) send(s.to, s.msg);
 }
 
 // What the drop-in rule and the landing's presence line read of the live
@@ -1203,9 +1212,7 @@ function dropInto(client: Client): boolean {
     ...forgedPayload(entry.match),
     ...teamsPayload(entry.match),
   });
-  for (const cid of entry.match.players.keys()) {
-    if (cid !== client.id) send(cid, { t: 'player_joined', name: client.name, team: seat.team });
-  }
+  tellSeat(entry, 'joined', { name: client.name, team: seat.team }, client.id);
   console.log(`match ${matchId}: ${client.name} dropped in on team ${seat.team}`);
   return true;
 }
@@ -2904,9 +2911,7 @@ wss.on('connection', (ws, req) => {
             ...forgedPayload(entry.match),
             ...teamsPayload(entry.match),
           });
-          for (const cid of entry.match.players.keys()) {
-            if (cid !== id) send(cid, { t: 'player_back', name: seat.name, team: seat.team });
-          }
+          tellSeat(entry, 'back', seat, id);
           console.log(`match ${seat.matchId}: ${seat.name} reconnected`);
         }
       } else royale.rejoin(client);
@@ -3123,9 +3128,7 @@ wss.on('connection', (ws, req) => {
         const left = entry.match.handleDisconnect(id);
         if (left) {
           rejoins.reserve(client.accountId, { matchId, ...left });
-          for (const cid of entry.match.players.keys()) {
-            send(cid, { t: 'player_left', name: left.name, team: left.team });
-          }
+          tellSeat(entry, 'left', left, id);
         }
         // Not reaped on the spot: the seat reservations above deserve a
         // grace window, so an accidental reload can come back (the world

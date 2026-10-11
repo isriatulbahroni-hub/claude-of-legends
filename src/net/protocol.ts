@@ -508,14 +508,20 @@ export type ServerMsg =
   | { t: 'score'; rows: WireScoreRow[] }
   | { t: 'chat'; from: string; team: TeamId; text: string }
   | { t: 'ping'; from: string; team: TeamId; x: number; z: number }
-  // A teammate's connection dropped; a bot policy took the seat over.
-  | { t: 'player_left'; name: string; team: TeamId }
-  // A dropped teammate reconnected and took their champion back.
+  // A seat changing hands while the match plays (server/seat_change.ts),
+  // told to everyone else in the match, spectators too, by the name the
+  // match shows and nothing more; the HUD's kill feed reads it
+  // (src/ui/seat_lines.ts). Never recorded in a replay.
+  // A person left their seat, by the menu or a dropped connection: a house
+  // bot plays it on, or with own the seat's own bot (a coach's) that was
+  // playing already; own is additive, absent on a house bot.
+  | { t: 'player_left'; name: string; team: TeamId; own?: 1 }
+  // A person whose connection dropped took their seat back.
   | { t: 'player_back'; name: string; team: TeamId }
   // The round-trip probe (server/seat_report.ts): the client echoes it at
   // once, and the time to the echo is the round trip the player lives.
   | { t: 'probe'; n: number }
-  // Someone took a bot's seat mid-match (ADR 0025); sent to everyone.
+  // Someone took a bot's seat mid-match (ADR 0025); sent to everyone else.
   | { t: 'player_joined'; name: string; team: TeamId }
   // Sent once to each human player when the finished match is recorded:
   // this player's rating movement (zero and rated:false when unrated).

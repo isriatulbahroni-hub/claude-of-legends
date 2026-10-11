@@ -27,8 +27,10 @@ import { goalBar } from './royale_goal_bar';
 import { RoyaleHudGrafts } from './royale_hud_grafts';
 import { type MomentDeath, RoyaleHudMoments } from './royale_hud_moments';
 import {
+  COMPACT_FEED_FONT_PX,
   COMPACT_NOTE_FONT_PX,
   COMPACT_NOTES_BOTTOM_PX,
+  FEED_FONT_PX,
   FEED_MAX_W_PX,
   FEED_NAME_MAX_W_PX,
   FEED_RIGHT_PX,
@@ -67,6 +69,7 @@ import {
   placeText,
   seatName,
 } from './royale_text';
+import type { SeatLine } from './seat_lines';
 
 // An enemy champion this close counts as near, for the fight and takedown
 // steps.
@@ -150,7 +153,8 @@ const CSS = `
   right: calc(${FEED_RIGHT_PX}px + var(--safe-right, env(safe-area-inset-right, 0px)));
   top: calc(${FEED_TOP_PX}px + var(--safe-top, env(safe-area-inset-top, 0px)));
   max-width: ${FEED_MAX_W_PX}px;
-  display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-size: 12.5px; }
+  display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+  font-size: ${FEED_FONT_PX}px; }
 .br-feed-line { display: flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 6px;
   background: rgba(6, 10, 20, 0.82); border: 1px solid #3a3420; color: #e6dcb8;
   text-shadow: 0 1px 2px #000; white-space: nowrap; animation: br-in 0.25s ease-out;
@@ -254,7 +258,7 @@ const CSS = `
   padding: 6px 8px 6px 12px; gap: 10px; }
 .hud.compact .br-drop b { font-size: 14px; letter-spacing: 0.8px; }
 .hud.compact .br-drop span { font-size: 14px; min-width: 40px; padding: 3px 8px; }
-.hud.compact .br-feed { font-size: 10.5px; gap: 3px;
+.hud.compact .br-feed { font-size: ${COMPACT_FEED_FONT_PX}px; gap: 3px;
   top: calc(40% + 58px); right: calc(12px + var(--safe-right, env(safe-area-inset-right, 0px))); }
 .hud.compact.thumbs .br-feed { right: calc(12px + var(--safe-right, env(safe-area-inset-right, 0px)));
   top: calc(178px + var(--safe-top, env(safe-area-inset-top, 0px))); }
@@ -557,6 +561,11 @@ export class RoyaleHud {
 
   play(calls: readonly MomentCall[]): void {
     this.moments.play(calls);
+  }
+
+  // A seat changing hands (ui/seat_lines.ts): its line of the feed.
+  seatLine(line: SeatLine): void {
+    this.moments.seatLine(line);
   }
 
   // The mode's events: what the first steps count, and the loud moments

@@ -24,6 +24,7 @@ import type {
 import { SEEDFALL_IMPACT_M, SEEDFALL_WARN_S } from '../sim/content/royale_events';
 import { CLAMOR_S } from '../sim/royale/types';
 import { MultikillLadder, multikillLook, ROYALE_MULTIKILL_LEASH } from './multikill';
+import { SEAT_LINES_MAX } from './seat_lines';
 
 // The synthesized sounds a call may carry (src/game/sfx.ts).
 export type MomentSfx =
@@ -365,8 +366,10 @@ export interface FeedContext {
 }
 
 // 'news' is a mark's news from afar (newsCall): a line of the near rows
-// that is no death.
-export type FeedTier = 'own' | 'lead' | 'near' | 'news' | 'fold';
+// that is no death. 'seat' is a seat changing hands (ui/seat_lines.ts: a
+// person joined, came back or left to a bot): no death either, kept the
+// full time like the own lines, never one of the near rows.
+export type FeedTier = 'own' | 'lead' | 'near' | 'news' | 'seat' | 'fold';
 
 export function feedTier(k: { unitId: number; killerId: number }, ctx: FeedContext): FeedTier {
   const ids = [k.unitId];
@@ -389,26 +392,40 @@ export const FEED_MAX = 4;
 export const FEED_NEAR_MAX = 2;
 
 export function feedLife(tier: FeedTier): number {
-  return tier === 'own' || tier === 'lead' ? FEED_MS : FEED_NEAR_MS;
+  return tier === 'own' || tier === 'lead' || tier === 'seat' ? FEED_MS : FEED_NEAR_MS;
 }
 
 // The lines a new one pushes out, by index into `tiers` (newest first, the
 // new one included): the oldest near lines (deaths or news) past
-// FEED_NEAR_MAX, then the oldest lines past FEED_MAX, a near one before
-// the viewer's or the leader's. A near death pushed out joins the fold
-// (foldsOut); a news line just goes.
+// FEED_NEAR_MAX and the oldest seat lines past SEAT_LINES_MAX, then the
+// oldest lines past FEED_MAX, a near one before the viewer's or the
+// leader's. A near death pushed out joins the fold (foldsOut); a news or
+// a seat line just goes.
 export function feedOverflow(tiers: readonly FeedTier[]): number[] {
   const out = new Set<number>();
   const isNear = (i: number): boolean => tiers[i] === 'near' || tiers[i] === 'news';
   const standing = (): number[] => tiers.map((_, i) => i).filter((i) => !out.has(i));
   const near = standing().filter(isNear);
   for (const i of near.slice(FEED_NEAR_MAX)) out.add(i);
+  const seats = standing().filter((i) => tiers[i] === 'seat');
+  for (const i of seats.slice(SEAT_LINES_MAX)) out.add(i);
   while (standing().length > FEED_MAX) {
     const rest = standing();
     const oldestNear = rest.filter(isNear).pop();
     out.add(oldestNear ?? (rest[rest.length - 1] as number));
   }
   return [...out].sort((a, b) => a - b);
+}
+
+// Where a new line goes among the standing ones (`tiers`, top first): on
+// top, under the seat lines still standing, which keep the top while they
+// last. A phone shows only the feed's first two lines (ui/royale_hud.ts),
+// and a fight's lines coming in over a seat line hid it within a second.
+export function feedInsertAt(tiers: readonly FeedTier[], tier: FeedTier): number {
+  if (tier === 'seat') return 0;
+  let i = 0;
+  while (tiers[i] === 'seat') i += 1;
+  return i;
 }
 
 // Whether a line pushed out of the feed counts in "+N elsewhere": a near

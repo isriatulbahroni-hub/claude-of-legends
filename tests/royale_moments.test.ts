@@ -25,6 +25,7 @@ import {
   type FeedContext,
   type FeedTier,
   FoldCount,
+  feedInsertAt,
   feedKeeps,
   feedLife,
   feedOverflow,
@@ -47,6 +48,7 @@ import {
   tickPitch,
   WHOOSH_LEAD_S,
 } from '../src/ui/royale_moments';
+import { SEAT_LINES_MAX } from '../src/ui/seat_lines';
 
 const SELF = 1;
 const A = 2;
@@ -296,6 +298,55 @@ describe('the feed', () => {
     expect(foldsOut('near')).toBe(true);
     expect(foldsOut('news')).toBe(false);
     expect(foldsOut('own')).toBe(false);
+  });
+
+  it('keeps a seat changing hands the full time, out of the near rows, never a death', () => {
+    expect(feedLife('seat')).toBe(FEED_MS);
+    // A fight's near lines do not push it out; only FEED_MAX lines do,
+    // a near one leaving before it.
+    expect(feedOverflow(['near', 'near', 'seat'])).toEqual([]);
+    expect(feedOverflow(['near', 'near', 'near', 'seat'])).toEqual([2]);
+    expect(feedOverflow(['own', 'near', 'own', 'seat', 'own'])).toEqual([1]);
+    expect(feedOverflow(['own', 'own', 'own', 'own', 'seat'])).toEqual([4]);
+    expect(foldsOut('seat')).toBe(false);
+  });
+
+  it('keeps a seat line on top while it stands, a fight coming in under it', () => {
+    expect(feedInsertAt([], 'near')).toBe(0);
+    expect(feedInsertAt([], 'seat')).toBe(0);
+    expect(feedInsertAt(['near', 'own'], 'near')).toBe(0);
+    expect(feedInsertAt(['seat', 'near', 'own'], 'near')).toBe(1);
+    expect(feedInsertAt(['seat', 'seat', 'lead'], 'own')).toBe(2);
+    expect(feedInsertAt(['seat'], 'news')).toBe(1);
+    // A newer seat line goes over the older one.
+    expect(feedInsertAt(['seat', 'near'], 'seat')).toBe(0);
+    // A phone shows the first two lines: the seat line is one of them
+    // however many lines come after it.
+    let feed: FeedTier[] = [];
+    for (const tier of ['near', 'seat', 'near', 'own', 'near', 'lead'] as FeedTier[]) {
+      const at = feedInsertAt(feed, tier);
+      feed = [...feed.slice(0, at), tier, ...feed.slice(at)];
+      const gone = new Set(feedOverflow(feed));
+      feed = feed.filter((_, j) => !gone.has(j));
+    }
+    expect(feed.slice(0, 2)).toContain('seat');
+  });
+
+  it('keeps two seat lines when several change hands at once, a fight still shown', () => {
+    // Newest first: past SEAT_LINES_MAX the oldest seat line goes.
+    expect(SEAT_LINES_MAX).toBe(2);
+    expect(feedOverflow(['seat', 'seat', 'seat'])).toEqual([2]);
+    expect(feedOverflow(['seat', 'seat', 'own', 'seat'])).toEqual([3]);
+    // Five people dropping in, then the viewer's own takedown: the
+    // takedown stands, under the two newest seat lines.
+    let feed: FeedTier[] = [];
+    for (const tier of ['seat', 'seat', 'seat', 'seat', 'seat', 'own'] as FeedTier[]) {
+      const at = feedInsertAt(feed, tier);
+      feed = [...feed.slice(0, at), tier, ...feed.slice(at)];
+      const gone = new Set(feedOverflow(feed));
+      feed = feed.filter((_, j) => !gone.has(j));
+    }
+    expect(feed).toEqual(['seat', 'seat', 'own']);
   });
 
   it('folds a late Respawn of bots on bots instead of standing five rows deep', () => {

@@ -97,6 +97,34 @@ export function feedBox(width: number): ScreenBox {
   };
 }
 
+// A seat changing hands (ui/seat_lines.ts) is one line of the feed: the
+// person's name, then the words, never cut; on a desktop the words a
+// little smaller (SEAT_WORDS_EM), a phone's at the feed's size, its column
+// having room to spare. The name has the room the words leave rather than
+// FEED_NAME_MAX_W_PX, so a Guest's whole "Wanderer 0000" shows; a longer
+// name is cut short. The feed's sizes, a line's padding, border and gap,
+// and a regular system face's widest average letter in ems as Chrome
+// measured the words and the names (the words 0.46 to 0.53, a Guest's
+// name 0.59), rounded up.
+export const FEED_FONT_PX = 12.5;
+export const COMPACT_FEED_FONT_PX = 10.5;
+export const SEAT_WORDS_EM = 0.88;
+export const FEED_LINE_CHROME_PX = 9 * 2 + 2 + 6;
+export const COMPACT_FEED_LINE_CHROME_PX = 7 * 2 + 2 + 6;
+export const WORDS_EM_PER_CHAR = 0.54;
+export const NAME_EM_PER_CHAR = 0.6;
+
+export function seatLineWidth(name: string, words: string, compact: boolean): number {
+  const font = compact ? COMPACT_FEED_FONT_PX : FEED_FONT_PX;
+  const wordsEm = compact ? 1 : SEAT_WORDS_EM;
+  const chrome = compact ? COMPACT_FEED_LINE_CHROME_PX : FEED_LINE_CHROME_PX;
+  return (
+    chrome +
+    name.length * font * NAME_EM_PER_CHAR +
+    words.length * font * wordsEm * WORDS_EM_PER_CHAR
+  );
+}
+
 // The announcement (ui/hud.ts announce: "You took down Rushlantern", "Two
 // Seedfalls have landed"): centered under the top line, and never wider
 // than the room between the first steps' card and the feed, with

@@ -197,6 +197,20 @@ events without replaying flashes, rejects duplicates, and keeps the captured
 ground anchor independently of movement or death. It owns a bounded set of
 effects and releases evicted, expired and teardown resources.
 
+Its programs link before the fight, not in it. On the planet the fights'
+warm-up ([warm samples](../src/render/warm_samples.ts)) builds the rigged
+model once its file is in, and [the Voidmaul's art](../src/render/voidmaul_warm.ts),
+the slam, the crush and the rift with its burst, off screen against the
+planet's scene. The scar, the shockwave, the dust and sparks and the rift's
+opening draw with hand-written shaders, which three keys by their source
+stages and forgets once their last material is disposed, so the program
+keeper cannot keep them: [the shader hold](../src/render/shader_hold.ts)
+keeps one compiled stand-in per setup for the renderer's life, from the
+warm-up on the planet and from the first strike in a 5v5, and every later
+slam and rise finds its programs linked. The model, the rift and the scar
+go through the quality ladder like any body: their receivers leave the
+shadows with the ground's, and the points size by the drawing buffer.
+
 The broken rock is part of the attack. [The stone rain](../src/sim/combat/voidmaul_stones.ts)
 lays out 32 blocks (eight sectors by four rings; 128 read as a blizzard),
 from a fixed integer hash and

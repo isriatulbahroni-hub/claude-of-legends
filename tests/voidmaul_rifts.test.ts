@@ -141,6 +141,22 @@ describe('Voidmaul ground rift lifecycle', () => {
     rifts.dispose();
   });
 
+  it('hands each rift it opens to the shader hold before it is drawn, and no other', () => {
+    const scene = new THREE.Scene();
+    const built: THREE.Object3D[] = [];
+    const rifts = new VoidmaulRifts(scene, undefined, (root) => {
+      // Not yet in the scene: held before its first frame.
+      expect(root.parent).toBeNull();
+      built.push(root);
+    });
+    const anchor = new THREE.Vector3();
+    expect(rifts.start(1, null, anchor, 6)).toBe(false);
+    expect(rifts.start(1, 0.2, anchor, 6)).toBe(true);
+    expect(rifts.start(1, 0.4, anchor, 6)).toBe(false);
+    expect(built).toEqual([scene.children[0]]);
+    rifts.dispose();
+  });
+
   it('continues closing after Spawn is over and releases its resources exactly once', () => {
     const dispose = vi.spyOn(VoidmaulRiftFx.prototype, 'dispose');
     const scene = new THREE.Scene();

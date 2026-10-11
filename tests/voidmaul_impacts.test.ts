@@ -36,6 +36,27 @@ describe('resolved Voidmaul impacts', () => {
     impacts.dispose();
   });
 
+  it('hands each impact it starts to the shader hold before it is drawn, and no other', () => {
+    const scene = new THREE.Scene();
+    const built: THREE.Object3D[] = [];
+    const impacts = new VoidmaulImpacts(
+      scene,
+      () => 0,
+      undefined,
+      (root) => {
+        // Not yet in the scene: held before its first frame.
+        expect(root.parent).toBeNull();
+        built.push(root);
+      },
+    );
+    expect(impacts.start(slam(), 1.75, new THREE.Vector3())).toBe(true);
+    // A duplicate and an expired one start nothing.
+    expect(impacts.start(slam(), 1.8, new THREE.Vector3())).toBe(false);
+    expect(impacts.start(slam(5), 20, new THREE.Vector3())).toBe(false);
+    expect(built).toEqual([scene.children[0]]);
+    impacts.dispose();
+  });
+
   it('seeks late events without replaying contact feedback or duplicate snapshots', () => {
     const onImpact = vi.fn();
     const update = vi.spyOn(VoidmaulAttackFx.prototype, 'update');

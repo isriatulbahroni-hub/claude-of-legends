@@ -17,6 +17,9 @@ export class VoidmaulRifts {
   constructor(
     private readonly scene: THREE.Scene,
     private readonly onBeat?: (beat: VoidmaulSpawnBeat, groundAnchor: THREE.Vector3) => void,
+    // Each rift built, before it is first drawn: the renderer holds its
+    // hand-written shaders (shader_hold.ts) so the next rise links none.
+    private readonly built?: (root: THREE.Object3D) => void,
   ) {}
 
   get count(): number {
@@ -43,6 +46,7 @@ export class VoidmaulRifts {
       return false;
     }
     const effect = new VoidmaulRiftFx();
+    this.built?.(effect.root);
     effect.root.position.copy(groundAnchor);
     effect.root.rotation.y = yaw;
     effect.root.scale.setScalar(worldScale);

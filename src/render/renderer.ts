@@ -95,6 +95,7 @@ import {
   type RoyaleProjector,
   setRoyaleProjector,
 } from './royale_cues';
+import { ShaderHold } from './shader_hold';
 import { pickShieldHolder, type ShieldCandidate } from './shield_holder';
 import { fumbleSwirl, StealthVeils } from './status_veils';
 import { crownHeight, crownLift, flightProgress, isStill } from './structure_fire';
@@ -123,6 +124,7 @@ import { voidmaulAttackFeedback } from './voidmaul_attack_feedback';
 import { VoidmaulImpacts } from './voidmaul_impacts';
 import { VoidmaulRifts } from './voidmaul_rifts';
 import type { VoidmaulSpawnBeat } from './voidmaul_spawn';
+import { VOIDMAUL_WARM_ART } from './voidmaul_warm';
 import { sliced, texturesOf, type WarmBody, warmFights } from './warm_samples';
 
 const TEAM_COLORS: readonly number[] = [0x4a7dd6, 0xd65c5c];
@@ -528,6 +530,10 @@ export class Renderer {
   // (program_keeper.ts): an effect cast again finds its program instead of
   // linking it anew mid-fight.
   private readonly programs = new ProgramKeeper();
+  // The hand-written shaders' stand-ins (shader_hold.ts): the Voidmaul's
+  // slam and rift build theirs for each strike, and would link them anew.
+  private readonly shaderHold = new ShaderHold();
+  private readonly holdScene = new THREE.Scene();
   // The planet's programs linking before its first frame
   // (program_warmup.ts); null on the plane.
   private readonly warmup: ProgramWarmup | null = null;
@@ -637,18 +643,24 @@ export class Renderer {
       const planet = this.planet;
       this.vfx.chartCarry = (epoch) => planet.carryFrom(epoch);
     }
-    this.voidmaulRifts = new VoidmaulRifts(this.scene, (beat, at) =>
-      this.voidmaulSpawnBeat(beat, at),
+    this.voidmaulRifts = new VoidmaulRifts(
+      this.scene,
+      (beat, at) => this.voidmaulSpawnBeat(beat, at),
+      (root) => this.holdShaders(root),
     );
-    this.voidmaulImpacts = new VoidmaulImpacts(this.scene, this.terrain.heightAt, (at) =>
-      voidmaulAttackFeedback(at, {
-        vfx: this.vfx,
-        camera: this.camera,
-        planet: this.planet ?? undefined,
-        toScene: (point) => this.toScene(point),
-        gain: (x, z) => this.sfxGain(x, z),
-        shake: (strength) => this.addShake(strength),
-      }),
+    this.voidmaulImpacts = new VoidmaulImpacts(
+      this.scene,
+      this.terrain.heightAt,
+      (at) =>
+        voidmaulAttackFeedback(at, {
+          vfx: this.vfx,
+          camera: this.camera,
+          planet: this.planet ?? undefined,
+          toScene: (point) => this.toScene(point),
+          gain: (x, z) => this.sfxGain(x, z),
+          shake: (strength) => this.addShake(strength),
+        }),
+      (root) => this.holdShaders(root),
     );
     this.vfx.onShake = (k) => this.addShake(k);
     if (this.planet) {
@@ -824,6 +836,8 @@ export class Renderer {
     const notice = buildPictureNotice(container);
     this.picture = watchPicture(this.gl.domElement, {
       restore: async () => {
+        // Three built its caches anew: the stand-ins hold nothing in them.
+        this.shaderHold.forget();
         await this.terrain.restoreImages?.();
         this.terrain.releaseImages?.(upload);
       },
@@ -880,9 +894,12 @@ export class Renderer {
       // so the programs match.
       body: (body: WarmBody) => {
         const { holder } = this.buildBody(warmUnit(body));
-        // The Pyrefang's rigged model too, which a live one swaps in.
+        // The rigged models too, which a live one swaps in.
         if (body.creatureId === 'pyrefang') {
           const visual = createPyrefangVisual(null, holder.scale.x);
+          if (visual) holder.add(visual.root);
+        } else if (body.creatureId === 'voidmaul') {
+          const visual = createVoidmaulVisual(null, holder.scale.x);
           if (visual) holder.add(visual.root);
         }
         return holder;
@@ -899,12 +916,19 @@ export class Renderer {
         };
       },
       championIds: Object.keys(CHAMPION_VISUALS),
+      // The Voidmaul's slam, crush and rift (voidmaul_warm.ts).
+      art: VOIDMAUL_WARM_ART,
       catalog: SPELL_VFX,
+      // Stand-ins taken before the compile bends the sample, compiled with
+      // it, kept after it is released (shader_hold.ts).
+      hold: (root) => this.shaderHold.take(root),
       makeFx: (scene) => new VfxSystem(scene, this.terrain.heightAt),
       // Only the samples drawn from a file wait for it (warm_samples.ts
-      // filesFor): the Pyrefang's bodies, Sylra's and Elowen's spells.
+      // filesFor): the Pyrefang's and the Voidmaul's bodies, Sylra's and
+      // Elowen's spells.
       files: {
         pyrefang: preloadPyrefang,
+        voidmaul: preloadVoidmaul,
         effects: { sylra: preloadSylraEffects, elowen: preloadElowenEffects },
       },
       next: sliced(
@@ -917,6 +941,20 @@ export class Renderer {
       idle: () => new Promise((done) => window.setTimeout(done, WARM_IDLE_MS)),
       gone: () => this.disposed,
     }).catch(() => undefined);
+  }
+
+  // Holds the hand-written shaders of an effect just built
+  // (shader_hold.ts): their stand-ins dressed as the scene is (the
+  // planet's bend) and compiled against it now, while the effect stands,
+  // so its next strike links none of them.
+  private holdShaders(root: THREE.Object3D): void {
+    if (this.disposed) return;
+    const standIns = this.shaderHold.take(root);
+    if (standIns.length === 0) return;
+    for (const o of standIns) this.holdScene.add(o);
+    this.planet?.bendScene(this.holdScene);
+    this.gl.compile(this.holdScene, this.camera, this.scene);
+    for (const o of standIns) this.holdScene.remove(o);
   }
 
   // The planet's minimap window (planet_minimap.ts): its world, its

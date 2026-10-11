@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
+import { programPicks } from '../src/render/body_dress';
 import {
   VOIDMAUL_ATTACK_RELEASE_S,
   VOIDMAUL_CLIPS,
@@ -179,5 +180,27 @@ describe('Voidmaul quadruped playback', () => {
     expect(geometryDisposed).toBe(false);
     expect(source).toBe((t.scene.getObjectByName(mesh.name) as THREE.Mesh).material);
     second.dispose();
+  });
+});
+
+describe("the Voidmaul's model warmed", () => {
+  it('links the programs a live one draws with, toon and none Lambert', () => {
+    // A hide like the export's: a textured standard material, its emissive
+    // map lit by the cracks.
+    const template = makeTemplate();
+    const picture = new THREE.Texture();
+    template.scene.add(
+      new THREE.Mesh(
+        new THREE.BufferGeometry(),
+        new THREE.MeshStandardMaterial({ map: picture, emissiveMap: picture }),
+      ),
+    );
+    // The warm-up's sample stands idle; a live one is seen rising.
+    const warm = programPicks(new VoidmaulVisual(template, null, 1.1).root);
+    const rising = programPicks(new VoidmaulVisual(template, 0.5, 1.1 * 1.35).root);
+    expect(warm.length).toBeGreaterThan(0);
+    expect(warm).toEqual(rising);
+    expect(warm.some((p) => p.startsWith('MeshLambertMaterial'))).toBe(false);
+    expect(warm.every((p) => p.includes('key voidmaul-hide'))).toBe(true);
   });
 });

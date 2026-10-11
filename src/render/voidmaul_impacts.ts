@@ -22,6 +22,9 @@ export class VoidmaulImpacts {
     private readonly scene: THREE.Scene,
     private readonly groundHeight: GroundHeight,
     private readonly onImpact?: (at: THREE.Vector3) => void,
+    // Each effect built, before it is first drawn: the renderer holds its
+    // hand-written shaders (shader_hold.ts) so the next slam links none.
+    private readonly built?: (root: THREE.Object3D) => void,
   ) {}
 
   get count(): number {
@@ -73,6 +76,7 @@ export class VoidmaulImpacts {
       note.kind ?? 'slam',
       stones?.map((s) => ({ ...s, origin: local(s.origin), target: local(s.target) })),
     );
+    this.built?.(effect.root);
     effect.root.position.copy(groundAnchor);
     effect.root.rotation.y = yaw;
     effect.conformGround((x, z) => {

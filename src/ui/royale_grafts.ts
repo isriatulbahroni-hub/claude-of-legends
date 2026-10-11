@@ -143,13 +143,14 @@ export function graftNames(ids: readonly string[]): string[] {
 // across the top of the view, under the top line, the title above them,
 // so the world and the champion's body stay in sight below (the
 // maintainer: "faut quand meme qu'on voit le jeu"). A phone uses the same
-// row, smaller.
+// row, smaller, its title under the Dusk's pill (at 54 px the pill
+// touched it; ui/royale_layout.ts topLineBox).
 export const DESK_CARD_W_PX = 248;
 export const DESK_CARD_H_PX = 132;
 export const DESK_TOP_PX = 96;
 export const PHONE_CARD_W_PX = 222;
 export const PHONE_CARD_H_PX = 104;
-export const PHONE_TOP_PX = 54;
+export const PHONE_TOP_PX = 62;
 export const TITLE_H_PX = 30;
 export const PHONE_TITLE_H_PX = 22;
 export const CARD_GAP_PX = 12;
@@ -186,6 +187,32 @@ export function cardsCoverBox(width: number, compact: boolean): ScreenBox {
     top: compact ? PHONE_TOP_PX : DESK_TOP_PX,
     right: row.right,
     bottom: row.bottom + (compact ? PHONE_LATER_H_PX : LATER_H_PX),
+  };
+}
+
+// The Later button alone, centered under the row, at most LATER_W_PX
+// wide: the room either side of it under the row is free (the feed
+// stands there while the cards are open, ui/royale_cards_room.ts).
+export const LATER_W_PX = 96;
+
+export function laterBox(width: number, compact: boolean): ScreenBox {
+  const row = cardsBox(width, compact);
+  return {
+    left: width / 2 - LATER_W_PX / 2,
+    top: row.bottom,
+    right: width / 2 + LATER_W_PX / 2,
+    bottom: row.bottom + (compact ? PHONE_LATER_H_PX : LATER_H_PX),
+  };
+}
+
+// The title's line over the row, as wide as the row.
+export function titleBox(width: number, compact: boolean): ScreenBox {
+  const row = cardsBox(width, compact);
+  return {
+    left: row.left,
+    top: compact ? PHONE_TOP_PX : DESK_TOP_PX,
+    right: row.right,
+    bottom: row.top,
   };
 }
 

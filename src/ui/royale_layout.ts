@@ -97,6 +97,31 @@ export function feedBox(width: number): ScreenBox {
   };
 }
 
+// A phone's feed: at the right, COMPACT_FEED_TOP_PCT percent of the screen
+// down and COMPACT_FEED_TOP_PX more, clear of the map in the corner; with
+// the thumb controls, whose map stands at the top right, at
+// THUMBS_FEED_TOP_PX. Two kept lines and the fold, each line its height
+// and its gap.
+export const COMPACT_FEED_TOP_PCT = 40;
+export const COMPACT_FEED_TOP_PX = 58;
+export const THUMBS_FEED_TOP_PX = 178;
+export const COMPACT_FEED_LINE_H_PX = 24;
+export const COMPACT_FEED_LINES = 3;
+
+export function compactFeedTop(height: number, thumbs: boolean): number {
+  return thumbs ? THUMBS_FEED_TOP_PX : (height * COMPACT_FEED_TOP_PCT) / 100 + COMPACT_FEED_TOP_PX;
+}
+
+export function compactFeedBox(width: number, height: number, thumbs: boolean): ScreenBox {
+  const top = compactFeedTop(height, thumbs);
+  return {
+    left: width - FEED_RIGHT_PX - FEED_MAX_W_PX,
+    top,
+    right: width - FEED_RIGHT_PX,
+    bottom: top + COMPACT_FEED_LINES * COMPACT_FEED_LINE_H_PX,
+  };
+}
+
 // A seat changing hands (ui/seat_lines.ts) is one line of the feed: the
 // person's name, then the words, never cut; on a desktop the words a
 // little smaller (SEAT_WORDS_EM), a phone's at the feed's size, its column
@@ -208,13 +233,18 @@ export function compactNoteWidth(text: string): number {
 }
 
 // The top line (ui/royale_hud.ts .br-top) at its fullest, a test's
-// worst case: the Dusk's line and the count, the mark's badge and the
-// Dusk's pill under them; on a phone the line and the count share a row.
+// worst case: the Dusk's line and the count (its head, all the drop
+// shows), the mark's badge and the Dusk's pill under them; on a phone the
+// line, the count and the badge share a row, the pill under it. As Chrome
+// drew them: the head 53 px, the badge 22, the pill 25; a phone's row 26,
+// its pill 21.
 export const TOP_LINE_TOP_PX = 8;
 export const TOP_LINE_HALF_W_PX = 170;
-export const TOP_LINE_H_PX = 104;
+export const TOP_LINE_H_PX = 108;
+export const TOP_HEAD_H_PX = 54;
 export const COMPACT_TOP_LINE_HALF_W_PX = 190;
-export const COMPACT_TOP_LINE_H_PX = 78;
+export const COMPACT_TOP_LINE_H_PX = 52;
+export const COMPACT_TOP_HEAD_H_PX = 26;
 
 export function topLineBox(width: number, compact: boolean): ScreenBox {
   const half = compact ? COMPACT_TOP_LINE_HALF_W_PX : TOP_LINE_HALF_W_PX;
@@ -259,11 +289,15 @@ export const COMPACT_NOTES_SHOWN = 2;
 export const COMPACT_NOTE_H_PX = 40;
 export const COMPACT_NOTES_GAP_PX = 6;
 
-export function compactNotesBox(width: number, height: number, thumbs: boolean): ScreenBox {
+export function compactNotesBox(
+  width: number,
+  height: number,
+  thumbs: boolean,
+  shown = COMPACT_NOTES_SHOWN,
+): ScreenBox {
   const mid = thumbs ? (width * THUMBS_NOTES_LEFT_PCT) / 100 : width / 2;
   const bottom = height - (thumbs ? THUMBS_NOTES_BOTTOM_PX : COMPACT_NOTES_BOTTOM_PX);
-  const tall =
-    COMPACT_NOTES_SHOWN * COMPACT_NOTE_H_PX + (COMPACT_NOTES_SHOWN - 1) * COMPACT_NOTES_GAP_PX;
+  const tall = shown * COMPACT_NOTE_H_PX + (shown - 1) * COMPACT_NOTES_GAP_PX;
   return {
     left: mid - COMPACT_DONE_MAX_W_PX / 2,
     top: bottom - tall,

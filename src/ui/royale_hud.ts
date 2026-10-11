@@ -28,6 +28,8 @@ import { RoyaleHudGrafts } from './royale_hud_grafts';
 import { type MomentDeath, RoyaleHudMoments } from './royale_hud_moments';
 import {
   COMPACT_FEED_FONT_PX,
+  COMPACT_FEED_TOP_PCT,
+  COMPACT_FEED_TOP_PX,
   COMPACT_NOTE_FONT_PX,
   COMPACT_NOTES_BOTTOM_PX,
   FEED_FONT_PX,
@@ -39,6 +41,7 @@ import {
   NOTES_FROM_MIDDLE_PX,
   NOTES_MAX,
   SIDE_MARGIN_PX,
+  THUMBS_FEED_TOP_PX,
 } from './royale_layout';
 import { royaleMode } from './royale_modes';
 import type { MomentCall } from './royale_moments';
@@ -259,9 +262,10 @@ const CSS = `
 .hud.compact .br-drop b { font-size: 14px; letter-spacing: 0.8px; }
 .hud.compact .br-drop span { font-size: 14px; min-width: 40px; padding: 3px 8px; }
 .hud.compact .br-feed { font-size: ${COMPACT_FEED_FONT_PX}px; gap: 3px;
-  top: calc(40% + 58px); right: calc(12px + var(--safe-right, env(safe-area-inset-right, 0px))); }
+  top: calc(${COMPACT_FEED_TOP_PCT}% + ${COMPACT_FEED_TOP_PX}px);
+  right: calc(12px + var(--safe-right, env(safe-area-inset-right, 0px))); }
 .hud.compact.thumbs .br-feed { right: calc(12px + var(--safe-right, env(safe-area-inset-right, 0px)));
-  top: calc(178px + var(--safe-top, env(safe-area-inset-top, 0px))); }
+  top: calc(${THUMBS_FEED_TOP_PX}px + var(--safe-top, env(safe-area-inset-top, 0px))); }
 .hud.compact .br-feed-line { padding: 2px 7px; }
 /* Two kept lines on a phone; the "+N elsewhere" fold (appended last)
    still shows under them. */

@@ -12,6 +12,7 @@
 import type { SnapGraftOffer, SnapRoyale } from '../net/royale_wire';
 import { GRAFTS } from '../sim/content/grafts';
 import { setHidden } from './dom_write';
+import { cardsRoomCss } from './royale_cards_room';
 import {
   CARD_GAP_PX,
   CARDS_ASIDE,
@@ -85,6 +86,8 @@ const CSS = `
 /* While the cards are open, what they stand over steps aside. */
 ${CARDS_ASIDE.map((s) => `.hud.br-cards-open ${s}`).join(', ')} {
   visibility: hidden; opacity: 0; transition: none; }
+/* And the HUD's lines keep clear of them (ui/royale_cards_room.ts). */
+${cardsRoomCss()}
 /* A phone: the same row under the top line, smaller; the chip in its corner. */
 .hud.compact .br-grafts { top: calc(${PHONE_TOP_PX}px + var(--safe-top, env(safe-area-inset-top, 0px))); }
 .hud.compact .br-grafts .ttl { height: ${PHONE_TITLE_H_PX}px; font-size: 15px; }

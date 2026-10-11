@@ -25,6 +25,7 @@ import type { TeamId } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { itemIconUrl } from './icons';
 import { BURR_COLOR, burrTarget } from './royale_burr';
+import { openCall } from './royale_cards_room';
 import {
   compactRing,
   EdgeChimes,
@@ -396,13 +397,17 @@ export class RoyaleHudMoments {
   }
 
   // Plays calls: the spotlight or the announcement, the voice, the sound;
-  // news from afar as one quiet line of the feed.
+  // news from afar as one quiet line of the feed. While the Graft cards are
+  // open a spotlight's call is said on the announcement's line
+  // (ui/royale_cards_room.ts openCall).
   play(calls: readonly MomentCall[]): void {
-    for (const c of calls) {
-      if (c.feed) {
-        this.newsLine(c);
+    const cardsOpen = this.host.root.classList.contains('br-cards-open');
+    for (const call of calls) {
+      if (call.feed) {
+        this.newsLine(call);
         continue;
       }
+      const c = openCall(call, cardsOpen);
       if (c.spotlight) this.spotlight(c);
       else this.host.announce(c.text, c.color, c.holdMs, c.keep);
       if (c.voice) announceVoice(c.voice, true, true);

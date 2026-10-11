@@ -6,9 +6,12 @@
 // (ui/royale_modes.ts) and the pill. Same frame as the play tiles
 // (ui/play_tiles.ts), so the two rows read as one section.
 
+import { getSettings } from '../game/settings';
 import type { RoyaleVariant } from '../sim/royale/types';
 import { el } from './menu';
 import { planetEmblem } from './planet_emblem';
+import { goalLineView } from './royale_goal_line';
+import { goalWelcome, WELCOME_BACK } from './royale_goal_lines';
 import { ROYALE_MODES, royaleArtUrl, viewArt } from './royale_modes';
 
 const CSS = `
@@ -47,6 +50,7 @@ const CSS = `
   background: linear-gradient(180deg, #e8cc74 0%, #c9a84a 55%, #a07830 100%);
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25); }
 .royale-tile .planet-emblem { --planet: 128px; transition: transform 0.7s ease; }
+.royale-tile .goal-line.royale-tile-back { font-size: 13px; }
 .royale-tile:hover .planet-emblem { transform: scale(1.06) rotate(-6deg); }
 @media (max-width: 900px) {
   .royale-tiles { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
@@ -54,6 +58,7 @@ const CSS = `
   .royale-tile h3 { font-size: 18px; letter-spacing: 1.6px; }
   .royale-tile p { font-size: 11.5px; line-height: 1.4; }
   .royale-tile-cta { padding: 6px 14px; font-size: 12px; }
+  .royale-tile .goal-line.royale-tile-back { font-size: 11.5px; }
   .royale-tile .planet-emblem { --planet: 72px; }
 }
 @media (max-width: 560px) {
@@ -81,11 +86,16 @@ export function buildRoyaleTiles(onPick: (variant: RoyaleVariant) => void): HTML
     tile.style.setProperty('--view', `url(${royaleArtUrl(viewArt(mode.variant))})`);
     const words = el('div', 'royale-tile-words');
     // The section's heading says Battle royale over both (ui/home_screen.ts).
-    words.append(
-      el('h3', '', mode.title),
-      el('p', '', mode.line),
-      el('span', 'royale-tile-cta', mode.call),
-    );
+    words.append(el('h3', '', mode.title), el('p', '', mode.line));
+    // Respawn's card greets a browser that has played before with where
+    // its goal across matches stands (ui/royale_goal_lines.ts).
+    const back = lead ? goalWelcome(getSettings()) : null;
+    if (back) {
+      const line = goalLineView('royale-tile-back wraps', WELCOME_BACK);
+      line.draw(back);
+      words.appendChild(line.root);
+    }
+    words.appendChild(el('span', 'royale-tile-cta', mode.call));
     tile.append(words, planetEmblem(mode.variant));
     tile.addEventListener('click', () => onPick(mode.variant));
     row.appendChild(tile);

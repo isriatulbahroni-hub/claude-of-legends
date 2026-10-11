@@ -1108,8 +1108,12 @@ player, which the match's start decides. Deaths cost nothing, and a seat left to
 nothing more for its player. Never spent, and distinct from the rating, which only rated matches
 move, and from laurels and embers. Respawn's end card also climbs the points a browser's battle
 royale seats have earned as levels, kept in that browser alone: Level 2 at 50 points, each next
-level a little further, the bar running from the last one reached to the next. Plain numbered
-levels, never named after the ladder or anyone on it, and not a champion's level.
+level a little further, the bar running from the last one reached to the next. They show before
+the card too: the wash of a Respawn death says the level and the points to the next, a note under
+each pop of points in a battle royale says where they leave it, the landing and the home's Respawn
+card greet a browser that has played before with its level, and the card's Play the next match
+carries the points still wanted. Plain numbered levels, never named after the ladder or anyone on
+it, and not a champion's level.
 _Avoid_: score (the scoreboard's word), XP (the champion's), rating
 
 **Ladder**:

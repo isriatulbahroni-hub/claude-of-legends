@@ -2,8 +2,9 @@
 // browser's seats have earned on the Wanderseed, climbed as levels, the bar
 // running from the last level reached to the next. Kept per browser
 // (game/settings.ts royaleGoal), so it names nobody: not a ladder entry,
-// not another player. Pure; ui/royale_goal_bar.ts draws it and ui/hud.ts
-// counts the points as they come.
+// not another player. Pure; ui/royale_goal_bar.ts draws it, ui/hud.ts
+// counts the points as they come, and ui/royale_goal_lines.ts says it
+// before the card.
 //
 // The points are the ones a seat banks (server/royale_points.ts): a
 // champion taken down 10, an assist 5, a camp's last hit or a cache opened
@@ -109,6 +110,13 @@ export class GoalTrack {
     if (!(delta > 0)) return;
     this.earned += Math.round(delta);
     this.write(Math.min(GOAL_MAX_POINTS, this.before + this.earned));
+  }
+
+  // The total as it stands, this match's points in it: what the wash of a
+  // Respawn death and the points' pop say before the card
+  // (ui/royale_goal_lines.ts).
+  total(): number {
+    return Math.min(GOAL_MAX_POINTS, this.before + this.earned);
   }
 
   model(): GoalModel {

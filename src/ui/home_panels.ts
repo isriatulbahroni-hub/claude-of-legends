@@ -57,6 +57,13 @@ interface Career {
   lastAt: number | null;
 }
 
+// The reader's line of the ladder: its points, which the level reads, and
+// its Respawn best.
+export interface HomeLine {
+  points: number;
+  best: number;
+}
+
 interface HomePage {
   ladder: { way: 'hand'; total: number; rows: Row[] };
   bots: { way: 'arena' | 'bot'; total: number; rows: Row[] };
@@ -66,6 +73,7 @@ interface HomePage {
     career: Career;
     bots: { total: number; ranked: number };
     forged: number;
+    line?: HomeLine;
   };
 }
 
@@ -78,6 +86,18 @@ export interface HomePanelsOptions {
   // The account's own drawer: the career in full.
   openCareer: () => void;
   onWatch: WatchReplay;
+  // The reader's line as each answer carries it, for what reads the level
+  // outside the panels (ui/royale_tiles.ts); null when an answer carried
+  // none or none came.
+  onLine?: (line: HomeLine | null) => void;
+}
+
+// The line as an answer carries it, read field by field: null for an
+// answer without one.
+function lineOf(page: HomePage): HomeLine | null {
+  const line = page.me?.line;
+  if (!line || typeof line.points !== 'number' || typeof line.best !== 'number') return null;
+  return { points: line.points, best: line.best };
 }
 
 export interface HomePanels {
@@ -485,6 +505,7 @@ export function buildHomePanels(o: HomePanelsOptions): HomePanels {
   };
   const fail = (): void => {
     for (const p of [you, ladder, bots, forged]) say(p, UNREACHABLE);
+    o.onLine?.(null);
   };
   // Each panel draws on its own: one that cannot be drawn says so and
   // leaves the other three standing.
@@ -505,6 +526,7 @@ export function buildHomePanels(o: HomePanelsOptions): HomePanels {
           fail();
           return;
         }
+        o.onLine?.(lineOf(page));
         draw(you, () => renderYou(page));
         draw(ladder, () => renderLadder(page));
         draw(bots, () => renderBots(page));

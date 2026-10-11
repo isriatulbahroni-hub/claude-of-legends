@@ -4,14 +4,17 @@
 // behind it, fading into the words on the left, the globe from orbit at
 // its right (ui/planet_emblem.ts), the name, the line that says the rules
 // (ui/royale_modes.ts) and the pill. Same frame as the play tiles
-// (ui/play_tiles.ts), so the two rows read as one section.
+// (ui/play_tiles.ts), so the two rows read as one section. Respawn's card
+// greets an account that has played before with its level, read off the
+// line's points the home's answer carries (ui/royale_goal_lines.ts).
 
 import { getSettings } from '../game/settings';
 import type { RoyaleVariant } from '../sim/royale/types';
+import type { HomeLine } from './home_panels';
 import { el } from './menu';
 import { planetEmblem } from './planet_emblem';
-import { goalLineView } from './royale_goal_line';
-import { goalWelcome, WELCOME_BACK } from './royale_goal_lines';
+import { type GoalLineView, goalLineView } from './royale_goal_line';
+import { type GoalLine, goalWelcome, WELCOME_BACK } from './royale_goal_lines';
 import { ROYALE_MODES, royaleArtUrl, viewArt } from './royale_modes';
 
 const CSS = `
@@ -51,6 +54,7 @@ const CSS = `
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25); }
 .royale-tile .planet-emblem { --planet: 128px; transition: transform 0.7s ease; }
 .royale-tile .goal-line.royale-tile-back { font-size: 13px; }
+.royale-tile .goal-line.royale-tile-back.wait { visibility: hidden; }
 .royale-tile:hover .planet-emblem { transform: scale(1.06) rotate(-6deg); }
 @media (max-width: 900px) {
   .royale-tiles { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
@@ -75,9 +79,24 @@ function ensureCss(): void {
   document.head.appendChild(style);
 }
 
-export function buildRoyaleTiles(onPick: (variant: RoyaleVariant) => void): HTMLElement {
+export interface RoyaleTiles {
+  root: HTMLElement;
+  // The account's line as the home's answer carries it (ui/home_panels.ts),
+  // null when none came: what Respawn's greeting says, or that it goes.
+  showLine(line: HomeLine | null): void;
+}
+
+// Whether the greeting is said for a line: points or a best on it, or a
+// quick pick this browser keeps from a battle royale played here.
+function welcomeOf(points: number, best: number): GoalLine | null {
+  return goalWelcome({ points, best, picked: getSettings().royalePick !== null });
+}
+
+export function buildRoyaleTiles(onPick: (variant: RoyaleVariant) => void): RoyaleTiles {
   ensureCss();
   const row = el('div', 'royale-tiles');
+  // Respawn's greeting, and where it stands in the card.
+  let greet: { line: GoalLineView; words: HTMLElement; cta: HTMLElement } | null = null;
   for (const mode of ROYALE_MODES) {
     const lead = mode.variant === 'respawn';
     const tile = el('button', `royale-tile ${mode.variant}${lead ? ' lead' : ''}`);
@@ -87,18 +106,37 @@ export function buildRoyaleTiles(onPick: (variant: RoyaleVariant) => void): HTML
     const words = el('div', 'royale-tile-words');
     // The section's heading says Battle royale over both (ui/home_screen.ts).
     words.append(el('h3', '', mode.title), el('p', '', mode.line));
-    // Respawn's card greets a browser that has played before with where
-    // its goal across matches stands (ui/royale_goal_lines.ts).
-    const back = lead ? goalWelcome(getSettings()) : null;
-    if (back) {
-      const line = goalLineView('royale-tile-back wraps', WELCOME_BACK);
-      line.draw(back);
-      words.appendChild(line.root);
+    const cta = el('span', 'royale-tile-cta', mode.call);
+    if (lead) {
+      // The browser's copy of the line (game/settings.ts) only holds the
+      // greeting's place, unseen, so the card keeps its height when the
+      // line's own points come to fill it.
+      const line = goalLineView('royale-tile-back wraps wait', WELCOME_BACK);
+      greet = { line, words, cta };
+      const s = getSettings();
+      const cached = welcomeOf(s.royaleGoal, s.royaleBest);
+      if (cached) {
+        line.draw(cached);
+        words.appendChild(line.root);
+      }
     }
-    words.appendChild(el('span', 'royale-tile-cta', mode.call));
+    words.appendChild(cta);
     tile.append(words, planetEmblem(mode.variant));
     tile.addEventListener('click', () => onPick(mode.variant));
     row.appendChild(tile);
   }
-  return row;
+  return {
+    root: row,
+    showLine(line) {
+      if (!greet) return;
+      const back = line ? welcomeOf(line.points, line.best) : null;
+      if (!back) {
+        greet.line.root.remove();
+        return;
+      }
+      greet.line.draw(back);
+      if (!greet.line.root.isConnected) greet.words.insertBefore(greet.line.root, greet.cta);
+      greet.line.root.classList.remove('wait');
+    },
+  };
 }

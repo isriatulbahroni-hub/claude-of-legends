@@ -1122,7 +1122,7 @@ points in the 5v5 and the battle royale alike wherever the level shows (the own 
 end card; ADR 0033): Level 2 at 50 points, each next level a little further, the bar running
 from the last one reached to the next. They show before the card too, off the same points: the
 wash of a Respawn death says the level and the points to the next, a note under each pop of
-points in a battle royale says where they leave it, the home's Respawn card greets a browser
+points in a battle royale says where they leave it, the home's Respawn card greets an account
 that has played before with its level, and the card's Play the next match carries the points
 still wanted. Plain numbered levels, never named after the ladder or anyone on it, and not a
 champion's level.

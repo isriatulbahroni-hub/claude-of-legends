@@ -2583,6 +2583,7 @@ const server = http.createServer(async (req, res) => {
               forged: forgeStore.listFinalized(),
               career: buildProfile(matchLog, me.id),
               myBots: botStore.listByAccount(me.id),
+              line: { points: me.points ?? 0, best: me.royaleBest ?? 0 },
             },
             me.id,
             { splash: (row) => splashOf(forgeStore, row) },

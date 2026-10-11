@@ -1,7 +1,7 @@
 // The goal across matches said before Respawn's end card
 // (src/ui/royale_goal_lines.ts): the one line of the wash of a Respawn
 // death, the note under the points' pop in play, the note under Play the
-// next match, and the greeting of a browser that has played before, each
+// next match, and the greeting of an account that has played before, each
 // read off the line's points on the one curve the own panel reads.
 
 import { describe, expect, it } from 'vitest';
@@ -127,24 +127,26 @@ describe('the note under Play the next match', () => {
 });
 
 describe('the greeting', () => {
-  const fresh = { royaleGoal: 0, royaleBest: 0, royalePick: null };
+  const fresh = { points: 0, best: 0, picked: false };
 
-  it('greets nobody who never played a battle royale here', () => {
+  it('greets nobody who never played', () => {
     expect(goalWelcome(fresh)).toBeNull();
   });
 
-  it("greets a browser with points with its level and the next level's points", () => {
-    const back = goalWelcome({ ...fresh, royaleGoal: 155 });
+  it("greets a line with points with its level and the next level's points", () => {
+    const back = goalWelcome({ ...fresh, points: 155 });
     expect(back?.text).toBe('Level 3 · 70 points to Level 4');
+    expect(back).toEqual(goalLine(155));
     expect(WELCOME_BACK).toBe('Welcome back');
   });
 
-  it('greets a browser that played without points yet, from the first level', () => {
-    const pick = { championId: 'torv', skin: 0, sigils: ['riftstep', 'mend'] };
-    expect(goalWelcome({ ...fresh, royalePick: pick })?.text).toBe(
-      'Level 1 · 50 points to Level 2',
-    );
-    expect(goalWelcome({ ...fresh, royaleBest: 2 })?.level).toBe(1);
+  it('greets one that played without points yet, from the first level', () => {
+    expect(goalWelcome({ ...fresh, picked: true })?.text).toBe('Level 1 · 50 points to Level 2');
+    expect(goalWelcome({ ...fresh, best: 2 })?.level).toBe(1);
+  });
+
+  it('reads junk as nothing', () => {
+    expect(goalWelcome({ points: Number.NaN, best: -3, picked: false })).toBeNull();
   });
 });
 

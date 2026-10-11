@@ -181,6 +181,25 @@ describe('the own panel', () => {
     expect(page.ladder.me).toMatchObject({ rank: 3, guest: false, named: true });
   });
 
+  it("reads the reader's own line only, a Guest and an account never the other's", () => {
+    // A Guest's key is negative and an account's positive (server/guests.ts
+    // isGuestId), so the same number on both sides is two lines.
+    const entries = [
+      { key: 421, name: 'Marrow', points: 400, guest: false, since: NOW - 30 * DAY },
+      { key: -421, name: 'Wanderer 0421', points: 60, guest: true, since: NOW - DAY },
+    ];
+    const asGuest = buildLandingPage({ entries, own: guestOwn({}), now: NOW });
+    expect(asGuest.own).toMatchObject({ name: 'Wanderer 0421', rank: 2, points: 60 });
+    expect(asGuest.ladder.me).toMatchObject({ rank: 2, points: 60, guest: true });
+    const asAccount = buildLandingPage({
+      entries,
+      own: { key: 421, name: 'Marrow', named: true, account: true, best: 3, since: NOW },
+      now: NOW,
+    });
+    expect(asAccount.own).toMatchObject({ name: 'Marrow', rank: 1, points: 400, best: 3 });
+    expect(asAccount.ladder.me).toMatchObject({ rank: 1, points: 400, guest: false });
+  });
+
   it('counts the gap to pass the line above, ties going to the older line', () => {
     const entries = (mine: number, theirs: number, mineSince: number): PointsEntry[] => [
       { key: 5, name: 'Above', points: theirs, guest: false, since: 100 },

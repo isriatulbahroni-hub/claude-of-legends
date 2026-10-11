@@ -11,6 +11,7 @@ import { CAMPS } from '../src/sim/content/camps';
 import { CHAMPION_LIST, CHAMPIONS } from '../src/sim/content/champions';
 import { PLANET_TUNING, planetTuning } from '../src/sim/content/royale_tuning';
 import { DROP_S, ROYALE_HP_SCALE, START_LEVEL } from '../src/sim/royale/types';
+import { UPSTART_DAMAGE, UPSTART_S } from '../src/sim/royale/upstart';
 import { Sim } from '../src/sim/sim';
 import type { CombatCtx } from '../src/sim/sim_context';
 import { recalcChampion } from '../src/sim/stats';
@@ -91,8 +92,14 @@ describe('the planet tuning table', () => {
     expect(u.dead).toBe(true);
     for (let i = 0; i < 20 * 10 && u.dead; i++) sim.tick();
     expect(u.dead).toBe(false);
-    expect(u.dmgScale).toBe(t.dmg);
     expect(u.hpScale).toBe(ROYALE_HP_SCALE * t.hp);
+    // Back with no takedown on its tally, in its Upstart (royale/upstart.ts),
+    // the share underneath it and the very number again once it ends.
+    expect(sim.royaleMode!.upstarts.get(u.id)?.base).toBe(t.dmg);
+    expect(u.dmgScale).toBeCloseTo(t.dmg * (1 + UPSTART_DAMAGE), 12);
+    const backAt = sim.time;
+    while (sim.time < backAt + UPSTART_S + 0.1) sim.tick();
+    expect(u.dmgScale).toBe(t.dmg);
   });
 });
 

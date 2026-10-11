@@ -12,6 +12,8 @@ import type { Vec3 } from '../sim/geo';
 import { intoLight } from '../sim/royale/return_pick';
 import { RESPAWN_S } from '../sim/royale/types';
 import { burrTarget } from './royale_burr';
+import type { ScreenBox } from './royale_layout';
+import { TOUCH_BAR_EDGE_PX, TOUCH_BAR_LEFT_W_PX } from './touch_bar';
 
 // Seconds after the fall the globe rises: the body is seen to fall first.
 export const RETURN_GLOBE_AFTER_S = 1;
@@ -94,6 +96,51 @@ export function returnWashColumnPx(width: number, height: number): number {
 // whatever the screen's height: above the notices' column and the bar
 // (ui/royale_layout.ts compactNotesBox).
 export const RETURN_WASH_PHONE_BOTTOM_PX = 164;
+
+// And they start no higher than RETURN_WASH_PHONE_TOP_PX, under the top
+// corner's chip (a Graft on offer) and the top line's first row: a column
+// too tall for the room between starts there and runs on past its foot,
+// where a dead champion's corner holds nothing, rather than off the top of
+// the screen (ui/hud.ts, safe alignment).
+export const RETURN_WASH_PHONE_TOP_PX = 44;
+
+// With the thumb controls the touch bar stands at the left edge, Menu and
+// Center over the middle of the screen's height (ui/touch_bar.ts), where
+// the column's lines stand: the killer recap and the Burr's line ran under
+// both at 844x390. So there the column starts RETURN_WASH_BAR_GAP_PX past
+// the bar's right edge, the safe area included, and its lines wrap in what
+// is left before the globe.
+export const RETURN_WASH_BAR_GAP_PX = 8;
+
+// Where the column's left edge stands from the screen's, past the safe
+// area `safeLeft` wide: past the bar when it stands at the left.
+export function returnWashLeftPx(barLeft: boolean, safeLeft = 0): number {
+  if (!barLeft) return 0;
+  return safeLeft + TOUCH_BAR_EDGE_PX + TOUCH_BAR_LEFT_W_PX + RETURN_WASH_BAR_GAP_PX;
+}
+
+// The same as CSS, the safe area as the stage gives it (game/match_stage.ts).
+export function returnWashLeftCss(): string {
+  const past = TOUCH_BAR_EDGE_PX + TOUCH_BAR_LEFT_W_PX + RETURN_WASH_BAR_GAP_PX;
+  return `calc(${past}px + var(--safe-left, env(safe-area-inset-left, 0px)))`;
+}
+
+// The column's box on a phone `width` by `height`: from its left edge to
+// the gap before the globe, from its top to its foot. Its lines stand
+// anywhere between its edges, and lower only when they outgrow it.
+export function returnWashPhoneBox(
+  width: number,
+  height: number,
+  barLeft: boolean,
+  safeLeft = 0,
+): ScreenBox {
+  return {
+    left: returnWashLeftPx(barLeft, safeLeft),
+    top: RETURN_WASH_PHONE_TOP_PX,
+    right: returnWashColumnPx(width, height),
+    bottom: height - RETURN_WASH_PHONE_BOTTOM_PX,
+  };
+}
 
 // The wash's line under the recap while the globe shows: what to do with
 // it, a phone's tap or a desktop's click, and once picked, that it holds.

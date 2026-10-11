@@ -156,8 +156,10 @@ import {
   RETURN_GLOBE_HALF_VH,
   RETURN_WASH_GAP_VH,
   RETURN_WASH_PHONE_BOTTOM_PX,
+  RETURN_WASH_PHONE_TOP_PX,
   returnGlobeOn,
   returnHint,
+  returnWashLeftCss,
 } from './royale_return';
 import {
   hideRoyaleSteps,
@@ -893,11 +895,19 @@ const CSS = `
   line-height: 1.2; text-wrap: balance; }
 .hud.compact .hud-overlay:not(.returning):has(> .hud-overlay-burr:not([hidden])) { padding-bottom: 36px; }
 .hud.compact .hud-overlay-hint { font-size: 12.5px; margin-top: 3px; }
-.hud.compact .hud-overlay.returning { justify-content: flex-end;
-  padding-bottom: ${RETURN_WASH_PHONE_BOTTOM_PX}px; }
+/* Its foot over the notices, its top under the corner's chip; lines that
+   outgrow the room run on past the foot rather than off the top (safe
+   alignment, a browser without it keeps the foot; ui/royale_return.ts). */
+.hud.compact .hud-overlay.returning { justify-content: flex-end; justify-content: safe flex-end;
+  padding-top: ${RETURN_WASH_PHONE_TOP_PX}px; padding-bottom: ${RETURN_WASH_PHONE_BOTTOM_PX}px; }
 .hud.compact .hud-overlay.returning .hud-overlay-title { font-size: 20px; }
-/* The wait's column stands over the thumbs' bar at the left: the goal's
-   line breaks after its bar, two short lines kept in the column's middle. */
+/* With the thumb controls the touch bar stands at the left edge, Menu and
+   Center beside the column's lines (ui/touch_bar.ts): the column starts
+   past it, and its lines wrap in what is left before the globe
+   (ui/royale_return.ts returnWashPhoneBox). */
+.hud.compact.thumbs .hud-overlay.returning { padding-left: ${returnWashLeftCss()}; }
+/* The wait's column is narrow on a phone: the goal's line breaks after its
+   bar, two short lines kept in the column's middle. */
 .hud.compact .hud-overlay.returning .goal-line-run { flex-wrap: wrap; justify-content: center;
   row-gap: 1px; }
 .hud.compact .hud-overlay.returning .goal-line-run > span { flex-basis: 100%; text-align: center; }

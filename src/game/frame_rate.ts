@@ -65,7 +65,12 @@ let refresh: number | null = null;
 function paint(at: number): void {
   if (lastPaint !== null) {
     const dt = at - lastPaint;
-    if (dt > 0 && dt <= LONGEST_MS) {
+    // A frame that read the time of the one before, which a clock read in
+    // steps gives one frame in nine (Firefox's resistFingerprinting hands
+    // it over in sixtieths of a second): painted, so counted, in no time
+    // of its own, and nothing to read the refresh off.
+    if (dt === 0) frames++;
+    else if (dt > 0 && dt <= LONGEST_MS) {
       frames++;
       spent += dt;
       recent.push(dt);

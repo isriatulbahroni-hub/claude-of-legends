@@ -12,7 +12,7 @@
 import { describe, expect, it } from 'vitest';
 import type { QualityLadder } from '../src/game/quality_ladder';
 import { DESK_RATIO_FLOOR, ladderRungs, PHONE_RATIO_FLOOR } from '../src/render/quality_dial';
-import { drive, exact, ladderFor, type Machine, SETTLE } from './quality_machine';
+import { drive, exact, ladderFor, type Machine, SETTLE, sequence } from './quality_machine';
 
 const P = 1000 / 60;
 // Seconds after the settling.
@@ -515,5 +515,35 @@ describe('what is not the frame rate', () => {
     expect(l.trying).toBe(true);
     until(l, at, run.at + 4000 + 11_000, 20);
     expect([l.trying, l.settled]).toEqual([false, 1]);
+  });
+});
+
+// A clock read in steps of a sixtieth of a second, as Firefox with
+// privacy.resistFingerprinting hands it over (2026-10-11, Firefox 157: one
+// interval in nine read 0): a frame drawn within the step of the one before
+// reads the same time. Frames `every` ms apart, each up to 4 ms early or
+// late, read on that clock.
+function clampedClock(every: number, seconds: number): number[] {
+  const next = sequence(11);
+  const step = 1000 / 60;
+  const out: number[] = [];
+  for (let t = 1000; t < 1000 + seconds * 1000; t += every) {
+    out.push(Math.floor((t + (next() - 0.5) * 8) / step) * step);
+  }
+  return out;
+}
+
+describe('a clock read in sixtieths of a second', () => {
+  it('counts a frame that read the same time as the one before', () => {
+    const times = clampedClock(1000 / 60, 120);
+    expect(times.some((t, i) => i > 0 && t === times[i - 1])).toBe(true);
+    const l = ladderFor(1.25, null);
+    for (const t of times) l.frame(t);
+    // Every refresh drawn: the top's windows read the screen's rate, where
+    // the frames whose time moved alone read three quarters of it.
+    expect(l.topShare).toBeGreaterThan(0.95);
+    expect(l.screenHz).toBeGreaterThan(58);
+    expect(l.screenHz).toBeLessThan(63);
+    expect([l.settled, l.trying]).toEqual([0, false]);
   });
 });

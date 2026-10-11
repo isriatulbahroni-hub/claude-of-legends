@@ -1,12 +1,13 @@
 // The end screens' sheet (src/ui/end_screen.ts) beyond its boxes' places
-// (tests/end_layout.test.ts): the order the keyboard walks it in and the
-// keyboard it takes, as the pause menu does.
+// (tests/end_layout.test.ts): the order the keyboard walks it in, what
+// stands down behind it and what stays, and the keyboard it takes, as the
+// pause menu does.
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { END_ORDER } from '../src/ui/end_screen';
+import { END_ORDER, END_SCREEN_CSS } from '../src/ui/end_screen';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (file: string): string => readFileSync(path.join(ROOT, file), 'utf8');
@@ -19,6 +20,15 @@ describe('the end screen', () => {
     expect(END_ORDER[1]).toBe('ladder');
     expect([...END_ORDER].sort()).toEqual(['ladder', 'lead', 'offer', 'side', 'table']);
     expect(read('src/ui/end_screen.ts')).toContain('for (const key of END_ORDER)');
+  });
+
+  it('hides the HUD behind it and leaves a replay its bar', () => {
+    // The HUD's own blocks and what the stage draws over the HUD stand
+    // down; the replay's bar stays, so a replay played to its end still
+    // rewinds, as it did before the end screen covered the screen.
+    expect(END_SCREEN_CSS).toContain(
+      '.hud.ended > :not(.end-screen):not(.hud-pause):not(.hud-turn), .hud.ended ~ :not(.replay-bar) {',
+    );
   });
 
   it('takes the keyboard while it is up, as the pause menu does', () => {

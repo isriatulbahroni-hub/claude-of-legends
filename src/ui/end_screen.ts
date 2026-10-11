@@ -33,8 +33,9 @@ export const END_SCREEN_CSS = `
    draws over the HUD (the minimap, the battle royale's edge arrows) stand
    down, as behind the pause menu: between the boxes and round the sheet
    only the dimmed match shows. The pause menu and the turn wall keep
-   their places over it. */
-.hud.ended > :not(${END_ROOT}):not(.hud-pause):not(.hud-turn), .hud.ended ~ * {
+   their places over it, and a replay its bar (ui/replay_bar.ts), so a
+   replay played to its end still rewinds. */
+.hud.ended > :not(${END_ROOT}):not(.hud-pause):not(.hud-turn), .hud.ended ~ :not(.replay-bar) {
   visibility: hidden; transition: none;
 }
 ${R}, ${RC} {

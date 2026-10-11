@@ -56,6 +56,7 @@ import {
   FEED_MS,
   type FeedTier,
   FoldCount,
+  feedInsertAt,
   feedLife,
   feedOverflow,
   feedTier,
@@ -496,11 +497,19 @@ export class RoyaleHudMoments {
     this.pushLine(line, 'news');
   }
 
-  // A line on top of the feed: the ones it pushes out go (a near death
-  // joins the fold), and it leaves once its tier's time is up.
+  // A line on top of the feed, under the seat lines still standing
+  // (feedInsertAt): the ones it pushes out go (a near death joins the
+  // fold), and it leaves once its tier's time is up.
   private pushLine(line: HTMLElement, tier: FeedTier): void {
     const { feed } = this.host;
-    feed.prepend(line);
+    const standing = [...feed.children].filter((c): c is HTMLElement => c !== this.fold);
+    const at = feedInsertAt(
+      standing.map((c) => (c.dataset.tier ?? 'near') as FeedTier),
+      tier,
+    );
+    // Past the standing lines it goes last, over the fold when one shows.
+    const fold = this.fold?.parentElement === feed ? this.fold : null;
+    feed.insertBefore(line, standing[at] ?? fold);
     const lines = [...feed.children].filter((c): c is HTMLElement => c !== this.fold);
     const tiers = lines.map((c) => (c.dataset.tier ?? 'near') as FeedTier);
     let folded = false;

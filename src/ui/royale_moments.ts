@@ -413,6 +413,17 @@ export function feedOverflow(tiers: readonly FeedTier[]): number[] {
   return [...out].sort((a, b) => a - b);
 }
 
+// Where a new line goes among the standing ones (`tiers`, top first): on
+// top, under the seat lines still standing, which keep the top while they
+// last. A phone shows only the feed's first two lines (ui/royale_hud.ts),
+// and a fight's lines coming in over a seat line hid it within a second.
+export function feedInsertAt(tiers: readonly FeedTier[], tier: FeedTier): number {
+  if (tier === 'seat') return 0;
+  let i = 0;
+  while (tiers[i] === 'seat') i += 1;
+  return i;
+}
+
 // Whether a line pushed out of the feed counts in "+N elsewhere": a near
 // death does; news is no death, and the own and the leader's lines are
 // the feed's to keep.

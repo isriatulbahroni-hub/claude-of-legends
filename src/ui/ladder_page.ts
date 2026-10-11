@@ -143,6 +143,11 @@ const CSS = `
 .lp *::-webkit-scrollbar { width: 10px; }
 .lp *::-webkit-scrollbar-track { background: #0a0d14; }
 .lp *::-webkit-scrollbar-thumb { background: #3d3520; border-radius: 5px; }
+/* Firefox has no ::-webkit-scrollbar: the same colors through the standard
+   properties, which Chrome would let override the rules above. */
+@supports not selector(::-webkit-scrollbar) {
+  .lp * { scrollbar-width: thin; scrollbar-color: #3d3520 #0a0d14; }
+}
 .lp-head { position: relative; z-index: 1; display: flex; align-items: baseline; gap: 14px; padding: 20px 32px 10px; flex-wrap: wrap; }
 .lp-title {
   font-family: Cinzel, Georgia, serif; font-size: 30px; letter-spacing: 3px; text-transform: uppercase; margin: 0;

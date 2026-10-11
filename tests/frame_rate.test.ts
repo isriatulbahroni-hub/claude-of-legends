@@ -74,6 +74,24 @@ describe("the page's frame rate", () => {
   });
 });
 
+describe('a clock read in sixtieths of a second', () => {
+  it('counts the frames that read the time of the one before', async () => {
+    // Firefox with privacy.resistFingerprinting (2026-10-11, Firefox 157):
+    // every refresh of a 60 Hz screen painted, one interval in nine read 0
+    // and the next 33.3.
+    const { frameRate, screenRefresh } = await import('../src/game/frame_rate');
+    frameRate(clock);
+    const step = 1000 / 60;
+    for (let i = 0; i < 120; i++) {
+      const pattern = i % 9 === 7 ? 0 : i % 9 === 8 ? 2 * step : step;
+      clock += pattern;
+      painters.shift()?.(clock);
+    }
+    expect(frameRate(clock)).toBeCloseTo(60, 0);
+    expect(screenRefresh()).toBeCloseTo(60, 0);
+  });
+});
+
 describe("the screen's refresh", () => {
   it('is read off the frames painted from the start, and never lowered', async () => {
     const { screenRefresh, watchFrames } = await import('../src/game/frame_rate');

@@ -175,7 +175,16 @@ export class QualityLadder {
   frame(at: number, scriptMs?: number): number {
     const r = LADDER_RULES;
     const dt = this.lastAt === null ? 0 : at - this.lastAt;
+    const first = this.lastAt === null;
     this.lastAt = at;
+    // A frame that read the time of the one before: a clock read in steps
+    // (Firefox's resistFingerprinting hands it over in sixtieths of a
+    // second) puts one frame in nine there. It was drawn: counted in the
+    // window, with no time of its own.
+    if (dt === 0 && !first) {
+      if (this.intervals.length > 0) this.intervals.push(0);
+      return this.current;
+    }
     if (!(dt > 0)) return this.current;
     if (this.usual !== null && dt > Math.max(STALL_MIN_MS, STALL_FACTOR * this.usual)) {
       this.stalled += dt;
@@ -190,7 +199,7 @@ export class QualityLadder {
     if (ms < r.windowMs || this.intervals.length < r.windowFrames) return this.current;
     const fps = windowRate(this.intervals);
     const script = this.scripts.length > 0 ? median(this.scripts) : 0;
-    const hz = refreshHz(this.intervals);
+    const hz = refreshHz(this.intervals.filter((x) => x > 0));
     this.intervals = [];
     this.scripts = [];
     if (hz !== null) {

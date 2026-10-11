@@ -8,6 +8,7 @@
 import type { Renderer } from '../render/renderer';
 import type { AbilityKey, Vec2 } from '../sim/types';
 import { cardOfKey } from '../ui/royale_grafts';
+import { heldFromBrowser } from './browser_keys';
 import { pointOnStage } from './match_stage';
 import { menuKey } from './menu_keys';
 import type { SlotPress } from './thumb_cast';
@@ -109,6 +110,8 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): () => v
 
   const onKeyDown = (e: KeyboardEvent): void => {
     if (handlers.isTyping()) return;
+    // Firefox's menu bar and Quick Find stay shut (browser_keys.ts).
+    if (heldFromBrowser(e.key)) e.preventDefault();
     if (handlers.isMenuOpen()) {
       if (menuKey(e.key) === 'close') handlers.onToggleMenu();
       return;
@@ -188,6 +191,7 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): () => v
 
   const onKeyUp = (e: KeyboardEvent): void => {
     if (handlers.isTyping()) return;
+    if (heldFromBrowser(e.key)) e.preventDefault();
     const key = ABILITY_KEYS[e.key.toLowerCase()];
     if (key) handlers.onAimEnd(key, renderer.groundPointAt(mouseX, mouseY));
   };

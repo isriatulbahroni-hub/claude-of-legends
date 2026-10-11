@@ -14,6 +14,7 @@ import {
 import { pointOnStage, rectOnStage, stageSizeOf } from '../game/match_stage';
 import { playCastSfx, playSfx } from '../game/sfx';
 import type { VoidmaulSlamNote } from '../game/voidmaul_slam_notes';
+import { wheelPixels } from '../game/wheel_step';
 import {
   attackWindupSeconds,
   RANGED_THRESHOLD,
@@ -697,12 +698,14 @@ export class Renderer {
     this.cleanups.push(() => document.removeEventListener('visibilitychange', onVisibility));
     this.cleanups.push(() => this.dial.dispose());
 
-    // Mouse-wheel zoom within sane bounds.
+    // Mouse-wheel zoom within sane bounds, a notch the same step on every
+    // browser (game/wheel_step.ts: Firefox counts it in lines).
     this.gl.domElement.addEventListener(
       'wheel',
       (e) => {
         e.preventDefault();
-        this.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, this.zoom + e.deltaY * 0.0008));
+        const px = wheelPixels(e, stageSizeOf(this.gl.domElement).height);
+        this.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, this.zoom + px * 0.0008));
       },
       { passive: false },
     );

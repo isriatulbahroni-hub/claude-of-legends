@@ -1,9 +1,11 @@
 // The locked cursor's pure parts (src/game/cursor_lock.ts): the virtual
-// position never leaves the window, and the painted cursor is read off a
-// CSS cursor value with its hotspot.
+// position never leaves the window, the painted cursor is read off a CSS
+// cursor value with its hotspot, the cursor keeps moving while a button is
+// held on Firefox, and a synthetic event names the pointer the browser
+// numbered.
 
 import { describe, expect, it } from 'vitest';
-import { clampToViewport, cursorImageOf } from '../src/game/cursor_lock';
+import { clampToViewport, cursorImageOf, MotionSource, pointerIdOf } from '../src/game/cursor_lock';
 
 describe('the locked cursor', () => {
   it('clamps the virtual position to the window', () => {
@@ -21,5 +23,32 @@ describe('the locked cursor', () => {
     expect(cursorImageOf("url('x.png'), pointer")).toEqual({ url: 'x.png', hotX: 0, hotY: 0 });
     expect(cursorImageOf('pointer')).toBeNull();
     expect(cursorImageOf('')).toBeNull();
+  });
+
+  it("moves on Firefox's pointermove while a button is held, its mousemove gone", () => {
+    const motion = new MotionSource();
+    // A motion with no button: the pointermove, then its mousemove twin.
+    expect(motion.takes('pointermove', 200, 0)).toBe(true);
+    expect(motion.takes('mousemove', 200, 0)).toBe(false);
+    // A button held: Firefox fires the pointermove alone (2026-10-11,
+    // Firefox 157 under the lock), and the cursor still follows it.
+    expect(motion.takes('pointermove', 0, 150)).toBe(true);
+    expect(motion.takes('pointermove', 0, 0)).toBe(true);
+  });
+
+  it('keeps mousemove where pointermove carries no movement, never both', () => {
+    const motion = new MotionSource();
+    expect(motion.takes('pointermove', 0, 0)).toBe(false);
+    expect(motion.takes('mousemove', 12, -3)).toBe(true);
+    expect(motion.takes('pointermove', 0, 0)).toBe(false);
+    expect(motion.takes('mousemove', 4, 1)).toBe(true);
+  });
+
+  it("names the native pointer: Firefox's mouse is pointer 0", () => {
+    expect(pointerIdOf({ pointerId: 0 }, 1)).toBe(0);
+    expect(pointerIdOf({ pointerId: 1 }, 0)).toBe(1);
+    // A mouse event has no id: the mouse's last seen one.
+    expect(pointerIdOf({}, 0)).toBe(0);
+    expect(pointerIdOf({}, 1)).toBe(1);
   });
 });

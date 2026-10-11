@@ -164,7 +164,7 @@ import { isRoyaleNewcomer, RoyaleVeterans } from './royale_join';
 import { RoyaleService } from './royale_service';
 import type { RoyaleSimFactory } from './royale_sim';
 import { sealChampion, unsealChampion } from './seal';
-import { type ChangedSeat, type SeatChange, seatChangeSends } from './seat_change';
+import { type ChangedSeat, matchSeatSends, type SeatChange } from './seat_change';
 import {
   buildSeatReport,
   countryOf,
@@ -1148,7 +1148,7 @@ function walkOutOfMatch(
     }
   }
   const left = entry.match.handleDisconnect(client.id);
-  if (left) tellSeat(entry, 'left', { ...left, ownBot: left.coach === true }, client.id);
+  if (left) tellSeat(entry, 'left', left, client.id);
   const anyConnected = [...entry.match.players.keys()].some((cid) => clients.has(cid));
   if (!anyConnected && entry.abandonedAt === null) {
     entry.abandonedAt = Date.now();
@@ -1157,11 +1157,15 @@ function walkOutOfMatch(
 }
 
 // A seat changed hands: everyone else in the match reads who, the people
-// playing and the spectators (server/seat_change.ts).
-function tellSeat(entry: MatchEntry, change: SeatChange, seat: ChangedSeat, about: number): void {
-  const audience = [...entry.match.players.keys(), ...entry.match.spectators.keys()];
-  const playing = entry.match.sim.winner === null;
-  for (const s of seatChangeSends(change, seat, audience, about, playing)) send(s.to, s.msg);
+// playing and the spectators, and the scoreboard follows
+// (server/seat_change.ts).
+function tellSeat(
+  entry: MatchEntry,
+  change: SeatChange,
+  seat: ChangedSeat & { coach?: boolean },
+  about: number,
+): void {
+  for (const s of matchSeatSends(entry.match, change, seat, about)) send(s.to, s.msg);
 }
 
 // What the drop-in rule and the landing's presence line read of the live
@@ -3123,7 +3127,7 @@ wss.on('connection', (ws, req) => {
         const left = entry.match.handleDisconnect(id);
         if (left) {
           rejoins.reserve(client.accountId, { matchId, ...left });
-          tellSeat(entry, 'left', { ...left, ownBot: left.coach === true }, id);
+          tellSeat(entry, 'left', left, id);
         }
         // Not reaped on the spot: the seat reservations above deserve a
         // grace window, so an accidental reload can come back (the world

@@ -4,9 +4,9 @@
 // by the name the match already shows and the seat's team, nothing more:
 // no account, no Guest key, no connection. The person it is about is not
 // told about themself, and nobody is told once the match is decided.
-// Pure: the 5v5 (server/main.ts) and the battle royale
-// (server/royale_service.ts) hand in who is in the match and send what it
-// answers.
+// Pure: the 5v5 (server/main.ts, through matchSeatSends) and the battle
+// royale (server/royale_service.ts) hand in who is in the match and send
+// what it answers.
 //
 // Nothing here reaches the sim or a bot's observation, and nothing of it is
 // recorded in the replay: a replay keeps what steered the sim, and the
@@ -61,5 +61,34 @@ export function seatChangeSends(
     told.add(to);
     out.push({ to, msg });
   }
+  return out;
+}
+
+// The 5v5's match (server/match.ts) as a seat change reads it.
+export interface SeatChangeMatch {
+  readonly players: ReadonlyMap<number, unknown>;
+  readonly spectators: ReadonlyMap<number, unknown>;
+  readonly sim: { readonly winner: number | null };
+  buildScore(): ServerMsg;
+}
+
+// A seat of the 5v5 changed hands: the line to everyone else in it, the
+// people playing and the spectators, then the scoreboard to everyone in
+// it, the seat's new name and its "(bot)" mark with it, rather than at the
+// next regular one. A coach's seat (Match.handleDisconnect's coach) leaves
+// its own bot playing.
+export function matchSeatSends(
+  match: SeatChangeMatch,
+  change: SeatChange,
+  seat: ChangedSeat & { coach?: boolean },
+  about: number,
+): { to: number; msg: ServerMsg }[] {
+  if (match.sim.winner !== null) return [];
+  const audience = [...match.players.keys(), ...match.spectators.keys()];
+  const told = { name: seat.name, team: seat.team, ownBot: seat.ownBot || seat.coach };
+  const out: { to: number; msg: ServerMsg }[] = [];
+  out.push(...seatChangeSends(change, told, audience, about, true));
+  const score = match.buildScore();
+  for (const to of new Set(audience)) out.push({ to, msg: score });
   return out;
 }

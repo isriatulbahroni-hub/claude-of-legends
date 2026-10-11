@@ -2,12 +2,14 @@
 // entry point decides what they mean. Keys: right-click move/attack, A
 // attack-move, B recall, QWER abilities, DF sigils, P shop, Tab scoreboard,
 // Enter chat, G ping, Space center camera, Escape menu, 1 2 3 a battle
-// royale's Graft card.
+// royale's Graft card. While the menu is up only Escape is the game's
+// (menu_keys.ts).
 
 import type { Renderer } from '../render/renderer';
 import type { AbilityKey, Vec2 } from '../sim/types';
 import { cardOfKey } from '../ui/royale_grafts';
 import { pointOnStage } from './match_stage';
+import { menuKey } from './menu_keys';
 import type { SlotPress } from './thumb_cast';
 
 export interface InputHandlers {
@@ -53,6 +55,8 @@ export interface InputHandlers {
   onThumbSigil(slot: number, press: SlotPress, dir: Vec2 | null, k: number): void;
   onThumbAttack(): void;
   isTyping(): boolean;
+  // The pause menu is up: the keyboard is the menu's (menu_keys.ts).
+  isMenuOpen(): boolean;
 }
 
 const ABILITY_KEYS: Readonly<Record<string, AbilityKey>> = {
@@ -105,6 +109,10 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): () => v
 
   const onKeyDown = (e: KeyboardEvent): void => {
     if (handlers.isTyping()) return;
+    if (handlers.isMenuOpen()) {
+      if (menuKey(e.key) === 'close') handlers.onToggleMenu();
+      return;
+    }
     if (e.key === 'Tab') {
       e.preventDefault();
       if (!e.repeat) handlers.onToggleScoreboard();

@@ -77,6 +77,15 @@ export interface EndMetrics {
   scoreRowH: number;
   scoreRowShortH: number;
   teamGap: number;
+  // The scoreboard's columns: the player's share of the names' room
+  // beside the champion's, the K/D/A and the CS wide enough for the
+  // widest a match gives them in the own row's bold ("22 / 18 / 31",
+  // "388"), and the width under which its item icons come down to a short
+  // row's size whatever the height, so the names keep their room.
+  playerFr: number;
+  kdaW: number;
+  csW: number;
+  tableTightW: number;
   // The HUD's own boxes at their tallest, border included, in a third of
   // the sheet (the battle royale's columns) and in a quarter (the 5v5's
   // beside the scoreboard): the ladder box (ui/ladder_box.ts), the account
@@ -123,6 +132,10 @@ export const DESKTOP_END: EndMetrics = {
   scoreRowH: 36,
   scoreRowShortH: 26,
   teamGap: 8,
+  playerFr: 1.15,
+  kdaW: 84,
+  csW: 30,
+  tableTightW: 600,
   ladderH: 180,
   ladderQH: 196,
   offerH: 200,
@@ -163,6 +176,10 @@ export const PHONE_END: EndMetrics = {
   scoreRowH: 26,
   scoreRowShortH: 26,
   teamGap: 6,
+  playerFr: 1,
+  kdaW: 74,
+  csW: 26,
+  tableTightW: 600,
   ladderH: 150,
   ladderQH: 180,
   offerH: 170,
@@ -516,12 +533,19 @@ ${sheet} .br-end-row img { width: ${m.rankRowH - 6}px; height: ${m.rankRowH - 6}
 ${sheet} .hud-score-team h4 { height: ${m.teamHeadH}px; }
 ${sheet} .hud-score-row.head { height: ${m.colsHeadH}px; }
 ${sheet} .hud-score-row:not(.head) { height: ${m.scoreRowH}px; }
+${sheet} .hud-score-row {
+  grid-template-columns: minmax(0, ${m.playerFr}fr) minmax(0, 1fr) ${m.kdaW}px ${m.csW}px max-content;
+}
 ${sheet} .hud-score-build { zoom: ${iconZoom(m.scoreRowH)}; }
 ${sheet} .end-table.hud-end-card { gap: ${m.teamGap}px; }
 @container end ${short} {
   ${sheet} .br-end-row { height: ${m.rankRowShortH}px; }
   ${sheet} .br-end-row img { width: ${m.rankRowShortH - 6}px; height: ${m.rankRowShortH - 6}px; }
   ${sheet} .hud-score-row:not(.head) { height: ${m.scoreRowShortH}px; }
+  ${sheet} .hud-score-build { zoom: ${iconZoom(m.scoreRowShortH)}; }
+}
+${sheet} .end-table.hud-end-card { container: end-table / inline-size; }
+@container end-table (width < ${m.tableTightW}px) {
   ${sheet} .hud-score-build { zoom: ${iconZoom(m.scoreRowShortH)}; }
 }
 @container end (min-width: ${m.twoFrom}px) {

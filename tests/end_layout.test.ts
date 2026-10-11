@@ -316,6 +316,41 @@ describe('the end screens', () => {
     expect(iconZoom(400)).toBe(1);
   });
 
+  it("keeps the scoreboard's numbers in their columns and the names their room", () => {
+    // The widest K/D/A and CS a match gives, in the own row's bold,
+    // measured in a browser: "22 / 18 / 31" drew 82 px on a desktop and 72
+    // on a phone, "388" 24 on a phone; narrower, the K/D/A ran over the CS.
+    const widest = [
+      [DESKTOP_END, 82, 24],
+      [PHONE_END, 72, 24],
+    ] as const;
+    const css = endLayoutCss();
+    for (const [m, kda, cs] of widest) {
+      expect(m.kdaW).toBeGreaterThanOrEqual(kda);
+      expect(m.csW).toBeGreaterThanOrEqual(cs);
+      expect(css).toContain(
+        `grid-template-columns: minmax(0, ${m.playerFr}fr) minmax(0, 1fr) ${m.kdaW}px ${m.csW}px max-content;`,
+      );
+      // A narrow scoreboard draws its icons a short row's size, tall rows
+      // or not.
+      expect(css).toContain(`@container end-table (width < ${m.tableTightW}px)`);
+    }
+    expect(css).toContain('container: end-table / inline-size;');
+    // The 5v5's scoreboard is narrow from 1024 wide down and wide at 1280.
+    const at = (w: number, h: number): number => width(endBoxes(w, h, false, TEAMS).table!);
+    expect(at(1024, 768)).toBeLessThan(DESKTOP_END.tableTightW);
+    expect(at(1280, 720)).toBeGreaterThanOrEqual(DESKTOP_END.tableTightW);
+  });
+
+  it('lets the level bar box scroll inside past the content it was measured for', () => {
+    // A long match's Grafts run past the two lines measured: the box under
+    // the result gives up its height, never the result or the page.
+    expect(END_SCREEN_CSS).toContain('.end-head { flex-shrink: 0; }');
+    expect(END_SCREEN_CSS).toContain(
+      '.end-progress { flex: 0 1 auto; min-height: 0; overflow-y: auto;',
+    );
+  });
+
   it('is what both end cards open on', () => {
     const hud = readFileSync(path.join(ROOT, 'src/ui/hud.ts'), 'utf8');
     const royale = readFileSync(path.join(ROOT, 'src/ui/royale_hud.ts'), 'utf8');

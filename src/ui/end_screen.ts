@@ -117,6 +117,12 @@ ${S} .end-label {
 ${S} .end-label::after { content: ''; flex: 1; height: 1px; background: rgba(201, 168, 74, 0.28); }
 /* The battle royale's level bar and Grafts, under the result. */
 ${S} .end-progress { display: flex; flex-direction: column; }
+/* Past the longest the column was measured for (a long match's Grafts),
+   this box gives up its height and scrolls inside itself, never the
+   result over it or the page. */
+${S} .end-head { flex-shrink: 0; }
+${S} .end-progress { flex: 0 1 auto; min-height: 0; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: #6e5a24 transparent; }
 ${S} .end-progress .br-goal { margin: 0; width: auto; }
 ${S} .end-progress .br-end-grafts { margin: 0; font-size: 13px; line-height: 17px; }
 /* The tables: the ranking and the scoreboard. They give up their height
@@ -133,10 +139,7 @@ ${S} .hud-end-card.end-table {
 }
 ${S} .hud-score-team h4 { display: flex; align-items: center; margin: 0; box-sizing: border-box; }
 ${S} .hud-score-team + .hud-score-team .hud-score-row.head { display: none; }
-${S} .hud-score-row {
-  box-sizing: border-box; padding: 0 6px; gap: 6px; font-size: 13px;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) 68px 28px max-content;
-}
+${S} .hud-score-row { box-sizing: border-box; padding: 0 6px; gap: 6px; font-size: 13px; }
 ${S} .hud-score-row.head { padding-bottom: 0; align-items: end; }
 /* The HUD's boxes in the grid: the ladder in gold, the offer in a
    brighter gold (the one box that asks for a decision), the feedback box
@@ -192,8 +195,7 @@ ${C} .end-label { font-size: 10px; letter-spacing: 1.3px; }
 ${C} .end-progress .br-goal-line { font-size: 11px; }
 ${C} .end-progress .br-end-grafts { font-size: 11.5px; line-height: 14px; }
 ${C} .br-end-row { font-size: 12px; padding: 0 6px; gap: 6px; }
-${C} .hud-score-row { font-size: 11.5px; padding: 0 5px; gap: 5px;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 58px 22px max-content; }
+${C} .hud-score-row { font-size: 11.5px; padding: 0 5px; gap: 5px; }
 ${C} .hud-end-offer { gap: 6px 10px; }
 ${C} .hud-end-offer b { font-size: 13px; line-height: 16px; }
 ${C} .hud-end-offer span { font-size: 11.5px; line-height: 1.3; }

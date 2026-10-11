@@ -133,7 +133,7 @@ import {
   objectiveLine,
   wrathChipText,
 } from './objective_line';
-import { fillPauseMenu } from './pause_menu';
+import { fillPauseMenu, settlePauseFocus } from './pause_menu';
 import { firstPointsText, pointsWord, popText } from './points_text';
 import { BURR_COLOR, burrWashLine } from './royale_burr';
 import { GoalTrack } from './royale_goal';
@@ -2633,10 +2633,11 @@ export class Hud {
   }
 
   toggleEscapeMenu(): void {
-    this.escapeOverlay.classList.toggle('open');
+    const open = this.escapeOverlay.classList.toggle('open');
     this.syncOverlay();
+    settlePauseFocus(this.escapeOverlay, open);
     // Opened in a match that scores: the place as it stands now.
-    if (this.scores() && this.escapeOverlay.classList.contains('open')) {
+    if (this.scores() && open) {
       this.pauseLadder.refresh();
     }
   }

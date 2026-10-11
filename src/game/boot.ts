@@ -657,6 +657,7 @@ export function startPresentation(
     onPickCard: (card) => hud.pickGraft(card),
     onDrinkSlot: (slot) => hud.drinkSlot(slot),
     isTyping: () => hud.isChatOpen(),
+    isMenuOpen: () => hud.covers().pauseMenu,
   };
   const teardownInput = setupInput(renderer, inputHandlers);
   // In fullscreen the mouse stays on the game (cursor_lock.ts): a second

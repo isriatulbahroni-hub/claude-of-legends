@@ -150,6 +150,19 @@ function button(cls: string, text: string, onClick: () => void): HTMLButtonEleme
   return b;
 }
 
+// Where the keyboard stands as the menu opens or closes (the HUD calls it
+// on every toggle): on Resume when it opens, so Enter resumes and Tab
+// walks the boxes from the top; out of the menu when it closes, so no key
+// is left in a hidden field, whose keys never reach the match.
+export function settlePauseFocus(overlay: HTMLElement, open: boolean): void {
+  if (open) {
+    overlay.querySelector<HTMLElement>('.hud-pause-btn.resume')?.focus({ preventScroll: true });
+    return;
+  }
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && overlay.contains(active)) active.blur();
+}
+
 // Fills the HUD's pause overlay with the menu's sheet.
 export function fillPauseMenu(overlay: HTMLElement, parts: PauseMenuParts): void {
   ensureCss();

@@ -7,7 +7,9 @@ import { dist } from './geo';
 import type { Sim } from './sim';
 
 const ACQUIRE_RADIUS = 8;
-const ARRIVE_RADIUS = 1.2;
+// Within this of its point an attack-move is done; exported for the
+// client's prediction, which follows the same rule (src/net/walk_memory.ts).
+export const ARRIVE_RADIUS = 1.2;
 
 export function stepAttackMove(sim: Sim): void {
   for (const u of sim.units.values()) {

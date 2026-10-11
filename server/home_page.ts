@@ -1,6 +1,7 @@
 // The home's panels (CONTEXT.md: Home): what a signed-in account reads
 // under the play tiles. The top of the ladder by hand, the top bots, the
-// latest champions out of the Forge, and the reader's own numbers, in one
+// latest champions out of the Forge, and the reader's own numbers (the
+// places, the career, the line's points and Respawn best), in one
 // answer, so the home makes one request rather than six and never carries
 // a gallery's worth of definitions to draw six cards. Pure over the same
 // seeds, stats, rows and career the ladder page, the gallery and the
@@ -16,6 +17,7 @@ import {
   placeOf,
 } from './ladder_page';
 import type { ProfileStats } from './profile';
+import { wholeBest } from './royale_ranking';
 import type { WayStats } from './way_stats';
 import type { Way } from './ways';
 
@@ -57,6 +59,15 @@ export interface HomeCareer {
   lastAt: number | null;
 }
 
+// The reader's line of the ladder of every human (ADR 0027): its points,
+// which the level reads on the one curve (src/ui/royale_goal.ts goalStep)
+// as the landing's own panel reads them (ADR 0033), and its Respawn best.
+// What the greeting on Respawn's card says (src/ui/royale_goal_lines.ts).
+export interface HomeLine {
+  points: number;
+  best: number;
+}
+
 export interface HomeMe {
   places: Record<Way, Place>;
   career: HomeCareer;
@@ -64,6 +75,7 @@ export interface HomeMe {
   bots: { total: number; ranked: number };
   // The reader's sealed champions.
   forged: number;
+  line: HomeLine;
 }
 
 export interface HomePage {
@@ -87,6 +99,8 @@ export interface HomeInput {
   career: ProfileStats;
   // The reader's bots: whether each stands in the Arena's pool.
   myBots: readonly { deposited: boolean }[];
+  // The reader's points and Respawn best as the account keeps them.
+  line: { points: number; best: number };
 }
 
 export interface HomeOpts {
@@ -210,6 +224,15 @@ export function buildHomePage(input: HomeInput, readerId: number, opts: HomeOpts
       },
       forged: input.forged.filter((r) => r.accountId === readerId && r.status === 'finalized')
         .length,
+      line: lineOf(input.line),
     },
   };
+}
+
+// The line as the home says it: whole points from zero, the best as the
+// line keeps it (server/royale_ranking.ts wholeBest).
+export function lineOf(line: HomeInput['line']): HomeLine {
+  const p = line.points;
+  const points = typeof p === 'number' && Number.isFinite(p) ? Math.max(0, Math.floor(p)) : 0;
+  return { points, best: wholeBest(line.best) };
 }

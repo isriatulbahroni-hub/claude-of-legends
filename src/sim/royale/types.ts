@@ -86,7 +86,9 @@ export const CLAMOR_S = 3;
 // 10: the Voidmaul Rising strikes with a ground slam and its Crush, and the
 // stones its slam throws across its ring hurt what they land on
 // (combat/voidmaul_slam.ts, combat/voidmaul_stones.ts).
-export const ROYALE_RULES_VERSION = 10;
+// 11: the Upstart, a Respawn champion come down with no takedown on its
+// tally hitting champions harder until its first one (upstart.ts).
+export const ROYALE_RULES_VERSION = 11;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {

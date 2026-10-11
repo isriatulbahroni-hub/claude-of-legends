@@ -5,6 +5,10 @@
 // The planet's model is the renderer's to load; a worker wants the grid
 // and never Three.js, which is why the records stand alone here.
 
+import type { PlanetWalk } from '../net/client_world';
+import { assemblePlanet, type Planet } from '../sim/content/planet';
+import { SphereGround } from '../sim/ground';
+import { decodeSphereNav, findSpherePath, SphereNavGrid } from '../sim/sphere_nav';
 import { versioned } from './asset_version';
 
 export const PLANET_ROOT = '/map/planet/';
@@ -42,4 +46,18 @@ export function loadPlanetRecords(): Promise<PlanetRecords> {
     throw err;
   });
   return cached;
+}
+
+// The planet as the own champion's prediction walks it online
+// (src/net/client_world.ts): the ground the server's sim walks, over the
+// records' grid, and the launch pads.
+export function planetWalk(
+  records: PlanetRecords,
+  layout: Planet = assemblePlanet(records.layout),
+): PlanetWalk {
+  const data = decodeSphereNav(layout.nav, records.navigation);
+  return {
+    ground: new SphereGround(new SphereNavGrid(data), findSpherePath),
+    pads: layout.pads,
+  };
 }

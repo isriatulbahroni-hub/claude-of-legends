@@ -41,6 +41,16 @@ export function hintsStart(guide: GuideMode): HintsClock {
   return guide === 'play' ? HINTS_START : { ...HINTS_START, faded: true };
 }
 
+// What covers the hint besides the screens over the HUD: with the thumbs,
+// the Respawn wait's globe, whose column of lines (the title, the life,
+// the goal's line, the Burr's line, the globe's line) rises into the
+// hint's corner on a phone. The hint stands down with the thumb controls
+// meanwhile (ui/hud.ts .hud.thumbs.wait-globe), and its clock stands still,
+// so it is read once the champion is back.
+export function hintsCovered(blocked: boolean, thumbs: boolean, waitGlobe: boolean): boolean {
+  return blocked || (thumbs && waitGlobe);
+}
+
 export function stepHints(
   state: HintsClock,
   time: number,

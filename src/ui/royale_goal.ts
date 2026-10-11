@@ -5,8 +5,9 @@
 // carries it and the count anchors to it, and the browser keeps the last
 // one read (game/settings.ts royaleGoal) as the cache a match reads before
 // its first points message. The card names nobody: not a ladder entry, not
-// another player. Pure; ui/royale_goal_bar.ts draws it and ui/hud.ts
-// counts the points as they come.
+// another player. Pure; ui/royale_goal_bar.ts draws it, ui/hud.ts counts
+// the points as they come, and ui/royale_goal_lines.ts says it before the
+// card.
 //
 // The 5v5's points bank on the same line (server/points.ts). The battle
 // royale's are the ones a seat banks (server/royale_points.ts): a
@@ -72,6 +73,11 @@ export interface GoalModel {
   line: string;
 }
 
+// A count as the own panel writes it ("1,000").
+export function goalCount(n: number): string {
+  return n.toLocaleString('en-US');
+}
+
 export function goalModel(before: number, earned: number): GoalModel {
   const from = Math.max(0, Math.min(GOAL_MAX_POINTS, Math.floor(before)));
   const gain = Math.max(0, Math.floor(earned));
@@ -81,7 +87,9 @@ export function goalModel(before: number, earned: number): GoalModel {
   const reached = step.level > was.level ? step.level : null;
   const left = step.to - after;
   const got =
-    gain === 0 ? 'No points this match' : `+${gain} ${gain === 1 ? 'point' : 'points'} this match`;
+    gain === 0
+      ? 'No points this match'
+      : `+${goalCount(gain)} ${gain === 1 ? 'point' : 'points'} this match`;
   return {
     level: step.level,
     next: step.level + 1,
@@ -91,7 +99,7 @@ export function goalModel(before: number, earned: number): GoalModel {
     earned: gain,
     left,
     title: reached !== null ? `Level ${reached} reached` : `Level ${step.level}`,
-    line: `${got} · ${left} more to Level ${step.level + 1}`,
+    line: `${got} · ${goalCount(left)} more to Level ${step.level + 1}`,
   };
 }
 
@@ -128,7 +136,9 @@ export class GoalTrack {
     this.write(this.total());
   }
 
-  // The total as it stands, this match's points in it.
+  // The total as it stands, this match's points in it: what the wash of a
+  // Respawn death and the points' pop say before the card
+  // (ui/royale_goal_lines.ts).
   total(): number {
     return clampPoints(this.before + this.earned);
   }

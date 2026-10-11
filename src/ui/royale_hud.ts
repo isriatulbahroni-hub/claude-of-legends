@@ -232,6 +232,8 @@ const CSS = `
   border-radius: 8px; cursor: pointer; font: inherit; font-size: 14px; font-weight: 700;
   border: 1px solid #6b5a2e; background: rgba(14, 18, 28, 0.9); color: #e6dcb8;
   transition: border-color 0.15s ease, transform 0.15s ease; }
+.br-end-btns button small { display: block; margin-top: 1px; font-size: 11.5px; font-weight: 700;
+  letter-spacing: 0.2px; opacity: 0.82; }
 .br-end-btns button:hover { border-color: #c9a84a; color: #fff3cf; transform: translateY(-1px); }
 .br-end-btns button.primary { flex-grow: 1.4; font-weight: 800; letter-spacing: 0.6px; color: #241a08;
   border-color: #f0deae; background: linear-gradient(180deg, #e8cc74 0%, #c9a84a 55%, #a07830 100%);
@@ -270,6 +272,7 @@ const CSS = `
 .hud.compact .br-note img { width: 22px; height: 22px; }
 .hud.compact .br-note.level { padding-left: 10px; }
 .hud.compact .br-end-btns button { min-height: 44px; padding: 6px 10px; font-size: 13px; min-width: 100px; }
+.hud.compact .br-end-btns button small { font-size: 10.5px; margin-top: 0; }
 `;
 
 // A death as the feed reads it: who and by whom, and in a battle royale
@@ -744,9 +747,15 @@ export class RoyaleHud {
       lines,
     );
     const btns = el('div', 'br-end-btns');
-    const button = (text: string, action: PostMatchAction, primary = false): HTMLButtonElement => {
+    const button = (
+      text: string,
+      action: PostMatchAction,
+      primary = false,
+      note: string | null = null,
+    ): HTMLButtonElement => {
       const b = el('button', primary ? 'primary' : '', text);
       b.type = 'button';
+      if (note !== null) b.appendChild(el('small', '', note));
       b.dataset.exit = action;
       b.addEventListener('click', () => {
         // The next match may skip every click before it: this is the
@@ -757,7 +766,7 @@ export class RoyaleHud {
       return b;
     };
     btns.append(
-      button(model.again, 'again', true),
+      button(model.again, 'again', true, model.againNote),
       button(model.other, 'other'),
       button(model.home, 'menu'),
     );

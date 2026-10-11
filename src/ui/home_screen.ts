@@ -8,6 +8,7 @@
 // It only decides; the entry point owns the flow. Everything here resolves
 // the promise with a HomeChoice and takes the page down.
 
+import { updateSettings } from '../game/settings';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { RoyaleVariant } from '../sim/royale/types';
 import type { TeamId } from '../sim/types';
@@ -321,10 +322,11 @@ export function showHome(
       leave();
       resolve({ name: accountName, mode: 'royale', royale: variant });
     };
+    const royaleTiles = buildRoyaleTiles(onRoyale);
     const main = el('section', 'home-main');
     main.append(
       el('h2', 'home-kicker', ROYALE_LABEL),
-      buildRoyaleTiles(onRoyale),
+      royaleTiles.root,
       el('h2', 'home-kicker', CLASSIC_TITLE),
       buildPlayTiles(PLAY_TILES, onTile),
       buildJoinLine(prefillCode, (code) => done('join', code)),
@@ -340,6 +342,13 @@ export function showHome(
       openGallery: showGallery,
       openCareer: showAccount,
       onWatch,
+      // The account's line: Respawn's card greets with its level, and the
+      // browser keeps its copy, which a match reads before its first
+      // points (ui/royale_goal.ts), as the landing's own panel keeps it.
+      onLine: (line) => {
+        if (line) updateSettings({ royaleGoal: line.points, royaleBest: line.best });
+        royaleTiles.showLine(line);
+      },
     });
     col.appendChild(panels.root);
 

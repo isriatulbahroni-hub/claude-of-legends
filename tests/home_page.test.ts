@@ -1,7 +1,8 @@
 // The home's panels (server/home_page.ts): the top of the ladder by hand
 // with the reader marked, the top bots from the Arena or, until it has
 // placed one, from live play, the latest champions out of the Forge as the
-// gallery would list them, and the reader's own numbers.
+// gallery would list them, and the reader's own numbers, its line's points
+// and Respawn best among them.
 
 import { describe, expect, it } from 'vitest';
 import type { ForgedRow } from '../server/forge_store';
@@ -14,6 +15,7 @@ import {
   HOME_LADDER_ROWS,
   type HomeInput,
   latestForged,
+  lineOf,
 } from '../server/home_page';
 import type { LadderSeed } from '../server/ladder_page';
 import type { ProfileStats } from '../server/profile';
@@ -102,6 +104,7 @@ function input(over: Partial<HomeInput> = {}): HomeInput {
     forged: [],
     career: NO_CAREER,
     myBots: [],
+    line: { points: 0, best: 0 },
     ...over,
   };
 }
@@ -313,6 +316,18 @@ describe('the home page', () => {
     expect(page.me.career.favorite).toEqual({ championId: 'sylra', games: 8 });
     expect(page.me.bots).toEqual({ total: 3, ranked: 2 });
     expect(page.me.forged).toBe(2);
+  });
+
+  it("carries the reader's line: the points the level reads and the Respawn best", () => {
+    const page = buildHomePage(input({ line: { points: 155, best: 4 } }), 1);
+    expect(page.me.line).toEqual({ points: 155, best: 4 });
+    expect(buildHomePage(input(), 1).me.line).toEqual({ points: 0, best: 0 });
+  });
+
+  it('says the line whole, junk as none', () => {
+    expect(lineOf({ points: 12.9, best: 2.5 })).toEqual({ points: 12, best: 2 });
+    expect(lineOf({ points: -4, best: Number.NaN })).toEqual({ points: 0, best: 0 });
+    expect(lineOf({ points: Number.POSITIVE_INFINITY, best: -1 })).toEqual({ points: 0, best: 0 });
   });
 
   it('reads each way once however many panels want it', () => {

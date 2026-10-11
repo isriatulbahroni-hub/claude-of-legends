@@ -16,16 +16,25 @@ import {
 } from '../src/render/planet_drop';
 import { PLANET_RADIUS } from '../src/render/planet_ground';
 import { RESPAWN_S } from '../src/sim/royale/types';
+import { overlaps } from '../src/ui/royale_layout';
 import {
+  RETURN_ANNOUNCE_GAP_PX,
   RETURN_GLOBE_AFTER_S,
   RETURN_GLOBE_HALF_VH,
+  RETURN_WASH_BAR_GAP_PX,
   RETURN_WASH_GAP_VH,
+  returnAnnounceMaxCss,
+  returnAnnounceMaxPx,
   returnGlobeOn,
   returnHint,
   returnLight,
   returnWashColumnPx,
+  returnWashLeftCss,
+  returnWashLeftPx,
+  returnWashPhoneBox,
   waitMarks,
 } from '../src/ui/royale_return';
+import { TOUCH_BAR_CSS, touchBarLeftBox } from '../src/ui/touch_bar';
 
 describe('the wait for a return', () => {
   const respawn = { v: 'respawn' as const, st: 'play' as const };
@@ -165,5 +174,79 @@ describe('the wait globe on the screen', () => {
       expect(column).toBeGreaterThanOrEqual(250);
       expect(globeLeft - column).toBeCloseTo((RETURN_WASH_GAP_VH * h) / 100, 6);
     }
+  });
+
+  // Phones held sideways, each with the inset its notch adds at the left
+  // (none without one), and the narrowest of them.
+  const PHONES = [
+    [844, 390, 47],
+    [812, 375, 44],
+    [932, 430, 59],
+    [844, 390, 0],
+    [740, 360, 0],
+    [915, 412, 0],
+    [667, 375, 0],
+  ] as const;
+
+  it("keeps the column clear of the touch bar's Menu and Center at the left", () => {
+    for (const [w, h, safe] of PHONES) {
+      const at = `${w}x${h} safe ${safe}`;
+      // A battle royale's bar: Menu and Center, no Shop, Recall or Drink.
+      const bar = touchBarLeftBox(h, 2, safe);
+      const column = returnWashPhoneBox(w, h, true, safe);
+      // The bar stands beside the column's lines, so only the edge keeps
+      // them apart.
+      expect(bar.top < column.bottom && bar.bottom > column.top, at).toBe(true);
+      expect(overlaps(column, bar), at).toBe(false);
+      expect(column.left - bar.right, at).toBe(RETURN_WASH_BAR_GAP_PX);
+      // What is left holds the widest piece a line cannot break: a name of
+      // 16 letters, or the goal's level with its bar.
+      expect(column.right - column.left, at).toBeGreaterThanOrEqual(130);
+    }
+  });
+
+  it('keeps the announcement over the globe, clear of the column, while the globe shows', () => {
+    // On a phone the announcement stands 70 px down, centered, two lines of
+    // 24 px at most once it wraps (ui/hud.ts).
+    for (const [w, h, safe] of PHONES) {
+      const at = `${w}x${h} safe ${safe}`;
+      const column = returnWashPhoneBox(w, h, true, safe);
+      const max = returnAnnounceMaxPx(h);
+      const announce = { left: w / 2 - max / 2, top: 70, right: w / 2 + max / 2, bottom: 118 };
+      expect(overlaps(column, announce), at).toBe(false);
+      expect(announce.left - column.right, at).toBeCloseTo(RETURN_ANNOUNCE_GAP_PX, 6);
+      // Room for a name of 16 letters at its 20 px on a line of its own.
+      expect(max, at).toBeGreaterThanOrEqual(190);
+    }
+    expect(returnAnnounceMaxCss()).toBe(
+      `calc(2 * (${RETURN_GLOBE_HALF_VH + RETURN_WASH_GAP_VH} * var(--vh, 1vh) - ${RETURN_ANNOUNCE_GAP_PX}px))`,
+    );
+  });
+
+  it('ran over the end of the recap as wide as a phone let it (844x390)', () => {
+    // "You took down Sorrel" at 20 px, 260 px wide, over a recap on two
+    // lines from y 70.
+    const column = returnWashPhoneBox(844, 390, true);
+    expect(overlaps(column, { left: 292, top: 70, right: 552, bottom: 94 })).toBe(true);
+  });
+
+  it('ran under both from the edge before (844x390)', () => {
+    const bar = touchBarLeftBox(390, 2);
+    expect(bar.left).toBe(8);
+    expect(overlaps(returnWashPhoneBox(844, 390, false), bar)).toBe(true);
+  });
+
+  it("starts at the screen's edge with the bar at the right", () => {
+    expect(returnWashLeftPx(false, 47)).toBe(0);
+    expect(returnWashPhoneBox(844, 390, false).left).toBe(0);
+  });
+
+  it('draws the clearance and the bar from the same numbers the boxes use', () => {
+    expect(returnWashLeftCss()).toBe(
+      `calc(${returnWashLeftPx(true)}px + var(--safe-left, env(safe-area-inset-left, 0px)))`,
+    );
+    const bar = touchBarLeftBox(390, 2);
+    expect(TOUCH_BAR_CSS).toContain(`width: ${bar.right - bar.left}px`);
+    expect(TOUCH_BAR_CSS).toMatch(/\.touchbar\.left \{[^}]*top: 38%/);
   });
 });

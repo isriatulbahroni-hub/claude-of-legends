@@ -124,8 +124,9 @@ describe('an Arrival in play', () => {
     expect(u.items).toEqual(before.get(u.id)!.items);
     expect([u.kills, u.deaths, u.assists, u.killStreak]).toEqual([0, 0, 0, 0]);
     expect(sim.royale!.scores.get(u.id)).toBe(0);
-    // The match's own count keeps what happened.
-    expect(sim.royaleMode!.tally).toEqual(tally);
+    // The match's own count keeps what happened, and counts the Upstart it
+    // begins (tests/royale_upstart.test.ts).
+    expect(sim.royaleMode!.tally).toEqual({ ...tally, upstarts: tally.upstarts + 1 });
     // In its Grace, which waits on the seat's first order past
     // ARRIVAL_GRACE_S, ARRIVAL_GRACE_MAX_S at most (tests/royale_grace_wait.test.ts).
     expect(sim.royale!.arriving.has(u.id)).toBe(true);

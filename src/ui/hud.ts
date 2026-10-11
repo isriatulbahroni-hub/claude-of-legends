@@ -891,6 +891,11 @@ const CSS = `
 .hud.compact .hud-overlay.returning { justify-content: flex-end;
   padding-bottom: ${RETURN_WASH_PHONE_BOTTOM_PX}px; }
 .hud.compact .hud-overlay.returning .hud-overlay-title { font-size: 20px; }
+/* The wait's column stands over the thumbs' bar at the left: the goal's
+   line breaks after its bar, two short lines kept in the column's middle. */
+.hud.compact .hud-overlay.returning .goal-line-run { flex-wrap: wrap; justify-content: center;
+  row-gap: 1px; }
+.hud.compact .hud-overlay.returning .goal-line-run > span { flex-basis: 100%; text-align: center; }
 .hud.compact .hud-end-rating { font-size: 13px; margin-top: 2px; min-height: 0; }
 .hud.compact .hud-end-join { margin-top: 8px; font-size: 11.5px; }
 .hud.compact .hud-menu-btn { margin-top: 6px; padding: 8px 18px; font-size: 13px; }

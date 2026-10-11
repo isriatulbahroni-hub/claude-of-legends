@@ -2869,7 +2869,9 @@ export class Hud {
   // `keep`: the line holds its slot for its whole moment, and what is
   // announced meanwhile waits its turn. A Guest's first points say they are
   // on the ladder this way (showPoints), since they land with the very
-  // things that announce themselves: a tower, a creature taken.
+  // things that announce themselves: a tower, a creature taken. The root
+  // carries `announcing` while a line shows: the battle royale's open
+  // Graft cards give it their title's line (ui/royale_cards_room.ts).
   announce(text: string, color = '#f2ffd9', holdMs = 2600, keep = false): void {
     if (this.announceKept && !keep && performance.now() < this.announceUntil) {
       if (this.announceNext.length < 3) this.announceNext.push({ text, color, holdMs });
@@ -2879,6 +2881,7 @@ export class Hud {
     this.announceEl.textContent = text;
     this.announceEl.style.color = color;
     this.announceEl.style.opacity = '1';
+    this.rootEl.classList.add('announcing');
     this.announceUntil = performance.now() + holdMs;
   }
 
@@ -3342,6 +3345,7 @@ export class Hud {
         this.announce(next.text, next.color, next.holdMs);
       } else {
         this.announceEl.style.opacity = '0';
+        this.rootEl.classList.remove('announcing');
         this.announceUntil = 0;
       }
     }

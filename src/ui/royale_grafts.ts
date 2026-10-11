@@ -143,13 +143,14 @@ export function graftNames(ids: readonly string[]): string[] {
 // across the top of the view, under the top line, the title above them,
 // so the world and the champion's body stay in sight below (the
 // maintainer: "faut quand meme qu'on voit le jeu"). A phone uses the same
-// row, smaller.
+// row, smaller, its title under the Dusk's pill (at 54 px the pill
+// touched it; ui/royale_layout.ts topLineBox).
 export const DESK_CARD_W_PX = 248;
 export const DESK_CARD_H_PX = 132;
 export const DESK_TOP_PX = 96;
 export const PHONE_CARD_W_PX = 222;
 export const PHONE_CARD_H_PX = 104;
-export const PHONE_TOP_PX = 54;
+export const PHONE_TOP_PX = 62;
 export const TITLE_H_PX = 30;
 export const PHONE_TITLE_H_PX = 22;
 export const CARD_GAP_PX = 12;

@@ -44,7 +44,10 @@ export interface PauseMetrics {
   rowGap: number;
   // The width of a settings row's label.
   rowLabelW: number;
-  // The ladder box and the feedback box at their tallest, border included.
+  // The ladder box and the feedback box at their tallest, border included:
+  // the ladder's line on two lines and a refusal under the name field, the
+  // feedback field at its least. Measured in a browser at the narrowest
+  // column (169 and 149 on a desktop, 150 and 103 on a phone).
   ladderH: number;
   feedbackH: number;
 }
@@ -54,7 +57,7 @@ export const DESKTOP_PAUSE: PauseMetrics = {
   gutter: 24,
   gap: 14,
   maxWidth: 1360,
-  actionsWidth: 236,
+  actionsWidth: 220,
   wideFrom: 860,
   twoFrom: 520,
   headH: 40,
@@ -66,9 +69,9 @@ export const DESKTOP_PAUSE: PauseMetrics = {
   leaveGap: 16,
   rowH: 26,
   rowGap: 10,
-  rowLabelW: 118,
+  rowLabelW: 112,
   ladderH: 178,
-  feedbackH: 140,
+  feedbackH: 156,
 };
 
 // A touchscreen (the compact HUD), a phone in landscape first: smaller
@@ -77,8 +80,8 @@ export const PHONE_PAUSE: PauseMetrics = {
   gutter: 10,
   gap: 8,
   maxWidth: 1360,
-  actionsWidth: 156,
-  wideFrom: 660,
+  actionsWidth: 164,
+  wideFrom: 672,
   twoFrom: 440,
   headH: 26,
   pad: 10,
@@ -90,7 +93,7 @@ export const PHONE_PAUSE: PauseMetrics = {
   rowH: 30,
   rowGap: 6,
   rowLabelW: 100,
-  ladderH: 142,
+  ladderH: 156,
   feedbackH: 112,
 };
 

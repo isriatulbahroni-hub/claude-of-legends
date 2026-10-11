@@ -37,9 +37,10 @@ ${M} {
 ${C} { justify-content: flex-start; overflow-y: auto; gap: 0; }
 ${M} .hud-pause-sheet { width: 100%; margin: auto; flex: none; min-height: 0; }
 ${M} .hud-pause-head { display: flex; align-items: center; gap: 16px; min-width: 0; }
+/* The title in the menus' display face, like the battle royale's. */
 ${M} .hud-pause-title {
-  font-size: 28px; font-weight: 800; letter-spacing: 3px; text-transform: uppercase;
-  color: #f2e6c0; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8); white-space: nowrap;
+  font-family: Cinzel, Georgia, serif; font-size: 30px; font-weight: 700; letter-spacing: 2px;
+  line-height: 1; color: #f2e6c0; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8); white-space: nowrap;
 }
 ${M} .hud-pause-head::after {
   content: ''; flex: 1; height: 1px;
@@ -75,6 +76,7 @@ ${M} .hud-pause-btn.leave {
   margin-top: auto; border-color: #6e3a2c; color: #f0cbbf; background: #2a1611;
 }
 ${M} .hud-pause-btn.leave:hover { border-color: #c0604a; }
+${M} .hud-menu-btn:focus-visible { outline: 2px solid #c9a84a; outline-offset: 2px; }
 /* The settings: their rows, scrolled inside the box when the screen is
    shorter than the list. */
 ${M} .hud-pause-settings {
@@ -94,11 +96,14 @@ ${M} .hud-ladder {
   background: linear-gradient(180deg, rgba(44, 37, 15, 0.97), rgba(26, 22, 10, 0.97));
 }
 ${M} .hud-feedback { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
-${M} .hud-feedback-row { flex: 1 1 auto; min-height: 0; }
+/* Send at the field's foot, a button's height, rather than stretched
+   along a field that grows with the box. */
+${M} .hud-feedback-row { flex: 1 1 auto; min-height: 0; align-items: flex-end; }
 ${M} .hud-feedback-row .hud-menu-btn, ${M} .hud-ladder-row .hud-menu-btn { margin: 0; }
-${M} .hud-feedback-field { min-height: 52px; }
+${M} .hud-feedback-row .hud-menu-btn { align-self: flex-end; min-height: 40px; }
+${M} .hud-feedback-field { align-self: stretch; min-height: 72px; }
 /* A phone: smaller words, the buttons still a finger wide. */
-${C} .hud-pause-title { font-size: 18px; letter-spacing: 2px; }
+${C} .hud-pause-title { font-size: 20px; letter-spacing: 1.5px; }
 ${C} .hud-pause-head { gap: 10px; }
 ${C} .hud-pause-card { border-radius: 10px; }
 ${C} .hud-pause-label { font-size: 10px; letter-spacing: 1.3px; }
@@ -106,9 +111,9 @@ ${C} .hud-pause-label::after { margin-top: 6px; }
 ${C} .hud-pause-btn { font-size: 13px; padding: 0 8px; border-radius: 7px; }
 ${C} .hud-pause-settings .set-row { font-size: 12px; gap: 8px; }
 ${C} .hud-pause-settings .set-row select { min-height: 28px; }
-${C} .hud-ladder-row .hud-menu-btn { min-height: 36px; padding: 0 14px; }
+${C} .hud-ladder-row .hud-menu-btn { min-height: 40px; padding: 0 14px; }
 ${C} .hud-feedback-field { min-height: 44px; }
-${C} .hud-feedback-row .hud-menu-btn { padding: 0 14px; }
+${C} .hud-feedback-row .hud-menu-btn { min-height: 44px; padding: 0 16px; }
 ${pauseLayoutCss()}
 `;
 

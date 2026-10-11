@@ -19,6 +19,7 @@ import { Sim } from '../src/sim/sim';
 import type { CombatCtx } from '../src/sim/sim_context';
 import type { Vec2 } from '../src/sim/types';
 import { createCreature } from '../src/sim/unit';
+import { HOME, R } from './sphere_world';
 
 function fixture() {
   const sim = new Sim(17);
@@ -81,6 +82,22 @@ describe('the Voidmaul slam rain of stones', () => {
       far = Math.max(far, dist(s.target, arena.center));
     }
     expect(far).toBeGreaterThan(14);
+  });
+
+  it("lands every stone on the planet's ground inside the Rising's ring", () => {
+    // The Voidmaul a Rising on the planet (royale/risings.ts): its ring a
+    // disc of the sphere, its slam's contact on the sphere too.
+    const arena = { center: HOME, radius: 16.35 };
+    const point = offset(HOME, heading(HOME, 0.4), 4);
+    const a = voidmaulStones(point, 5.5, arena);
+    expect(voidmaulStones(point, 5.5, arena)).toEqual(a);
+    expect(a).toHaveLength(VOIDMAUL_STONE_COUNT);
+    for (const s of a) {
+      for (const p of [s.origin, s.target]) {
+        expect(Math.sqrt(p.x * p.x + p.y! * p.y! + p.z * p.z)).toBeCloseTo(R, 6);
+      }
+      expect(dist(s.target, arena.center)).toBeLessThan(arena.radius);
+    }
   });
 
   it('hurts a unit a stone lands on, on its landing beat, and only once per slam', () => {

@@ -2289,6 +2289,14 @@ export class Hud {
     );
   }
 
+  // An end screen is up, the 5v5's or the battle royale's: the HUD stands
+  // down behind it (ui/end_screen.ts) and, as under the pause menu, the
+  // keyboard is the screen's (game/menu_keys.ts), so Enter or Tab never
+  // opens the chat or the scoreboard unseen behind it.
+  endScreenUp(): boolean {
+    return this.endOverlay.classList.contains('open') || this.royale?.resultShown() === true;
+  }
+
   // What stands over the match right now, for the practice clock
   // (game/practice_clock.ts); read every frame, so it reads classes only.
   covers(): MatchCover {
@@ -2363,10 +2371,7 @@ export class Hud {
     // (ui/pause_menu.ts), so only the dimmed match shows between its boxes.
     this.rootEl.classList.toggle('paused', this.escapeOverlay.classList.contains('open'));
     // And behind an end screen, the same way (ui/end_screen.ts).
-    this.rootEl.classList.toggle(
-      'ended',
-      this.endOverlay.classList.contains('open') || this.royale?.resultShown() === true,
-    );
+    this.rootEl.classList.toggle('ended', this.endScreenUp());
   }
 
   // Something covers the HUD: the shop, the pause menu, the end screen or

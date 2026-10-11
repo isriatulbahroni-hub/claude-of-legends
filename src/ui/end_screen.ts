@@ -241,6 +241,12 @@ function div(cls: string): HTMLElement {
   return e;
 }
 
+// The sheet's parts in the document's order, which is the order Tab walks
+// them in (the grid places them by name, whatever the order): the result
+// and its buttons first, the 5v5's ladder next (it stands under the
+// result), then the table, the side column and the battle royale's offer.
+export const END_ORDER = ['lead', 'ladder', 'table', 'side', 'offer'] as const;
+
 // Fills a card's root (the battle royale's screen, the HUD's overlay) with
 // the sheet of boxes.
 export function fillEndScreen(root: HTMLElement, card: EndCard, parts: EndParts): HTMLElement {
@@ -254,25 +260,25 @@ export function fillEndScreen(root: HTMLElement, card: EndCard, parts: EndParts)
     b.classList.add('end-box');
     lead.appendChild(b);
   }
-  sheet.appendChild(lead);
-  if (parts.table) {
-    parts.table.classList.add('end-box', 'end-table');
-    sheet.appendChild(parts.table);
-  }
+  parts.table?.classList.add('end-box', 'end-table');
   const side = div('end-side');
   for (const b of parts.side) {
     b.classList.add('end-box');
     side.appendChild(b);
   }
   if (parts.foot) side.appendChild(parts.foot);
-  sheet.appendChild(side);
-  if (parts.offer) {
-    parts.offer.classList.add('end-box', 'end-offer');
-    sheet.appendChild(parts.offer);
-  }
-  if (parts.ladder) {
-    parts.ladder.classList.add('end-box');
-    sheet.appendChild(parts.ladder);
+  parts.offer?.classList.add('end-box', 'end-offer');
+  parts.ladder?.classList.add('end-box');
+  const placed: Record<(typeof END_ORDER)[number], HTMLElement | null> = {
+    lead,
+    ladder: parts.ladder,
+    table: parts.table,
+    side,
+    offer: parts.offer,
+  };
+  for (const key of END_ORDER) {
+    const part = placed[key];
+    if (part) sheet.appendChild(part);
   }
   root.appendChild(sheet);
   return sheet;

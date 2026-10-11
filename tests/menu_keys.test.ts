@@ -27,7 +27,9 @@ describe('the keyboard under the pause menu', () => {
     expect(gate).toBeGreaterThan(-1);
     expect(gate).toBeLessThan(input.indexOf("if (e.key === 'Tab') {"));
     expect(input).toContain("if (menuKey(e.key) === 'close') handlers.onToggleMenu();");
-    expect(read('src/game/boot.ts')).toContain('isMenuOpen: () => hud.covers().pauseMenu,');
+    expect(read('src/game/boot.ts')).toContain(
+      'isMenuOpen: () => hud.covers().pauseMenu || hud.endScreenUp(),',
+    );
   });
 
   it('stands on Resume as the menu opens and leaves the menu as it closes', () => {

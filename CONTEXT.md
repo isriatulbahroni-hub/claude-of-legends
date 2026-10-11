@@ -614,7 +614,8 @@ end, or a drop-in's Arrival): a card at the left for a few seconds, gone sooner 
 button, at most four short lines. Respawn: most takedowns when the light goes out wins, then fight
 champions for takedowns, open caches for your build, stay in the light. One life: last one standing
 wins, with its own lines. The **win line** under the top line keeps it said all match, small:
-"Most takedowns wins · 4:12 left · you are 11th", "Last one standing wins · 23 left".
+"Most takedowns wins · 4:12 left · you are 11th", "Last one standing wins · 23 left"; on a
+desktop the Dusk's pill takes its place while the champion stands in the Dusk.
 _Avoid_: objective (the Warden is the 5v5's), mission, goal (the goal across matches is the levels
 of the points' line), tutorial
 

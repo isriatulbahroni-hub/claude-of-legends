@@ -36,6 +36,7 @@ import {
   WIN_LINE_PX,
   WIN_ROW_GAP_PX,
   winLine,
+  winLineAside,
 } from './royale_win_line';
 
 const SAFE_LEFT = 'var(--safe-left, env(safe-area-inset-left, 0px))';
@@ -51,8 +52,8 @@ ${scope} .br-win-close { width: ${t.close - 2}px; height: ${t.close - 2}px; }`;
 
 const CSS = `
 /* The win line: under the head of the top line, small and on a dark
-   ground so it reads over the planet. On a desktop the Dusk's pill stands
-   under it (beside it while the Graft cards are open, ui/
+   ground so it reads over the planet. On a desktop the Dusk's pill takes
+   its place while it shows (beside it while the Graft cards are open, ui/
    royale_cards_room.ts); on a phone beside it, the row under the head's. */
 .br-sub { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .hud.compact .br-sub { flex-direction: row; gap: ${WIN_ROW_GAP_PX}px; }
@@ -157,18 +158,27 @@ export class RoyaleWinView {
   }
 
   // One update: the card's clock, from the landing (`since`, null before
-  // it) while nothing covers it, and the line's words.
-  update(r: SnapRoyale, time: number, since: number | null, covered: boolean): void {
+  // it) while nothing covers it, and the line's words, aside on a desktop
+  // while the Dusk's pill shows (`burning`, winLineAside).
+  update(
+    r: SnapRoyale,
+    time: number,
+    since: number | null,
+    covered: boolean,
+    burning = false,
+  ): void {
     this.time = time;
     const root = this.host.root;
+    const cardsOpen = root.classList.contains('br-cards-open');
     const aside =
       covered ||
-      root.classList.contains('br-cards-open') ||
+      cardsOpen ||
       root.classList.contains('br-spotting') ||
       root.classList.contains('overlay-open');
     this.state = stepWinCard(this.state, { time, landed: since !== null, covered: aside });
     this.card.classList.toggle('on', winCardUp(this.state, aside));
-    const text = winLine(r, time, root.classList.contains('compact'));
+    const compact = root.classList.contains('compact');
+    const text = winLineAside({ compact, cardsOpen, burning }) ? null : winLine(r, time, compact);
     setHidden(this.line, text === null);
     if (text !== null && this.line.textContent !== text) this.line.textContent = text;
   }

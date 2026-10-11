@@ -29,6 +29,8 @@ import {
   type ScreenBox,
   spotBox,
   stepsBox,
+  TOP_LINE_H_PX,
+  TOP_LINE_TOP_PX,
   topLineBox,
 } from '../src/ui/royale_layout';
 import { duskPill } from '../src/ui/royale_text';
@@ -238,7 +240,8 @@ describe('the win card in the way of nothing', () => {
     expect(view).toContain('.hud.br-cards-open .br-win-card, .hud.br-spotting .br-win-card,');
     expect(view).toContain('.hud.overlay-open .br-win-card { visibility: hidden; opacity: 0;');
     // Its clock holds meanwhile.
-    expect(view).toContain("root.classList.contains('br-cards-open') ||");
+    expect(view).toContain("const cardsOpen = root.classList.contains('br-cards-open');");
+    expect(view).toContain('cardsOpen ||');
     expect(view).toContain("root.classList.contains('br-spotting') ||");
   });
 
@@ -302,6 +305,30 @@ describe('the win line', () => {
       // clear of the corners.
       expect(lineW(line, false) + 6 + pillW(false), line).toBeLessThanOrEqual(w - 2 * 140);
     }
+  });
+
+  it("adds nothing to a desktop's top line at its fullest: it steps aside for the pill", () => {
+    // As Chrome drew them at 1280x720: the head (the Dusk's line and the
+    // count), the mark's badge, the win line and the pill, 4 px apart.
+    const [HEAD, BADGE, LINE, PILL, GAP] = [53, 22, 18, 25, 4];
+    const stack = (...rows: number[]): number =>
+      rows.reduce((a, b) => a + b, 0) + GAP * (rows.length - 1);
+    // All four stacked reached 138 px, past the announcement's top at 112;
+    // with the line aside the fullest is the head, the badge and the pill,
+    // what the top line held before the line came.
+    expect(TOP_LINE_TOP_PX + stack(HEAD, BADGE, LINE, PILL)).toBeGreaterThan(announceBox(1280).top);
+    expect(stack(HEAD, BADGE, PILL)).toBeLessThanOrEqual(TOP_LINE_H_PX);
+    expect(stack(HEAD, BADGE, LINE)).toBeLessThanOrEqual(TOP_LINE_H_PX);
+    expect(TOP_LINE_TOP_PX + TOP_LINE_H_PX).toBeLessThanOrEqual(116);
+    // In the Dusk with no mark, the usual case, the line and the pill
+    // reached the band; the pill alone stands well over it.
+    expect(TOP_LINE_TOP_PX + stack(HEAD, PILL)).toBeLessThan(announceBox(1280).top - 16);
+    const view = source('src/ui/royale_win_view.ts');
+    expect(view).toContain('winLineAside({');
+    const hud = source('src/ui/royale_hud.ts');
+    const call = hud.slice(hud.indexOf('this.win.update('));
+    expect(call.slice(0, call.indexOf(');'))).toContain('outside === true,');
+    expect(hud.indexOf('this.win.update(')).toBeGreaterThan(hud.indexOf('const outside ='));
   });
 
   it('stands in the row under the head with the pill, in the stylesheet and the DOM', () => {

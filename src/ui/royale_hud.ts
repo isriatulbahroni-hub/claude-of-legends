@@ -466,7 +466,6 @@ export class RoyaleHud {
     this.landing = noteLanding(this.landing, r.st, r.de, time);
     this.moments.step(r);
     const own = world.units.get(selfId);
-    this.win.update(r, time, sinceLanding(this.landing, r.st, time), covered || own?.dead === true);
     if (own && this.landing.at !== null && !this.fought) this.noteFight(r, own);
     this.grafts.update(
       r,
@@ -511,6 +510,15 @@ export class RoyaleHud {
       const pill = duskPill(r.dusk.b);
       if (this.burnEl.textContent !== pill) this.burnEl.textContent = pill;
     }
+    // The win card's clock and the win line, which steps aside for the pill
+    // on a desktop (ui/royale_win_line.ts winLineAside).
+    this.win.update(
+      r,
+      time,
+      sinceLanding(this.landing, r.st, time),
+      covered || own?.dead === true,
+      outside === true,
+    );
 
     const drop = dropBanner(r, time, touch);
     setHidden(this.dropEl, drop === null);

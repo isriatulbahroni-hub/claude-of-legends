@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { SnapRoyale } from '../src/net/royale_wire';
-import { ONE_LIFE_WINS, RESPAWN_WINS, winLine } from '../src/ui/royale_win_line';
+import { ONE_LIFE_WINS, RESPAWN_WINS, winLine, winLineAside } from '../src/ui/royale_win_line';
 
 const snap = (over: Partial<SnapRoyale> = {}): SnapRoyale => ({
   v: 'respawn',
@@ -51,6 +51,16 @@ describe('the win line', () => {
     expect(winLine(snap({ st: 'drop' }), 5)).toBeNull();
     expect(winLine(snap({ st: 'over', rk: 4 }), 610)).toBeNull();
     expect(winLine(snap({ v: 'one_life', st: 'over' }), 610)).toBeNull();
+  });
+
+  it("steps aside for the Dusk's pill on a desktop with the Graft cards shut", () => {
+    // Stacked under the head and the mark's badge, the line and the pill
+    // reached 138 px, into the announcements' band at 112.
+    expect(winLineAside({ compact: false, cardsOpen: false, burning: true })).toBe(true);
+    expect(winLineAside({ compact: false, cardsOpen: false, burning: false })).toBe(false);
+    // A phone's row and the open cards' row hold the two side by side.
+    expect(winLineAside({ compact: true, cardsOpen: false, burning: true })).toBe(false);
+    expect(winLineAside({ compact: false, cardsOpen: true, burning: true })).toBe(false);
   });
 
   it('opens with the same words as the win card', () => {

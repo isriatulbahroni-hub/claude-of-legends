@@ -5,7 +5,8 @@
 // above qualifies a drop-in's, "since you landed"). One life: "Last one
 // standing wins · 23 left". On a phone (`compact`) the line shares its row
 // with the Dusk's pill and leaves the rank to the count beside the Dusk
-// line, which carries it there; on a desktop the pill stands under it.
+// line, which carries it there; on a desktop the pill takes its place
+// while it shows (winLineAside).
 // Nothing during the drop (the drop's banner asks where to land, and the
 // cards' seconds stand there) and nothing once the match is over. Pure:
 // ui/royale_win_view.ts draws it.
@@ -37,4 +38,17 @@ export function winLine(
   const parts = [RESPAWN_WINS, `${clockText(r.end - time)} left`];
   if (!compact && r.rk !== undefined && r.rk > 0) parts.push(`you are ${ordinal(r.rk)}`);
   return parts.join(' · ');
+}
+
+// Whether the line steps aside for the Dusk's pill: on a desktop with the
+// Graft cards shut the two stack under the head, and with the mark's
+// badge they reached 138 px, into the announcements' band at 112
+// (ui/royale_layout.ts announceBox); the pill alone says what matters
+// then. A phone's row and the open cards' row hold both side by side.
+export function winLineAside(v: {
+  compact: boolean;
+  cardsOpen: boolean;
+  burning: boolean;
+}): boolean {
+  return v.burning && !v.compact && !v.cardsOpen;
 }

@@ -56,10 +56,7 @@ export function createWallSegment(
   b: Vec2,
   duration: number,
 ): Wall {
-  const steps = Math.max(1, Math.ceil(dist(a, b) / SAMPLE_SPACING));
-  const samples: Vec2[] = [];
-  for (let i = 0; i <= steps; i++) samples.push(lerp(a, b, i / steps));
-  for (const s of samples) ctx.ground.blockCircle(s, SAMPLE_RADIUS);
+  const samples = blockWall(ctx.ground, a, b);
   // Shove out anything standing in the footprint: a wall is ground, not a
   // cage, and a unit inside blocked cells could never move again.
   for (const u of ctx.units.values()) {
@@ -84,10 +81,26 @@ export function createWallSegment(
   return wall;
 }
 
+// Blocks the ground a wall from a to b stands on, and returns the points
+// it blocked for unblockWall to free: the sim's own walls, and the walls a
+// snapshot tells the client's prediction, which walks the same ground
+// (src/net/self_predict.ts).
+export function blockWall(ground: Pick<Ground, 'blockCircle'>, a: Vec2, b: Vec2): Vec2[] {
+  const steps = Math.max(1, Math.ceil(dist(a, b) / SAMPLE_SPACING));
+  const samples: Vec2[] = [];
+  for (let i = 0; i <= steps; i++) samples.push(lerp(a, b, i / steps));
+  for (const s of samples) ground.blockCircle(s, SAMPLE_RADIUS);
+  return samples;
+}
+
+export function unblockWall(ground: Pick<Ground, 'unblockCircle'>, samples: readonly Vec2[]): void {
+  for (const s of samples) ground.unblockCircle(s, SAMPLE_RADIUS);
+}
+
 export function stepWalls(ctx: CombatCtx): void {
   for (const w of [...ctx.walls.values()]) {
     if (ctx.time < w.until) continue;
-    for (const s of w.samples) ctx.ground.unblockCircle(s, SAMPLE_RADIUS);
+    unblockWall(ctx.ground, w.samples);
     ctx.walls.delete(w.id);
   }
 }
@@ -97,7 +110,7 @@ export function stepWalls(ctx: CombatCtx): void {
 // Called after a walk step whenever walls exist; lands the unit just short
 // of the first unwalkable sample and drops the stale path.
 export function clampThroughWalls(
-  ground: Ground,
+  ground: Pick<Ground, 'isWalkableAt'>,
   from: Vec2,
   u: { pos: Vec2; path: Vec2[] },
 ): void {

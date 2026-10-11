@@ -44,7 +44,7 @@ import { castSoundOf } from './champion_sounds';
 import { installCursorLock } from './cursor_lock';
 import { BeatCamera } from './death_beat';
 import type { PostMatchAction } from './flow';
-import { requestGameFullscreen } from './fullscreen';
+import { pauseOnFullscreenExit, requestGameFullscreen, watchFullscreen } from './fullscreen';
 import { type InputHandlers, setupInput } from './input';
 import { buildMatchStage, stageSizeOf } from './match_stage';
 import { moveRingWanted } from './move_ring';
@@ -255,6 +255,24 @@ export function startPresentation(
     if (options.fullscreen !== false) void requestGameFullscreen().then(askLandscape);
   };
   container.addEventListener('pointerdown', onFirstPointerDown, { once: true });
+  // Fullscreen coming and going mid-match (game/fullscreen.ts). Taken: the
+  // phone is asked to turn again, the lock being a fullscreen document's.
+  // Left (the browser's Esc, a phone's Back, the menu's button): the
+  // browser gave the turn back with it, so the stage and the wall answer
+  // for the phone again; the first click no longer takes the screen back,
+  // the window being the player's choice; and the pause menu the Esc was
+  // pressed for opens.
+  const stopFullscreenWatch = watchFullscreen((fullscreen) => {
+    if (fullscreen) {
+      askLandscape();
+      return;
+    }
+    container.removeEventListener('pointerdown', onFirstPointerDown);
+    stage.setLandscapeLocked(false);
+    hud.setLandscapeLocked(false);
+    const cover = { pauseMenu: hud.covers().pauseMenu, ended: hud.endScreenUp() };
+    if (pauseOnFullscreenExit({ ...cover, typing: hud.isChatOpen() })) hud.toggleEscapeMenu();
+  });
 
   let hooks: NetHooks = {};
   const showPing = (x: number, z: number, from: string, team: TeamId): void => {
@@ -669,8 +687,11 @@ export function startPresentation(
   };
   const teardownInput = setupInput(renderer, inputHandlers);
   // In fullscreen the mouse stays on the game (cursor_lock.ts): a second
-  // monitor beside it must not take a click mid-fight.
-  const teardownCursorLock = coarsePointer ? () => undefined : installCursorLock(container);
+  // monitor beside it must not take a click mid-fight. It is let go while
+  // the pause menu or the end screen stands (their sliders and lists want
+  // the browser's own pointer), read every frame below; a replay has no
+  // fight, and its scrub slider and draggable bar want that pointer too.
+  const cursorLock = coarsePointer || guide === 'watch' ? null : installCursorLock(container);
 
   // Touch: the same handlers behind finger gestures (tap to move or attack,
   // two-step casts armed by tapping HUD slots). The gesture listeners are
@@ -854,6 +875,7 @@ export function startPresentation(
     const alpha = Math.max(0, Math.min(1, (now - lastTick) / TICK_MS));
     renderer.render(alpha, now);
     placeArrow(alpha);
+    cursorLock?.setFree(hud.covers().pauseMenu || hud.endScreenUp());
     rafId = requestAnimationFrame(frame);
   }
   rafId = requestAnimationFrame(frame);
@@ -880,9 +902,10 @@ export function startPresentation(
       disposed = true;
       cancelAnimationFrame(rafId);
       container.removeEventListener('pointerdown', onFirstPointerDown);
+      stopFullscreenWatch();
       window.removeEventListener('blur', onWindowBlur);
       teardownInput();
-      teardownCursorLock();
+      cursorLock?.dispose();
       touch.dispose();
       stickView?.dispose();
       touchBar?.dispose();

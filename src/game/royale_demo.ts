@@ -9,7 +9,8 @@
 // offer), calm (with the status chips and a Heartwood offer), closing, out, end-one, end-respawn, moments (the loud
 // moments: the Seedfalls' edge arrows, the Clamors, the feed folding, the
 // run's spotlight, the cache's ritual and the loot's words, the Dusk's
-// pill, every new block faked).
+// pill, every new block faked), and end-teams: the 5v5's end screen over
+// the same match played as two teams of five, every build full.
 
 import { orchardSim } from '../net/replay';
 import type { RoyaleNote } from '../net/royale_client';
@@ -78,8 +79,17 @@ function result(v: RoyaleVariant, place: number, score: number): RoyaleResult {
       bot: i + 1 !== place && i % 2 === 0,
     })),
     grafts: ['thornhide', 'keen_edge', 'keen_edge', 'chainsap'],
-    // Respawn: the best the line kept before, for the card's best line.
-    ...(v === 'respawn' ? { bestBefore: 12 } : {}),
+    // Respawn: the best the line kept before, for the card's best line, and
+    // a drop-in's count since landing with its near miss, so the card shows
+    // every line it can.
+    ...(v === 'respawn'
+      ? {
+          bestBefore: 12,
+          held: 372,
+          gap: { name: 'Morrow', by: 2 },
+          window: { rank: place, of: 41, score },
+        }
+      : {}),
   };
 }
 
@@ -118,12 +128,25 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
   self.sigils = [...DEFAULT_SIGILS];
   sim.setLevel(self.id, 3);
   for (const key of ['Q', 'W', 'E'] as const) sim.levelAbility(self.id, key);
+  // The 5v5's end: four beside the viewer and five against, every bag full.
+  const teams = scene === 'end-teams';
   const others: Unit[] = [];
-  for (const [i, championId] of ROSTER.entries()) {
+  for (const [i, championId] of (teams ? ROSTER.slice(0, 9) : ROSTER).entries()) {
     const near = { x: self.pos.x + 4 + (i % 3) * 2, z: self.pos.z + 3 + Math.floor(i / 3) * 2 };
-    const u = sim.addChampion(i < 2 ? 1 : ((i % 2) as 0 | 1), i < 2 ? near : undefined, championId);
+    const team = teams ? (i < 5 ? 1 : 0) : i < 2 ? 1 : ((i % 2) as 0 | 1);
+    const u = sim.addChampion(team, i < 2 ? near : undefined, championId);
     attachBot(sim, u.id, 'laner');
     others.push(u);
+  }
+  if (teams) {
+    const full = ITEM_LIST.filter((i) => i.tier === 2);
+    for (const [i, u] of [self, ...others].entries()) {
+      u.kills = (i * 3) % 11;
+      u.deaths = (i * 5) % 7;
+      u.assists = (i * 7) % 13;
+      sim.setLevel(u.id, 11 + (i % 7));
+      for (let k = 0; k < 6; k++) u.items.push(full[(i + k) % full.length]!.id);
+    }
   }
   const names = new Map<number, { name: string; bot: boolean }>();
   names.set(self.id, { name: 'Wanderer 4821', bot: false });
@@ -217,7 +240,7 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
   };
   const world = new Proxy(sim, {
     get(target, key) {
-      if (key === 'royaleView') return state;
+      if (key === 'royaleView') return teams ? undefined : state;
       if (key === 'scoreboard') {
         return (): ScoreRow[] =>
           target.scoreboard().map((row) => {
@@ -236,10 +259,16 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
     self.id,
     self.team,
     (action) => console.log('exit', action),
-    { terrain, mode: 'online', guest: true, guide: 'play', royale: variant },
+    { terrain, mode: 'online', guest: true, guide: 'play', ...(teams ? {} : { royale: variant }) },
   );
   (window as unknown as { __royaleDemo?: unknown }).__royaleDemo = { pres, sim, self };
-  if (scene === 'end-one') {
+  if (teams) {
+    window.setTimeout(() => {
+      // Points banked on the line, so the end screen asks for the ladder.
+      for (let i = 0; i < 5; i++) pres.showPoints(10, 300 + 10 * (i + 1), 'kill');
+      sim.winner = 0;
+    }, 600);
+  } else if (scene === 'end-one') {
     window.setTimeout(() => pres.showRoyaleResult(result('one_life', 7, 3)), 600);
   } else if (scene === 'end-respawn') {
     window.setTimeout(() => {
@@ -250,6 +279,8 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
       for (let i = 0; i < 9; i++) pres.showPoints(10, line + 10 * (i + 1), 'kill');
       for (let i = 0; i < 4; i++) pres.showPoints(5, line + 90 + 5 * (i + 1), 'assist');
       for (let i = 0; i < 3; i++) pres.showPoints(1, line + 110 + i + 1, 'cache');
+      self.kills = 9;
+      self.assists = 4;
       pres.showRoyaleResult(result('respawn', 3, 9));
     }, 600);
   }

@@ -8,9 +8,9 @@ import { fetchPlace, LADDER_ROUTE, NAME_ROUTE, saveName } from '../src/ui/ladder
 import {
   earnedText,
   firstPointsText,
+  levelText,
   nameHint,
   nameSuggestion,
-  levelText,
   placeText,
   pointsCount,
   popText,

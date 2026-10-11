@@ -2,6 +2,8 @@
 
 > Amends ADR 0006 (a Guest now has a line on a ladder, kept by a cookie; the rating ladder is
 > untouched) and ADR 0024 (a Guest is kept on disk once it scores or names itself).
+>
+> Amended by ADR 0033: the line also keeps a Respawn best, and the level reads the line's points.
 
 ADR 0024 let a person play the public queue without an account, and kept the Guest off every
 ladder, because a ladder was a rating and a stranger nobody can hold to a name must not move an

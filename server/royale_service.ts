@@ -18,6 +18,7 @@ import { bankAwards } from './points';
 import { ROYALE_VERBS } from './royale_commands';
 import { chooseRoyaleMatch, type RoyaleCandidate, takesPeople } from './royale_join';
 import { RoyaleMatch, type RoyalePlayer, type RoyaleReplay } from './royale_match';
+import { respawnSeatTally } from './royale_ranking';
 import { type RoyalePerson, type RoyalePick, royalePick } from './royale_seats';
 import type { RoyaleSimFactory } from './royale_sim';
 import { buildSeatReport, type SeatEnd, type SeatReport, type SeenQuality } from './seat_report';
@@ -71,6 +72,10 @@ export interface RoyaleDeps {
   leaveQueues(clientId: number): void;
   // Banks points on a line (ADR 0027), answering the new total or null.
   bank(owner: number, delta: number): number | null;
+  // A Respawn end's tally for a line's seat (ADR 0033): raises the line's
+  // best when the tally beats it, answering the best held before, or null
+  // when the line is gone. Unset, no best is kept.
+  raiseBest?(owner: number, tally: number): number | null;
   // Whether an owner never banked a battle royale award: a newcomer, whose
   // escorts the mode deals differently (RoyalePerson.newcomer). Unset, no
   // one is.
@@ -520,8 +525,9 @@ export class RoyaleService {
   }
 
   // The last light went out, or the last champion stands: every person
-  // still in hears their result. Respawn then closes at once and tells each
-  // person the match ended; nobody is moved. The end screen's Play the next
+  // still in hears their result, a Respawn one with the best their line
+  // held before it, raised by this seat's tally (ADR 0033). Respawn then
+  // closes at once and tells each person the match ended; nobody is moved. The end screen's Play the next
   // match enters anew with the same pick, into the match kept running for
   // visitors (keepOneOpen) with an Arrival, fresh and graced. Moving the
   // people at once landed their champion behind the end screen, where it
@@ -533,7 +539,13 @@ export class RoyaleService {
     for (const p of m.players.values()) {
       if (!p.resultSent) {
         const result = m.resultFor(p.clientId);
-        if (result) this.deps.send(p.clientId, result);
+        if (result) {
+          if (m.variant === 'respawn') {
+            const before = this.deps.raiseBest?.(p.owner, respawnSeatTally(result)) ?? null;
+            if (before !== null) result.bestBefore = before;
+          }
+          this.deps.send(p.clientId, result);
+        }
         p.resultSent = true;
       }
       const c = this.deps.client(p.clientId);

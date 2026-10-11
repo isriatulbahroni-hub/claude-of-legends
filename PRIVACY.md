@@ -22,19 +22,22 @@ a random session id and nothing else, and it exists so the server knows
 which account is talking to it (`server/cookies.ts`, `server/sessions.ts`,
 ADR 0006).
 
-`loc_guest`, set when you press Play on the landing without an account. It
-holds a random token and nothing else, and it exists so the server knows
-which Guest is talking to it: it gives you your seat back if the page
-reloads mid-match, and your line of the ladder when you come back. It lasts
-a year, and is set again each time you press Play. Until you score a point
-or choose a name for the ladder, the server keeps what it points at, a
-handed-out name like `Wanderer 4821`, in memory only, for a day after you
+`loc_guest`, set when the landing opens without an account. It holds a
+random token and nothing else, and it exists so the server knows which
+Guest is talking to it: it shows you your name and your line of the ladder
+when the landing opens, gives you your seat back if the page reloads
+mid-match, and keeps your line when you come back. It lasts a year, and is
+set again on each visit and each time you press Play. Until you score a
+point or choose a name for the ladder, the server keeps what it points at,
+a handed-out name like `Wanderer 4821`, in memory only, for a day after you
 last used it, and a restart forgets it. Once you do, the server keeps, on
-disk in `guests.json`: the name, your points, a SHA-256 hash of the token
-(never the token itself, so the file cannot be used to play as you), and
-when it was made and last seen. Nothing else, and for a year after you were
-last seen. Making an account in the same browser moves the points onto it
-and deletes that record (`server/guests.ts`, ADR 0024, ADR 0027).
+disk in `guests.json`: the name, your points, your best in Respawn (the
+most takedowns you scored in one seat), a SHA-256 hash of the token (never
+the token itself, so the file cannot be used to play as you), and when it
+was made and last seen. Nothing else, and for a year after you were last
+seen. Making an account in the same browser moves the points and the best
+onto it and deletes that record (`server/guests.ts`, ADR 0024, ADR 0027,
+ADR 0033).
 
 `col_visit`, set on your first page here. It holds one random number, 32
 characters, minted on the server and meaning nothing anywhere else. Its

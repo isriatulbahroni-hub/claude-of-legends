@@ -123,7 +123,7 @@ import {
 import { buildHomePage } from './home_page';
 import { buildBotLadder, buildLadder } from './ladder';
 import { type BotSummary, buildLadderPage, type LadderSeed, placeOf } from './ladder_page';
-import { buildLandingPage } from './landing_page';
+import { buildLandingPage, type LandingOwnInput } from './landing_page';
 import {
   backfillLaurels,
   CHAMPION_PRICES,
@@ -1059,6 +1059,11 @@ const royale = new RoyaleService({
     royaleVeterans.noteBanked(owner);
     return bankPoints(owner, delta);
   },
+  // The Respawn best on the line behind the seat (ADR 0033).
+  raiseBest: (owner, tally) =>
+    isGuestId(owner)
+      ? guests.raiseBest(owner, tally, Date.now())
+      : registry.raiseBest(owner, tally),
   newcomer: (owner) => isRoyaleNewcomer(royaleVeterans, owner),
   appendSeat: (rec) => appendJsonl(SEATS_FILE, rec),
   saveReplay: (id, record) => {
@@ -1240,6 +1245,21 @@ function guestForRequest(req: http.IncomingMessage, now: number): Guest | undefi
   return token ? guests.resolve(token, now) : undefined;
 }
 
+// The Guest a request arrives as (ADR 0033): the one its cookie holds, or
+// a new one handed out. The cookie is set again either way, so it lasts a
+// year from the last visit rather than the first (ADR 0027).
+function handGuest(req: http.IncomingMessage, res: http.ServerResponse, now: number): Guest {
+  const { token, guest } = guests.arrive(parseCookies(req.headers.cookie).get(GUEST_COOKIE), now);
+  addCookie(
+    res,
+    serializeCookie(GUEST_COOKIE, token, {
+      maxAgeS: GUEST_COOKIE_MAX_AGE_S,
+      secure: cookieSecure(req),
+    }),
+  );
+  return guest;
+}
+
 // Who is reading the ladder of points, if anyone: the account when the
 // browser holds both cookies, as on the socket.
 function pointsReader(req: http.IncomingMessage, now: number): PointsReader | null {
@@ -1397,27 +1417,14 @@ const server = http.createServer(async (req, res) => {
     // Nothing here is anybody's: champion ids, a table of prices, and a
     // balance that is the caller's own or zero.
     // A Guest for the public queue (ADR 0024): the name and a cookie of
-    // its own, reused while it lives so a reload keeps the same Guest. The
-    // cookie is set again on every ask, so it lasts a year from the last
-    // visit rather than the first (ADR 0027).
+    // its own, the same Guest the landing handed out (ADR 0033), so Play
+    // and a reload keep it.
     if (url === '/api/guest') {
       if (req.method !== 'POST') {
         sendJson(res, 405, { error: 'use POST' });
         return;
       }
-      const now = Date.now();
-      const held = parseCookies(req.headers.cookie).get(GUEST_COOKIE);
-      const known = held ? guests.resolve(held, now) : undefined;
-      const { token, guest } =
-        held !== undefined && known ? { token: held, guest: known } : guests.issue(now);
-      addCookie(
-        res,
-        serializeCookie(GUEST_COOKIE, token, {
-          maxAgeS: GUEST_COOKIE_MAX_AGE_S,
-          secure: cookieSecure(req),
-        }),
-      );
-      sendJson(res, 200, { name: guest.name });
+      sendJson(res, 200, { name: handGuest(req, res, Date.now()).name });
       return;
     }
 
@@ -1522,17 +1529,40 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // The landing's ladder (server/landing_page.ts): the top of the ladder
-    // of every human (ADR 0027), names and numbers, so a visitor sees
-    // whose names stand there and that one match puts theirs beside them.
-    // No ids; a returning Guest's own place when the cookie says who.
+    // The landing's one request (server/landing_page.ts, ADR 0033): it
+    // hands a visitor with no account its Guest, the cookie set again, and
+    // answers the ladder of every human (ADR 0027), names and numbers, the
+    // own panel and the week. No ids. A POST, since it may issue a Guest;
+    // a signed-in account reads its own and is handed no Guest.
     if (url === '/api/public/landing') {
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'use POST' });
+        return;
+      }
       const now = Date.now();
-      sendJson(
-        res,
-        200,
-        buildLandingPage({ entries: pointsEntries(), reader: pointsReader(req, now) }),
-      );
+      const account = accountForRequest(req, now);
+      let own: LandingOwnInput;
+      if (account) {
+        own = {
+          key: account.id,
+          name: account.name,
+          named: true,
+          account: true,
+          best: account.royaleBest ?? 0,
+          since: account.createdAt,
+        };
+      } else {
+        const guest = handGuest(req, res, now);
+        own = {
+          key: guest.id,
+          name: guest.name,
+          named: guest.named,
+          account: false,
+          best: guest.best,
+          since: guest.createdAt,
+        };
+      }
+      sendJson(res, 200, buildLandingPage({ entries: pointsEntries(), own, now }));
       return;
     }
 

@@ -118,6 +118,8 @@ most takedowns when the last light goes out wins. A takedown's experience goes t
 and a share of it to every champion with an assist on it. During the wait the globe shows, and a
 tap on it picks where the champion comes back instead: inside that light, at least ten meters
 from every champion standing, the nearest such point to the pick.
+A person's best is the most takedowns one of their seats scored in a Respawn match, since
+landing for a drop-in, kept on their line of the ladder (ADR 0033).
 What Play now launches.
 _Avoid_: loop mode, deathmatch
 
@@ -419,13 +421,14 @@ never part of it: only the account itself ever sees its own.
 _Avoid_: profile (that is the screen that shows an account), user, login, player (ambiguous, see Participant)
 
 **Guest**:
-A visitor playing the public queue without an account (ADR 0024): a name the server hands out
-(`Wanderer 4821`, a space no account name may hold), or one it chose for its line of the ladder
-under the account name rules, under a cookie that lasts a year. Held in the server's memory for
-a day, and kept on disk once it has points or a chosen name, for a year after it was last seen
+A visitor playing without an account (ADR 0024), handed out when the landing opens (ADR 0033):
+a name the server hands out (`Wanderer 4821`, a space no account name may hold), or one it chose
+for its line of the ladder under the account name rules, under a cookie that lasts a year. It
+holds its points, its Respawn best and its chosen name. Held in the server's memory for a day,
+and kept on disk once it has points or a chosen name, for a year after it was last seen
 (ADR 0027). A match with a Guest in it is never rated, and a Guest holds no rating, record,
 collection beyond the starter one, lobby, bot or Forge champion. An account made in its browser
-takes its points and its chosen name, and the Guest is retired.
+takes all three, and the Guest is retired.
 _Avoid_: anonymous player, visitor account
 
 **Drop in**:
@@ -445,6 +448,14 @@ holds the rest. Everything under the bar stands in one column, centered on a wid
 A section opens under the bar rather than over it, so the bar stays and one click goes from
 any section to the next.
 _Avoid_: menu, main menu, lobby (that is the private one), dashboard, launcher, feed, widget
+
+**Own panel**:
+The landing's first panel, about the reader alone (ADR 0033): their name, changed in place; their
+place on the ladder and their points; the level the points stand at, with the bar to the next;
+their Respawn best; the next thing within reach, the line just above and how far ahead it is;
+and, once a Guest holds something kept, the account, offered as keeping all of it on another
+device. The Guest is handed out as the landing opens, so the panel always has someone to show.
+_Avoid_: dashboard, profile (that is the screen that shows an account), account box, stats card
 
 **News**:
 The section of the home that says what changed on the server: an update, an event, a
@@ -533,8 +544,8 @@ every one it has recruited with laurels. A bot fields only its owner's collectio
 _Avoid_: owned champions, roster (that is the ten the game ships), library, inventory
 
 **Rotation**:
-The three roster champions every account may play for one week whatever its collection, the
-same three for everyone, changing on a fixed weekly turn.
+The three roster champions every player, a Guest too, may play for one week whatever their
+collection, the same three for everyone, changing on a fixed weekly turn.
 _Avoid_: free week, trial champions, loan
 
 **Laurel**:
@@ -1106,10 +1117,11 @@ the people's times the bots': two with a human on the other team, one and a half
 only on the seat's own, one alone; and half for a seat whose opposing lane seats play the Gentle
 player, which the match's start decides. Deaths cost nothing, and a seat left to a bot earns
 nothing more for its player. Never spent, and distinct from the rating, which only rated matches
-move, and from laurels and embers. Respawn's end card also climbs the points a browser's battle
-royale seats have earned as levels, kept in that browser alone: Level 2 at 50 points, each next
-level a little further, the bar running from the last one reached to the next. Plain numbered
-levels, never named after the ladder or anyone on it, and not a champion's level.
+move, and from laurels and embers. The points a line holds climb as levels, read off the line's
+points in the 5v5 and the battle royale alike wherever the level shows (the own panel, Respawn's
+end card; ADR 0033): Level 2 at 50 points, each next level a little further, the bar running
+from the last one reached to the next. Plain numbered levels, never named after the ladder or
+anyone on it, and not a champion's level.
 _Avoid_: score (the scoreboard's word), XP (the champion's), rating
 
 **Ladder**:

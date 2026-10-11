@@ -82,6 +82,9 @@ Sign in with any seeded name and the password `seed-home-shots`:
 | `Halloway` | Still placing (2 of 3 rated matches), no bot, one forged champion |
 | `Quillon`, `Ashvale`, `Tessaly`, `Bramble`, `Orrin`, `Vexley` | Placed lower, a bot or a champion each |
 
+A browser given the cookie `loc_guest=seed-home-guest` is the seeded Guest `Thornwick`:
+named, 340 points and a Respawn best of 9, so the landing's own panel reads a Guest with points.
+
 An account you register yourself shows the fresh career beside a full ladder. The seed
 refuses to run twice into the same directory; delete it to start over. Once the server is
 up the Arena runner plays the seeded bots on its own, so their numbers move.

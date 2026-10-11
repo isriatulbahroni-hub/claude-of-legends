@@ -8,6 +8,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { RoyaleReplay } from '../server/royale_match';
+import { respawnSeatTally } from '../server/royale_ranking';
 import {
   ROYALE_LINGER_MS,
   ROYALE_MATCH_WEIGHT,
@@ -17,6 +18,7 @@ import {
 } from '../server/royale_service';
 import type { SeatReport } from '../server/seat_report';
 import type { ClientMsg, ServerMsg } from '../src/net/protocol';
+import type { RoyaleResult } from '../src/net/royale_wire';
 import { CHAMPION_LIST } from '../src/sim/content/champions';
 import { clampSkin } from '../src/sim/content/skins';
 import {
@@ -27,15 +29,34 @@ import {
   ROYALE_RULES_VERSION,
   ROYALE_SEATS,
 } from '../src/sim/royale/types';
+import { respawnTally } from '../src/ui/royale_result';
 import { fakeFactory, near } from './royale_fake';
 
 type Msg<T extends ServerMsg['t']> = Extract<ServerMsg, { t: T }>;
 
-function harness(opts: { capacity?: number; open?: boolean; standing?: boolean } = {}) {
+function harness(
+  opts: {
+    capacity?: number;
+    open?: boolean;
+    standing?: boolean;
+    // The lines' Respawn bests: kept (the default), gone (every line
+    // answers null), or not wired at all.
+    bests?: 'kept' | 'gone' | 'none';
+  } = {},
+) {
   const sent: { to: number; msg: ServerMsg }[] = [];
   const clients = new Map<number, RoyaleClient>();
   const seats: SeatReport[] = [];
   const banked = new Map<number, number>();
+  const bests = new Map<number, number>();
+  const raised: [owner: number, tally: number][] = [];
+  const raiseBest = (owner: number, tally: number): number | null => {
+    raised.push([owner, tally]);
+    if (opts.bests === 'gone') return null;
+    const before = bests.get(owner) ?? 0;
+    bests.set(owner, Math.max(before, tally));
+    return before;
+  };
   const replays = new Map<number, RoyaleReplay>();
   const fake = fakeFactory();
   let now = 1_000_000;
@@ -60,6 +81,7 @@ function harness(opts: { capacity?: number; open?: boolean; standing?: boolean }
       banked.set(owner, total);
       return total;
     },
+    ...(opts.bests === 'none' ? {} : { raiseBest }),
     appendSeat: (rec) => seats.push(rec),
     saveReplay: (id, record) => replays.set(id, record),
     now: () => now,
@@ -105,6 +127,8 @@ function harness(opts: { capacity?: number; open?: boolean; standing?: boolean }
     sent,
     seats,
     banked,
+    bests,
+    raised,
     replays,
     fake,
     connect,
@@ -373,6 +397,97 @@ describe('the end', () => {
     expect(h.last(1, 'match_end')).toBeDefined();
     expect(h.service.matches.size).toBe(0);
     expect(a.matchId).toBeNull();
+  });
+});
+
+describe('the Respawn best (ADR 0033)', () => {
+  it("raises each person's line at the end with that seat's tally, and tells the one before", () => {
+    const h = harness();
+    const a = h.connect(1, 'alice');
+    h.enter(a);
+    h.runTo(DROP_S + 1);
+    const sim = h.fake.sims[0]!;
+    const alice = h.last(1, 'match_start')!.selfUnitId;
+    // Every other seat scored three before anyone dropped in.
+    for (const u of sim.units.values()) {
+      if (u.kind === 'champion' && u.id !== alice) sim.royale.scores.set(u.id, 3);
+    }
+    // A Guest drops in: their tally counts from their landing.
+    const b = h.connect(2, 'bob', true);
+    h.enter(b);
+    const bob = h.last(2, 'match_start')!.selfUnitId;
+    expect(h.last(2, 'match_start')!.dropIn).toBe(true);
+    const others = [...sim.units.values()].filter(
+      (u) => u.kind === 'champion' && u.id !== alice && u.id !== bob,
+    );
+    sim.takedown(others[0]!.id, alice);
+    sim.takedown(others[1]!.id, alice);
+    sim.takedown(others[2]!.id, bob);
+    h.bests.set(1, 5);
+    h.runTo(DROP_S + PLAY_S + 0.1);
+    // Once per person, with the tally the card counts.
+    expect(h.raised).toEqual([
+      [1, 2],
+      [-2, 1],
+    ]);
+    const ra = h.last(1, 'royale_result')!;
+    const rb = h.last(2, 'royale_result')!;
+    expect(ra.score).toBe(2);
+    expect(ra.bestBefore).toBe(5);
+    expect(rb.score).toBe(4);
+    expect(rb.window?.score).toBe(1);
+    expect(rb.bestBefore).toBe(0);
+    expect(h.bests.get(-2)).toBe(1);
+    expect(h.bests.get(1)).toBe(5);
+  });
+
+  it('sends no best before when the line is gone, or none is kept', () => {
+    for (const bests of ['gone', 'none'] as const) {
+      const h = harness({ bests });
+      h.enter(h.connect(1, 'alice'));
+      h.runTo(DROP_S + PLAY_S + 0.1);
+      const result = h.last(1, 'royale_result')!;
+      expect(result.v).toBe('respawn');
+      expect(result).not.toHaveProperty('bestBefore');
+      expect(h.raised).toHaveLength(bests === 'gone' ? 1 : 0);
+    }
+  });
+
+  it('is never asked in One life', () => {
+    const h = harness();
+    const a = h.connect(1, 'alice');
+    h.enter(a, 'one_life');
+    h.runTo(DROP_S + 1);
+    const sim = h.fake.sims[0]!;
+    const self = h.last(1, 'match_start')!.selfUnitId;
+    const victim = [...sim.units.values()].find((u) => u.kind === 'champion' && u.id !== self)!;
+    sim.takedown(victim.id, self);
+    sim.finish(self);
+    h.step(1);
+    const result = h.last(1, 'royale_result')!;
+    expect(result).toMatchObject({ v: 'one_life', place: 1 });
+    expect(result).not.toHaveProperty('bestBefore');
+    expect(h.raised).toEqual([]);
+  });
+
+  it("judges a seat by the end card's own tally, with a window or without", () => {
+    const base: RoyaleResult = {
+      t: 'royale_result',
+      v: 'respawn',
+      place: 4,
+      of: ROYALE_SEATS,
+      score: 7,
+      winner: 'Quillon',
+      top: [],
+    };
+    const dropIn: RoyaleResult = { ...base, window: { rank: 2, of: ROYALE_SEATS, score: 3 } };
+    const nothingSince: RoyaleResult = { ...base, window: { rank: 9, of: ROYALE_SEATS, score: 0 } };
+    for (const r of [base, dropIn, nothingSince]) {
+      expect(respawnSeatTally(r)).toBe(respawnTally(r));
+    }
+    expect(respawnSeatTally(base)).toBe(7);
+    expect(respawnSeatTally(dropIn)).toBe(3);
+    expect(respawnSeatTally(nothingSince)).toBe(0);
   });
 });
 

@@ -11,15 +11,16 @@
 // opens nobody's line, and it lives a year after it was last seen.
 //
 // The write discipline is the sessions' (server/sessions.ts). Naming and
-// retiring a Guest are rare and written through; points and the last seen
-// moment are not rare, so they only move numbers in memory, and the flush
-// that follows is on a timer and at shutdown.
+// retiring a Guest are rare and written through; points, the Respawn best
+// and the last seen moment are not rare, so they only move numbers in
+// memory, and the flush that follows is on a timer and at shutdown.
 
 import { createHash, randomBytes } from 'node:crypto';
 import type { TeamId } from '../src/sim/types';
 import { foldName, type NameError, nameErrorMessage, validateName } from './account_name';
 import type { GuestClaim } from './accounts';
 import type { MatchPick } from './match';
+import { wholeBest } from './royale_ranking';
 import { loadJson, saveJsonAtomic } from './store';
 import { findBlockedWord } from './word_filter';
 
@@ -33,6 +34,9 @@ export interface Guest {
   named: boolean;
   // Banked on the ladder (server/points.ts), never spent.
   points: number;
+  // The most Respawn takedowns the line scored in one seat, counted since
+  // landing for a drop-in (ADR 0033); 0 before the first.
+  best: number;
   createdAt: number;
   seenAt: number;
 }
@@ -72,12 +76,17 @@ export function tokenDigest(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
-// What an account made in this Guest's browser takes from it (ADR 0027):
-// the points, and the chosen name when there is one. The Guest is retired
-// once the account exists, so one browser's line becomes one account.
+// What an account made in this Guest's browser takes from it (ADR 0027,
+// ADR 0033): the points, the Respawn best, and the chosen name when there
+// is one. The Guest is retired once the account exists, so one browser's
+// line becomes one account.
 export function guestClaim(guest: Guest | undefined): GuestClaim | undefined {
   if (!guest) return undefined;
-  return { fold: guest.named ? foldName(guest.name) : null, points: guest.points };
+  return {
+    fold: guest.named ? foldName(guest.name) : null,
+    points: guest.points,
+    best: guest.best,
+  };
 }
 
 // Whether a match may be rated: the queue's rule, and no Guest seated by
@@ -149,7 +158,9 @@ export function guestNameMessage(err: GuestNameError): string {
     case 'taken':
       return 'Somebody already plays under that name. Pick another one.';
     case 'unknown_guest':
-      return 'This browser has no Guest to name yet: play a match first.';
+      // A Guest is handed out as the landing opens (ADR 0033), so a browser
+      // without one has outlived it on the server.
+      return 'Your Guest has expired on the server. Reload the page, then pick the name again.';
     default:
       return nameErrorMessage(err);
   }
@@ -180,6 +191,7 @@ interface StoredGuest {
   name: string;
   named: boolean;
   points: number;
+  best: number;
   createdAt: number;
   seenAt: number;
 }
@@ -225,6 +237,7 @@ export class GuestStore {
         name: s.name,
         named: s.named === true,
         points: Number.isFinite(s.points) ? Math.max(0, Math.round(s.points)) : 0,
+        best: wholeBest(s.best),
         createdAt: Number.isFinite(s.createdAt) ? s.createdAt : 0,
         seenAt: Number.isFinite(s.seenAt) ? s.seenAt : 0,
       });
@@ -289,6 +302,7 @@ export class GuestStore {
       name: guestName(this.digits()),
       named: false,
       points: 0,
+      best: 0,
       createdAt: now,
       seenAt: now,
     };
@@ -312,6 +326,15 @@ export class GuestStore {
     return guest;
   }
 
+  // The Guest a browser arrives as (ADR 0033): the one its cookie holds,
+  // rolled forward by resolve, so a kept Guest's year counts from this
+  // visit; else a new one, when the cookie is missing, unknown or lapsed.
+  arrive(token: string | undefined, now: number): { token: string; guest: Guest; issued: boolean } {
+    const known = token === undefined ? undefined : this.resolve(token, now);
+    if (token !== undefined && known) return { token, guest: known, issued: false };
+    return { ...this.issue(now), issued: true };
+  }
+
   findById(id: number): Guest | undefined {
     const digest = this.digestOf.get(id);
     return digest === undefined ? undefined : this.byDigest.get(digest);
@@ -326,6 +349,23 @@ export class GuestStore {
     guest.seenAt = now;
     this.dirty = true;
     return guest.points;
+  }
+
+  // A Respawn end's tally for this Guest's seat (ADR 0033): answers the
+  // best held before it, and raises the best when the tally beats it.
+  // Memory only, like points; the flush writes it, and only a raise needs
+  // it. Null when the Guest is gone.
+  raiseBest(id: number, tally: number, now: number): number | null {
+    const guest = this.findById(id);
+    if (!guest) return null;
+    const before = guest.best;
+    const t = wholeBest(tally);
+    guest.seenAt = now;
+    if (t > before) {
+      guest.best = t;
+      this.dirty = true;
+    }
+    return before;
   }
 
   // The Guest holding this folded name, if one chose it.

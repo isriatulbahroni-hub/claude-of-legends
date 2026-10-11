@@ -3,7 +3,7 @@
 // it is unrated, and what is kept of one that scores or names itself: its
 // line, under a hashed token and an id that survives a restart.
 
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -12,6 +12,7 @@ import {
   GUEST_KEPT_TTL_MS,
   GUEST_TTL_MS,
   GuestStore,
+  guestClaim,
   guestName,
   guestNameMessage,
   guestNameRefusal,
@@ -67,6 +68,30 @@ describe('guests', () => {
     expect(store.resolve(token, 1800)?.id).toBe(guest.id);
     expect(store.resolve(token, 2801)).toBeUndefined();
     expect(store.resolve('nope', 0)).toBeUndefined();
+  });
+
+  it('are handed out on arrival, or found again on the cookie they left (ADR 0033)', () => {
+    const store = new GuestStore({ ttlMs: 1000, max: 10, tokenGen: seqTokens(), digits: () => 7 });
+    // No cookie: a new Guest, issued.
+    const first = store.arrive(undefined, 0);
+    expect(first).toMatchObject({ token: 't0', issued: true });
+    expect(first.guest).toMatchObject({ name: 'Wanderer 0007', named: false, points: 0 });
+    // A live cookie: the same Guest and token, its window rolled forward.
+    const again = store.arrive('t0', 900);
+    expect(again).toEqual({ token: 't0', guest: first.guest, issued: false });
+    expect(again.guest.seenAt).toBe(900);
+    expect(store.size).toBe(1);
+    // An unknown cookie: a new Guest under a new token.
+    const stranger = store.arrive('nope', 950);
+    expect(stranger.issued).toBe(true);
+    expect(stranger.token).toBe('t1');
+    expect(stranger.guest.id).not.toBe(first.guest.id);
+    // A lapsed cookie: a new Guest too, and the old one is gone.
+    const late = store.arrive('t0', 900 + 1001);
+    expect(late.issued).toBe(true);
+    expect(late.token).not.toBe('t0');
+    expect(late.guest.id).not.toBe(first.guest.id);
+    expect(store.findById(first.guest.id)).toBeUndefined();
   });
 
   it('are bounded: the oldest with nothing kept goes when the store is full', () => {
@@ -201,6 +226,74 @@ describe('a kept Guest', () => {
   });
 });
 
+describe('the Respawn best on a Guest line (ADR 0033)', () => {
+  it('answers the best before, only raises it, and is null for a Guest gone', () => {
+    const store = new GuestStore({ tokenGen: seqTokens() });
+    const { guest } = store.issue(0);
+    expect(guest.best).toBe(0);
+    expect(store.raiseBest(guest.id, 3, 10)).toBe(0);
+    expect(store.raiseBest(guest.id, 2, 20)).toBe(3);
+    expect(store.findById(guest.id)?.best).toBe(3);
+    expect(store.raiseBest(guest.id, 5, 30)).toBe(3);
+    expect(store.findById(guest.id)?.best).toBe(5);
+    expect(store.raiseBest(-999, 5, 30)).toBeNull();
+  });
+
+  it('is written with a kept Guest on the flush, and read back', () => {
+    const file = tmpFile();
+    const store = new GuestStore({ file, tokenGen: seqTokens() });
+    const { guest } = store.issue(0);
+    store.addPoints(guest.id, 30, 1);
+    store.flush();
+    const before = readFileSync(file, 'utf8');
+    store.raiseBest(guest.id, 4, 2);
+    expect(readFileSync(file, 'utf8')).toBe(before);
+    store.flush();
+    expect(new GuestStore({ file }).resolve('t0', 3)).toMatchObject({ points: 30, best: 4 });
+    // A tally that does not raise it leaves nothing to write.
+    store.raiseBest(guest.id, 1, 4);
+    const after = readFileSync(file, 'utf8');
+    store.flush();
+    expect(readFileSync(file, 'utf8')).toBe(after);
+  });
+
+  it('reads junk on disk as none and a huge one as the ceiling', () => {
+    const file = tmpFile();
+    const line = (id: number, best: unknown) => ({
+      id,
+      digest: tokenDigest(`k${-id}`),
+      name: `Wanderer 000${-id}`,
+      named: false,
+      points: 10,
+      best,
+      createdAt: 0,
+      seenAt: 0,
+    });
+    writeFileSync(
+      file,
+      JSON.stringify({
+        nextId: -6,
+        guests: [line(-1, 'nine'), line(-2, -4), line(-3, 1e9), line(-4, 7.6), line(-5, null)],
+      }),
+    );
+    const store = new GuestStore({ file });
+    expect([-1, -2, -3, -4, -5].map((id) => store.findById(id)?.best)).toEqual([0, 0, 1000, 7, 0]);
+  });
+
+  it('goes to the account made in its browser, with the points and the name', () => {
+    const store = new GuestStore({ tokenGen: seqTokens() });
+    const { guest } = store.issue(0);
+    store.addPoints(guest.id, 85, 1);
+    store.raiseBest(guest.id, 9, 2);
+    store.setName(guest.id, 'Thornwick', 3, noAccount);
+    expect(guestClaim(store.findById(guest.id))).toEqual({
+      fold: 'thornwick',
+      points: 85,
+      best: 9,
+    });
+  });
+});
+
 describe('a Guest naming itself', () => {
   it('follows the account name rules and the word filter', () => {
     expect(guestNameRefusal('ab')).toBe('too_short');
@@ -213,6 +306,14 @@ describe('a Guest naming itself', () => {
     for (const err of ['too_short', 'charset', 'blocked', 'taken', 'unknown_guest'] as const) {
       expect(guestNameMessage(err).length).toBeGreaterThan(10);
     }
+    // A Guest exists from the first page, so one the server lost asks for
+    // a reload, not a match.
+    expect(guestNameMessage('unknown_guest')).toBe(
+      'Your Guest has expired on the server. Reload the page, then pick the name again.',
+    );
+    expect(guestNameMessage('taken')).toBe(
+      'Somebody already plays under that name. Pick another one.',
+    );
   });
 
   it('cannot take a name an account holds or once held, or another Guest holds', () => {

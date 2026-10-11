@@ -59,12 +59,19 @@ function byPoints(a: PointsEntry, b: PointsEntry): number {
   return b.points - a.points || a.since - b.since || a.name.localeCompare(b.name) || a.key - b.key;
 }
 
+// The lines on the ladder, in its order: everyone with points, the most
+// first, equal points the older line first. What the rows are cut from,
+// and what the landing's own panel reads its place and the line above off.
+export function placedLines(entries: readonly PointsEntry[]): PointsEntry[] {
+  return entries.filter((e) => e.points > 0).sort(byPoints);
+}
+
 export function buildPointsLadder(
   entries: readonly PointsEntry[],
   reader: PointsReader | null,
   cap = POINTS_LADDER_CAP,
 ): PointsLadder {
-  const placed = entries.filter((e) => e.points > 0).sort(byPoints);
+  const placed = placedLines(entries);
   const rows = placed.slice(0, cap).map((e, i) => ({
     rank: i + 1,
     name: e.name,

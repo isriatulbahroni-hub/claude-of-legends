@@ -205,6 +205,11 @@ export interface RoyaleResult {
   // The ranking around the recipient: the podium and their own row with
   // two above and two below, people first.
   slice?: { place: number; name: string; championId: string; score: number; bot: boolean }[];
+  // Respawn: the best the recipient's line held before this match (ADR
+  // 0033), the most takedowns one seat scored, counted since landing for a
+  // drop-in; 0 before the first. Absent when the line is gone or the
+  // server is older.
+  bestBefore?: number;
 }
 
 // What a player sends for the mode.

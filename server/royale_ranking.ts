@@ -133,6 +133,24 @@ export function windowStanding(
   };
 }
 
+// A line's Respawn best (ADR 0033): the most takedowns one seat scored in
+// a match, a whole number. Past this it is junk, not a match.
+export const RESPAWN_BEST_MAX = 1000;
+
+// A best as it is read from disk or a tally: a whole number from 0 to
+// RESPAWN_BEST_MAX, and 0 for anything that is not a number.
+export function wholeBest(v: unknown): number {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return 0;
+  return Math.max(0, Math.min(RESPAWN_BEST_MAX, Math.floor(v)));
+}
+
+// The tally a Respawn seat's best is judged on (ADR 0033): its takedowns
+// since landing for a drop-in, the whole match's otherwise. The rule the
+// end card counts by (src/ui/royale_result.ts respawnTally).
+export function respawnSeatTally(result: RoyaleResult): number {
+  return result.window?.score ?? result.score;
+}
+
 // How close the near miss of the end card is: the seat just above, when
 // it was no more than this many takedowns ahead.
 export const NEAR_MISS_BY = 2;

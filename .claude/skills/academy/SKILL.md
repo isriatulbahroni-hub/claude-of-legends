@@ -38,7 +38,7 @@ Any sim or server behavior change adds or updates a test in the same change
 Bring the stack up (`/dev-server`), register an account with a cookie jar, then:
 
 ```bash
-J=.dev/cj; B=http://127.0.0.1:${CLIENT_PORT:-5173}
+J=.dev/cj; B=http://localhost:${CLIENT_PORT:-5173}
 curl -s -b $J $B/api/bots                                      # {"ok":true,"bots":[]}
 curl -s -b $J -H 'content-type: application/json' \
   -d '{"name":"Nightfall","championId":"torv"}' $B/api/bots/create   # the default playbook comes back

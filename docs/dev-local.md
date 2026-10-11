@@ -22,8 +22,10 @@ in a shell that has not loaded nvm, source `.claude/skills/dev-server/node_env.s
 ## One script for the stack
 
 `.claude/skills/dev-server/stack.sh up|status|log|links|down` builds and starts the
-server and the client in the background, waits until both answer, and keeps pids and
-logs under `.dev/` (gitignored). Its state directory defaults to `.dev/data`, so a
+server and the client in the background, waits until both answer on `localhost` (where
+Vite listens, possibly as `::1` alone, so ask the client by that name rather than
+`127.0.0.1`), and keeps pids and logs under `.dev/` (gitignored); `down` stops only the
+processes `up` started. Its state directory defaults to `.dev/data`, so a
 testing session never writes into `data/`; `DATA_DIR=data` opts back in. `PORT` and
 `CLIENT_PORT` move it off the defaults when another checkout holds them.
 
@@ -50,7 +52,7 @@ refused with a plain message.
 Sessions are cookies (ADR 0006). From the shell, keep a jar:
 
 ```bash
-J=.dev/cj; B=http://127.0.0.1:5173
+J=.dev/cj; B=http://localhost:5173
 curl -s -c $J -H 'content-type: application/json' \
   -d '{"name":"tester","password":"correct horse battery","email":"tester@example.com"}' $B/api/register
 curl -s -b $J $B/api/bots

@@ -30,6 +30,15 @@ What `up` gives you, and why it is shaped that way:
 - **The client proxies** `/api` and `/ws` to the server, so the browser talks to
   `http://localhost:<CLIENT_PORT>` only. Without the server, `pnpm dev` alone still runs
   the offline practice match and answers the four sign-in calls with "no session".
+- **Ask by `localhost`, not `127.0.0.1`.** Vite listens on `localhost`, which Node may
+  resolve to `::1` alone; `127.0.0.1:<CLIENT_PORT>` then refuses the connection. The
+  readiness probe and every example here use `localhost`, which curl and the browser try on
+  both families.
+- **`down` stops only what `up` started.** `up` starts the server and the client each as
+  the leader of a process group of its own (the client's holds the pnpm wrapper and vite),
+  and `down` stops those groups and nothing else, never the group of the shell or script
+  that calls it, then waits until they are gone so `up` can follow at once. A pid file
+  whose process now runs something else is dropped without a signal.
 - **Mail is log-only** without `MAIL_API_KEY`: the boot line says so, and every
   confirmation or reset mail is printed under a `[mail:log-only]` line. `links` pulls the
   URLs out. Registration does not wait on confirmation; an account is usable at once.
@@ -43,7 +52,7 @@ Sessions are cookies (ADR 0006), so keep a cookie jar. Registration needs a name
 password; an email address is optional and never mailed locally.
 
 ```bash
-J=.dev/cj; B=http://127.0.0.1:${CLIENT_PORT:-5173}
+J=.dev/cj; B=http://localhost:${CLIENT_PORT:-5173}
 curl -s -c $J -H 'content-type: application/json' \
   -d '{"name":"tester","password":"correct horse battery","email":"tester@example.com"}' $B/api/register
 curl -s -b $J $B/api/session

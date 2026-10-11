@@ -28,8 +28,11 @@ const CSS = `
   background: #1d2a14; color: #d8e6c0; font-size: 12px; font-weight: 600; cursor: pointer;
 }
 .spec-btn:hover { border-color: #7ca050; }
+/* Under the bar's row, which on a phone reaches the left third: each
+   line as wide as its words. */
 .spec-feed {
-  position: absolute; top: 12px; left: 12px; display: flex; flex-direction: column; gap: 4px;
+  position: absolute; top: 58px; left: calc(12px + env(safe-area-inset-left, 0px));
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
   font: 12px system-ui, sans-serif; color: #d8e6c0; text-shadow: 0 1px 2px #000;
   pointer-events: none; z-index: 11;
 }

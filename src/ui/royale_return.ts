@@ -142,6 +142,26 @@ export function returnWashPhoneBox(
   };
 }
 
+// While the globe shows on a phone the announcement ("You took down
+// Sorrel", ui/hud.ts announce), centered over it, keeps
+// RETURN_ANNOUNCE_GAP_PX clear of the column on its left and wraps within
+// that: as wide as a phone let it, it ran over the end of the recap's
+// lines at 844x390.
+export const RETURN_ANNOUNCE_GAP_PX = 8;
+
+// The announcement's widest on a phone `height` tall while the globe shows.
+export function returnAnnounceMaxPx(height: number): number {
+  return (
+    2 * (((RETURN_GLOBE_HALF_VH + RETURN_WASH_GAP_VH) * height) / 100 - RETURN_ANNOUNCE_GAP_PX)
+  );
+}
+
+// The same as CSS, on the stage's own height (game/match_stage.ts).
+export function returnAnnounceMaxCss(): string {
+  const half = RETURN_GLOBE_HALF_VH + RETURN_WASH_GAP_VH;
+  return `calc(2 * (${half} * var(--vh, 1vh) - ${RETURN_ANNOUNCE_GAP_PX}px))`;
+}
+
 // The wash's line under the recap while the globe shows: what to do with
 // it, a phone's tap or a desktop's click, and once picked, that it holds.
 export function returnHint(touch: boolean, picked: boolean): string {

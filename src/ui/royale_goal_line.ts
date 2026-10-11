@@ -4,7 +4,10 @@
 // shows it sets the size; the line keeps the gold of the end card's bar
 // (ui/royale_goal_bar.ts). The level, the bar and the points hold
 // together: a host that lets the line wrap (.wraps) breaks it after the
-// lead and nowhere else.
+// lead first, and only a host too narrow for the three on one line puts
+// the points under the level and its bar, rather than cutting them short
+// (the home's Respawn card at 844x390 read "1,000 points to Leve...", and
+// a narrower phone cuts shorter counts).
 
 import type { GoalLine } from './royale_goal_lines';
 import { pointsText } from './royale_goal_lines';
@@ -14,7 +17,8 @@ const CSS = `
   max-width: 100%; font-variant-numeric: tabular-nums; white-space: nowrap; color: #e6dcb8; }
 .goal-line.wraps { flex-wrap: wrap; }
 .goal-line[hidden] { display: none; }
-.goal-line-run { display: inline-flex; align-items: center; gap: 0.6em; min-width: 0; }
+.goal-line-run { display: inline-flex; flex-wrap: wrap; align-items: center; column-gap: 0.6em;
+  row-gap: 0.15em; min-width: 0; }
 .goal-line small { font-size: 1em; font-weight: 700; color: #f2e6c0; }
 .goal-line b { font-weight: 800; color: #ffe08a; letter-spacing: 0.3px; }
 .goal-line-track { position: relative; flex: none; width: 5.2em; height: 0.5em; border-radius: 999px;

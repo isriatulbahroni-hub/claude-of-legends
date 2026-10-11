@@ -157,6 +157,7 @@ import {
   RETURN_WASH_GAP_VH,
   RETURN_WASH_PHONE_BOTTOM_PX,
   RETURN_WASH_PHONE_TOP_PX,
+  returnAnnounceMaxCss,
   returnGlobeOn,
   returnHint,
   returnWashLeftCss,
@@ -821,8 +822,10 @@ const CSS = `
 .hud-overlay-life { font-size: 14px; margin-top: 6px; color: #e6dcb8;
   font-variant-numeric: tabular-nums; }
 /* Where the goal across matches stands, under the life line
-   (ui/royale_goal_line.ts). */
+   (ui/royale_goal_line.ts); its points, when they go under the level, kept
+   in the middle. */
 .hud-overlay-goal { font-size: 13.5px; margin-top: 6px; }
+.hud-overlay-goal .goal-line-run { justify-content: center; }
 /* Who carries the Burr of a Respawn death, under the life line
    (ui/royale_burr.ts): a thorn's red, the next life's target. */
 .hud-overlay-burr { font-size: 15px; font-weight: 700; margin-top: 8px; color: ${BURR_COLOR};
@@ -842,8 +845,12 @@ const CSS = `
 /* The thumb controls stand down meanwhile: their box under the right thumb
    took the tap meant for the globe, and a dead champion casts nothing. Their
    hint too, whose corner the column's lines reach on a phone; its fade clock
-   stands still meanwhile (ui/hints_fade.ts hintsCovered). */
-.hud.thumbs.wait-globe .hud-slots, .hud.thumbs.wait-globe .hud-hints { visibility: hidden; }
+   stands still meanwhile (ui/hints_fade.ts hintsCovered). And a newcomer's
+   Move ring (ui/thumb_stick_view.ts), drawn on the stage after the HUD, under
+   the lines a long column runs on past its foot: a dead champion walks
+   nowhere. */
+.hud.thumbs.wait-globe .hud-slots, .hud.thumbs.wait-globe .hud-hints,
+.hud.thumbs.wait-globe ~ .stick-ghost { visibility: hidden; }
 .hud-menu-btn {
   pointer-events: auto; margin-top: 10px; padding: 10px 26px; border-radius: 6px;
   border: 1px solid #466030; background: #1d2a14; color: #d8e6c0;
@@ -1039,8 +1046,10 @@ const CSS = `
 .hud.royale:not(.compact) .hud-steps-words span { font-size: 13px; }
 /* The points' pop comes out to the left of the box, as on a phone: under
    it stands the battle royale's feed, and "+5 assist" fell under its
-   first line, "+1 cache" on its fold. */
-.hud.royale .hud-points-pop { top: 11px; right: calc(100% + 6px); }
+   first line, "+1 cache" on its fold. Both its lines keep to the box's
+   side: the goal's note under it, longer than "+10 kill", drew the first
+   line left with it, over the top line's "4 takedowns" at 667x375. */
+.hud.royale .hud-points-pop { top: 11px; right: calc(100% + 6px); text-align: right; }
 /* The battle royale's announcement stands over the wash of a death (SLAIN
    dimmed "Two Seedfalls have landed"), under the modal screens; on a
    desktop it keeps between the first steps' card and the feed, wrapping
@@ -1050,6 +1059,11 @@ const CSS = `
 .hud.royale:not(.compact) .hud-announce { width: max-content; max-width: ${announceMaxWidthCss()};
   text-align: center; text-wrap: balance; line-height: 1.2; }
 .hud.compact.royale .hud-announce { top: 70px; }
+/* While the Respawn wait's globe shows on a phone, over the globe and
+   clear of the column of lines at its left, wrapping within that
+   (ui/royale_return.ts returnAnnounceMaxPx). */
+.hud.compact.royale.wait-globe .hud-announce { width: max-content;
+  max-width: ${returnAnnounceMaxCss()}; text-align: center; text-wrap: balance; line-height: 1.2; }
 /* Compact mode (touchscreens): the desktop sizes swallow a phone screen, so
    the whole bottom block scales down, the chat goes (there is no way to type
    in a match on a phone anyway; pings still flash on the map), and the hints

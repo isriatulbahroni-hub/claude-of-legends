@@ -18,10 +18,13 @@ import { PLANET_RADIUS } from '../src/render/planet_ground';
 import { RESPAWN_S } from '../src/sim/royale/types';
 import { overlaps } from '../src/ui/royale_layout';
 import {
+  RETURN_ANNOUNCE_GAP_PX,
   RETURN_GLOBE_AFTER_S,
   RETURN_GLOBE_HALF_VH,
   RETURN_WASH_BAR_GAP_PX,
   RETURN_WASH_GAP_VH,
+  returnAnnounceMaxCss,
+  returnAnnounceMaxPx,
   returnGlobeOn,
   returnHint,
   returnLight,
@@ -200,6 +203,31 @@ describe('the wait globe on the screen', () => {
       // 16 letters, or the goal's level with its bar.
       expect(column.right - column.left, at).toBeGreaterThanOrEqual(130);
     }
+  });
+
+  it('keeps the announcement over the globe, clear of the column, while the globe shows', () => {
+    // On a phone the announcement stands 70 px down, centered, two lines of
+    // 24 px at most once it wraps (ui/hud.ts).
+    for (const [w, h, safe] of PHONES) {
+      const at = `${w}x${h} safe ${safe}`;
+      const column = returnWashPhoneBox(w, h, true, safe);
+      const max = returnAnnounceMaxPx(h);
+      const announce = { left: w / 2 - max / 2, top: 70, right: w / 2 + max / 2, bottom: 118 };
+      expect(overlaps(column, announce), at).toBe(false);
+      expect(announce.left - column.right, at).toBeCloseTo(RETURN_ANNOUNCE_GAP_PX, 6);
+      // Room for a name of 16 letters at its 20 px on a line of its own.
+      expect(max, at).toBeGreaterThanOrEqual(190);
+    }
+    expect(returnAnnounceMaxCss()).toBe(
+      `calc(2 * (${RETURN_GLOBE_HALF_VH + RETURN_WASH_GAP_VH} * var(--vh, 1vh) - ${RETURN_ANNOUNCE_GAP_PX}px))`,
+    );
+  });
+
+  it('ran over the end of the recap as wide as a phone let it (844x390)', () => {
+    // "You took down Sorrel" at 20 px, 260 px wide, over a recap on two
+    // lines from y 70.
+    const column = returnWashPhoneBox(844, 390, true);
+    expect(overlaps(column, { left: 292, top: 70, right: 552, bottom: 94 })).toBe(true);
   });
 
   it('ran under both from the edge before (844x390)', () => {

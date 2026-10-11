@@ -38,7 +38,65 @@ server_log="$RUN_DIR/server.log"
 client_log="$RUN_DIR/client.log"
 
 alive() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
-listening() { curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$1$2"; }
+# Asked by name, as the browser asks: Vite listens on localhost, which Node
+# may resolve to ::1 alone, and the server on both families; curl tries
+# every address localhost has.
+listening() { curl -s -o /dev/null --noproxy '*' --max-time 2 "http://localhost:$1$2"; }
+
+# Starts a command in the background as the leader of a process group of
+# its own (job control on for that one start), its pid in `pidfile` and its
+# output appended to `log`: down stops that group and nothing else,
+# whichever group the caller runs in.
+start() { # pidfile log command...
+  local pidfile="$1" log="$2"
+  shift 2
+  set -m
+  nohup "$@" >>"$log" 2>&1 &
+  echo $! >"$pidfile"
+  set +m
+}
+
+# A pid and every process under it, deepest first.
+tree() {
+  local child
+  for child in $(pgrep -P "$1" 2>/dev/null); do tree "$child"; done
+  echo "$1"
+}
+
+# Stops what up started under one pid file, if that pid still runs it
+# (`what` is in its command line): the process group up gave it, which
+# holds the pnpm wrapper and vite alike, or the pid and its descendants
+# when it leads no group of its own (started by an older up, in the
+# caller's group). Never a group this script runs in.
+stop() { # pidfile what
+  local pid pgid name target
+  pid="$(cat "$1")"
+  name="$(basename "$1" .pid)"
+  if ! ps -o args= -p "$pid" 2>/dev/null | grep -q -- "$2"; then
+    echo "pid $pid no longer runs the $name ($2); left alone"
+    return 0
+  fi
+  pgid="$(ps -o pgid= -p "$pid" | tr -d ' ')"
+  if [ "$pgid" = "$pid" ] && [ "$pgid" != "$(ps -o pgid= -p $$ | tr -d ' ')" ]; then
+    target="-$pid"
+    kill -- "$target" 2>/dev/null
+  else
+    target="$pid"
+    # shellcheck disable=SC2046
+    kill $(tree "$pid") 2>/dev/null
+  fi
+  # The server closes its sockets and flushes its stores on TERM: wait for
+  # it, so the ports are free for the next up.
+  for _ in $(seq 1 40); do
+    if ! kill -0 -- "$target" 2>/dev/null; then
+      echo "stopped pid $pid ($name)"
+      return 0
+    fi
+    sleep 0.25
+  done
+  echo "pid $pid ($name) still running 10 s after TERM" >&2
+  return 1
+}
 
 wait_for() { # port path label
   for _ in $(seq 1 60); do
@@ -59,8 +117,7 @@ up() {
     node scripts/build_server.mjs >"$server_log" 2>&1 || { cat "$server_log"; exit 1; }
     mkdir -p "$DATA_DIR"
     # --env-file-if-exists mirrors pnpm server: .env knobs apply, the shell wins.
-    nohup node --env-file-if-exists=.env dist-server/server.cjs >>"$server_log" 2>&1 &
-    echo $! >"$server_pid"
+    start "$server_pid" "$server_log" node --env-file-if-exists=.env dist-server/server.cjs
     wait_for "$PORT" /api/session server || { tail -20 "$server_log"; exit 1; }
     echo "server on :$PORT, state in $DATA_DIR, log $server_log"
     grep -E '^(suggestions|mail|generation|discord|arena):' "$server_log" | sed 's/^/  /'
@@ -72,23 +129,19 @@ up() {
     echo "something else already listens on :$CLIENT_PORT. Set CLIENT_PORT to a free one." >&2
     exit 1
   else
-    nohup pnpm exec vite --port "$CLIENT_PORT" --strictPort >"$client_log" 2>&1 &
-    echo $! >"$client_pid"
+    : >"$client_log"
+    start "$client_pid" "$client_log" pnpm exec vite --port "$CLIENT_PORT" --strictPort
     wait_for "$CLIENT_PORT" / client || { tail -20 "$client_log"; exit 1; }
     echo "client on http://localhost:$CLIENT_PORT (proxies /api and /ws to :$PORT), log $client_log"
   fi
 }
 
 down() {
-  for f in "$client_pid" "$server_pid"; do
-    if alive "$f"; then
-      pid="$(cat "$f")"
-      # The client is a pnpm wrapper around vite: take the process group.
-      kill -- -"$(ps -o pgid= "$pid" | tr -d ' ')" 2>/dev/null || kill "$pid" 2>/dev/null
-      echo "stopped pid $pid ($(basename "$f" .pid))"
-    fi
-    rm -f "$f"
-  done
+  local failed=0
+  # A pid file is kept while what it names would not stop.
+  if alive "$client_pid" && ! stop "$client_pid" vite; then failed=1; else rm -f "$client_pid"; fi
+  if alive "$server_pid" && ! stop "$server_pid" server.cjs; then failed=1; else rm -f "$server_pid"; fi
+  return "$failed"
 }
 
 status() {

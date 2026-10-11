@@ -106,3 +106,13 @@ plane's: the next frame answers the click, no frame jumps, the drawing is a trip
 server's champion, and it ends where the server's champion ends, through a stop, a knock-up, a
 blink, a chase and its end, an attack that did not take, a wall standing across the way, a wall
 raised across the walk, and a launch pad.
+
+## Amended: the plane blocks the walls too (2026-10-11)
+
+The walls an ability raises were blocked on the planet's grid only; in a 5v5 the prediction
+searched and walked through them, and the server's answer pulled the drawing back a round trip
+later. The plane's prediction now blocks them on its own grid the same way (`standWalls`,
+`blockWall`): a way searched at the click goes round a standing wall as the server's search
+does, and a walk a wall rises across stops at its face as the sim's does, within a tick's step
+of where the server's champion stops. `tests/self_predict.test.ts` pins both on the Star
+Orchard, served as `server/match.ts` serves a 5v5.

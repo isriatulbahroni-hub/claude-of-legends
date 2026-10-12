@@ -335,9 +335,9 @@ const CSS = `
   /* Two cards, stacked, and the free one first. The account card went
      first until a phone was measured: with the form above it, the button
      that needs no account sat 1402 px down an 844 px screen, one and
-     seven tenths of a screen of scrolling. The end screen
-     makes the account offer once a match has been played
-     (ui/account_offer.ts), which is the better moment to ask anyway. */
+     seven tenths of a screen of scrolling. The own panel offers the
+     account once the Guest has points to keep, which is the better
+     moment to ask anyway. */
   .pg.land .pg-cards { grid-template-columns: minmax(0, 1fr); max-width: 620px; gap: 22px; }
   .pg.land .pg-cards .pg-card.plain { order: -1; }
   .pg.land .pg-cards > .pg-ladder { order: -1; }
@@ -559,19 +559,12 @@ export type LandingResult =
   // 0031), or the 5v5's public queue.
   | { kind: 'guest'; play: LandingPlay };
 
-// Why the landing is being shown again, when it is: 'register' after a
-// visitor took the account offer at the end of a match
-// (ui/account_offer.ts), so the page opens on the form, on its register
-// tab, rather than on the hero they have already read.
-export type LandingIntent = 'register';
-
 // `discordResult` is what a round trip through Discord came back with, if
 // this load came from one; the credential panel is the only thing on this
 // page that has anything to say about it (ADR 0009).
 export function showLanding(
   container: HTMLElement,
   discordResult: DiscordResult | null = null,
-  intent: LandingIntent | null = null,
 ): Promise<LandingResult> {
   ensureCss();
   // The landing's one request (src/net/landing.ts), asked once as the page
@@ -584,14 +577,6 @@ export function showLanding(
     const stopEmbers = mountEmbers(root);
     let stopReveal = (): void => {};
     container.appendChild(root);
-    // Arriving to sign up: straight to the form, which on a phone stands
-    // under the Play now card and the ladder. The cards are built below,
-    // and exist by the time the frame is painted.
-    if (intent === 'register') {
-      requestAnimationFrame(() => {
-        root.querySelector('.pg-card.gold')?.scrollIntoView({ block: 'start' });
-      });
-    }
 
     let leaving = false;
     const finish = (result: LandingResult): void => {
@@ -760,7 +745,7 @@ export function showLanding(
       buildAuthForm(
         (account) => finish({ kind: 'account', account }),
         discordResult,
-        intent === 'register' ? 'register' : 'login',
+        'login',
         authControl,
       ),
     );

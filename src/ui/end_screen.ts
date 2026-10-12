@@ -2,23 +2,15 @@
 // (ui/royale_hud.ts) and the 5v5's (ui/hud.ts), laid over the screen
 // (ui/end_layout.ts has the grid). Each card makes its own boxes and keeps
 // their behavior: the result with its buttons, the ranking or the
-// scoreboard, the level bar, and the HUD's ladder box, account offer and
-// feedback box. This places them and gives them the HUD's dark green and
-// gold. A box shows what it holds: a hidden ladder box or a closed offer
-// takes no room, and the grid closes over it.
+// scoreboard, the level bar, and the HUD's ladder box and feedback box.
+// This places them and gives them the HUD's dark green and gold. A box
+// shows what it holds: a hidden ladder box takes no room, and the grid
+// closes over it.
 
 import { END_ROOT, type EndCard, endLayoutCss, ROOT_RULE } from './end_layout';
 
-// The account offer's class (ui/hud.ts makes the block): the one box the
-// end screen lays in its own place rather than in a column.
-export const END_OFFER_CLASS = 'hud-end-offer';
-
-export function isEndOffer(e: HTMLElement): boolean {
-  return e.classList.contains(END_OFFER_CLASS);
-}
-
 // Every rule under the end screen's sheet, at a weight above the HUD's
-// rules for the boxes it borrows (the ladder, the offer, the feedback box,
+// rules for the boxes it borrows (the ladder, the feedback box,
 // the scoreboard's rows) and for a phone's modal overlay, whichever
 // stylesheet the page added last.
 const R = `.hud ${ROOT_RULE}`;
@@ -141,35 +133,16 @@ ${S} .hud-score-team h4 { display: flex; align-items: center; margin: 0; box-siz
 ${S} .hud-score-team + .hud-score-team .hud-score-row.head { display: none; }
 ${S} .hud-score-row { box-sizing: border-box; padding: 0 6px; gap: 6px; font-size: 13px; }
 ${S} .hud-score-row.head { padding-bottom: 0; align-items: end; }
-/* The HUD's boxes in the grid: the ladder in gold, the offer in a
-   brighter gold (the one box that asks for a decision), the feedback box
-   in the column's green, its field taking the height the column leaves. */
+/* The HUD's boxes in the grid: the ladder in gold, the feedback box in
+   the column's green, its field taking the height the column leaves. */
 ${S} .hud-ladder {
   border-color: #6e5c26;
   background: linear-gradient(180deg, rgba(44, 37, 15, 0.97), rgba(26, 22, 10, 0.97));
 }
-${S} .hud-ladder-row .hud-menu-btn, ${S} .hud-feedback-row .hud-menu-btn,
-${S} .hud-end-offer .hud-menu-btn { margin: 0; min-height: 36px; }
+${S} .hud-ladder-row .hud-menu-btn, ${S} .hud-feedback-row .hud-menu-btn {
+  margin: 0; min-height: 36px;
+}
 ${S} .hud-ladder-row .hud-menu-btn { padding: 0 16px; }
-${S} .${END_OFFER_CLASS} {
-  display: none; align-items: center; flex-wrap: wrap; gap: 10px 16px; color: #e6dcb8;
-  border-color: #8a7430; container: offer / inline-size;
-  background: linear-gradient(180deg, rgba(52, 43, 17, 0.98), rgba(28, 23, 10, 0.98));
-}
-${S} .${END_OFFER_CLASS}.open { display: flex; }
-${S} .hud-end-offer-words { flex: 1 1 260px; min-width: 0; }
-${S} .hud-end-offer b { display: block; font-size: 15px; line-height: 19px; color: #f2e6c0; }
-${S} .hud-end-offer span {
-  display: block; margin-top: 2px; font-size: 12.5px; line-height: 1.35; color: #c9bd93;
-}
-${S} .hud-end-offer .hud-menu-btn {
-  flex: none; padding: 8px 18px; border-color: #c9a84a; background: #3a3014; color: #f2e6c0;
-  font-weight: 700; white-space: nowrap;
-}
-${S} .hud-end-offer .hud-menu-btn:hover { border-color: #f0deae; }
-@container offer (width < 440px) {
-  ${S} .hud-end-offer .hud-menu-btn { flex: 1 1 100%; min-width: 0; white-space: normal; }
-}
 ${S} .hud-feedback { display: flex; flex-direction: column; container: feedback / inline-size; }
 ${S} .end-side > .hud-feedback { flex: 1 1 auto; }
 ${S} .hud-feedback-row { flex: 1 1 auto; min-height: 0; align-items: flex-end; }
@@ -196,12 +169,7 @@ ${C} .end-progress .br-goal-line { font-size: 11px; }
 ${C} .end-progress .br-end-grafts { font-size: 11.5px; line-height: 14px; }
 ${C} .br-end-row { font-size: 12px; padding: 0 6px; gap: 6px; }
 ${C} .hud-score-row { font-size: 11.5px; padding: 0 5px; gap: 5px; }
-${C} .hud-end-offer { gap: 6px 10px; }
-${C} .hud-end-offer b { font-size: 13px; line-height: 16px; }
-${C} .hud-end-offer span { font-size: 11.5px; line-height: 1.3; }
-${C} .hud-ladder-row .hud-menu-btn, ${C} .hud-feedback-row .hud-menu-btn,
-${C} .hud-end-offer .hud-menu-btn { min-height: 44px; }
-${C} .hud-end-offer .hud-menu-btn { padding: 4px 10px; }
+${C} .hud-ladder-row .hud-menu-btn, ${C} .hud-feedback-row .hud-menu-btn { min-height: 44px; }
 ${C} .hud-feedback-field { min-height: 44px; }
 @container feedback (width < 300px) {
   ${C} .hud-feedback-words b { font-size: 11px; }
@@ -222,19 +190,17 @@ function ensureCss(): void {
 
 // What a card hands the screen: the result with its buttons, the boxes
 // under it, its table, the boxes of the side column and the words under
-// them, and the boxes with a place of their own. The battle royale's lead
+// them, and the box with a place of its own. The battle royale's lead
 // holds the level bar and the Grafts, its side the ladder over the
-// feedback box, and its offer stands under the ranking; the 5v5's side
-// holds the offer over the feedback box and the Discord line under them,
-// and its ladder stands under the result (under the scoreboard on a
-// phone).
+// feedback box; the 5v5's side holds the feedback box and the Discord
+// line under it, and its ladder stands under the result (under the
+// scoreboard on a phone).
 export interface EndParts {
   head: HTMLElement;
   lead: readonly HTMLElement[];
   table: HTMLElement | null;
   side: readonly HTMLElement[];
   foot: HTMLElement | null;
-  offer: HTMLElement | null;
   ladder: HTMLElement | null;
 }
 
@@ -247,8 +213,8 @@ function div(cls: string): HTMLElement {
 // The sheet's parts in the document's order, which is the order Tab walks
 // them in (the grid places them by name, whatever the order): the result
 // and its buttons first, the 5v5's ladder next (it stands under the
-// result), then the table, the side column and the battle royale's offer.
-export const END_ORDER = ['lead', 'ladder', 'table', 'side', 'offer'] as const;
+// result), then the table and the side column.
+export const END_ORDER = ['lead', 'ladder', 'table', 'side'] as const;
 
 // Fills a card's root (the battle royale's screen, the HUD's overlay) with
 // the sheet of boxes.
@@ -270,14 +236,12 @@ export function fillEndScreen(root: HTMLElement, card: EndCard, parts: EndParts)
     side.appendChild(b);
   }
   if (parts.foot) side.appendChild(parts.foot);
-  parts.offer?.classList.add('end-box', 'end-offer');
   parts.ladder?.classList.add('end-box');
   const placed: Record<(typeof END_ORDER)[number], HTMLElement | null> = {
     lead,
     ladder: parts.ladder,
     table: parts.table,
     side,
-    offer: parts.offer,
   };
   for (const key of END_ORDER) {
     const part = placed[key];

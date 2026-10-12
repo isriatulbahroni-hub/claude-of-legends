@@ -41,8 +41,7 @@ const SCREENS: readonly { w: number; h: number; compact: boolean }[] = [
   { w: 844, h: 390, compact: true },
 ];
 
-// Every card at its fullest: a Guest's (the account offer, the ladder box
-// with its name field), Respawn's five lines and ten rows with the level
+// Every card at its fullest: the ladder box, Respawn's five lines and ten rows with the level
 // bar and the Grafts, One life's two lines and five rows, the 5v5's match
 // time and the line that says it was not rated (on three lines in a
 // narrow column), both teams.
@@ -53,7 +52,6 @@ const RESPAWN: EndContent = {
   goal: true,
   grafts: true,
   ladder: true,
-  offer: true,
 };
 const ONE_LIFE: EndContent = {
   card: 'royale',
@@ -62,7 +60,6 @@ const ONE_LIFE: EndContent = {
   goal: false,
   grafts: true,
   ladder: true,
-  offer: true,
 };
 const TEAMS: EndContent = {
   card: 'teams',
@@ -71,18 +68,16 @@ const TEAMS: EndContent = {
   goal: false,
   grafts: false,
   ladder: true,
-  offer: true,
 };
-// And lighter: an account's (no offer), a match that banked nothing (no
-// ladder), a card with no Grafts.
+// And lighter: a match that banked nothing (no ladder), a card with no
+// Grafts.
 const CARDS: readonly [string, EndContent][] = [
   ['Respawn', RESPAWN],
   ['One life', ONE_LIFE],
   ['the 5v5', TEAMS],
-  ["an account's Respawn", { ...RESPAWN, offer: false }],
-  ["an account's 5v5", { ...TEAMS, offer: false }],
-  ['a 5v5 that banked nothing', { ...TEAMS, ladder: false, offer: false }],
-  ['One life with no Grafts', { ...ONE_LIFE, grafts: false, offer: false }],
+  ['a Respawn that banked nothing', { ...RESPAWN, ladder: false }],
+  ['a 5v5 that banked nothing', { ...TEAMS, ladder: false }],
+  ['One life with no Grafts', { ...ONE_LIFE, grafts: false }],
 ];
 
 const inside = (outer: ScreenBox, inner: ScreenBox): boolean =>
@@ -104,7 +99,6 @@ const named = (b: EndBoxes): [string, ScreenBox][] => {
   if (b.progress) out.push(['level bar', b.progress]);
   if (b.table) out.push(['table', b.table]);
   if (b.ladder) out.push(['ladder', b.ladder]);
-  if (b.offer) out.push(['offer', b.offer]);
   if (b.join) out.push(['Discord line', b.join]);
   return out;
 };
@@ -175,14 +169,11 @@ describe('the end screens', () => {
           expect((b.ladder ?? b.feedback).top).toBe(b.head.top);
         } else {
           // The scoreboard twice as wide as the columns beside it, the
-          // offer heading the right one.
+          // feedback box heading the right one.
           expect(width(table)).toBeCloseTo(2 * width(b.head));
           expect(table.right).toBeLessThanOrEqual(b.feedback.left);
           expect(width(b.feedback)).toBeCloseTo(width(b.head));
-          if (b.offer) {
-            expect(b.offer.top).toBe(b.head.top);
-            expect(b.offer.left).toBe(b.feedback.left);
-          }
+          expect(b.feedback.top).toBe(b.head.top);
         }
         // Every column reaches the sheet's foot, so the grid has no hole.
         expect(Math.max(...named(b).map(([, x]) => x.bottom))).toBeCloseTo(b.sheet.bottom);
@@ -209,17 +200,17 @@ describe('the end screens', () => {
     expect(none.table!.bottom).toBeCloseTo(none.sheet.bottom);
   });
 
-  it("lays the battle royale's offer under the ranking and the ladder on a desktop", () => {
-    const b = endBoxes(1280, 720, false, RESPAWN);
-    const offer = b.offer!;
-    expect(offer.left).toBe(b.table!.left);
-    expect(offer.right).toBe(b.feedback.right);
-    expect(offer.top).toBeGreaterThanOrEqual(Math.max(b.table!.bottom, b.feedback.bottom));
-    // On a phone under the ranking alone, which gives up its height.
-    const p = endBoxes(844, 390, true, RESPAWN);
-    expect(p.offer!.left).toBe(p.table!.left);
-    expect(p.offer!.right).toBe(p.table!.right);
-    expect(p.feedback.bottom).toBeCloseTo(p.sheet.bottom);
+  it("lays the battle royale's ladder over the feedback box beside the ranking", () => {
+    for (const s of SCREENS) {
+      const b = endBoxes(s.w, s.h, s.compact, RESPAWN);
+      expect(b.kind).toBe('wide');
+      expect(b.ladder!.left).toBe(b.feedback.left);
+      expect(b.ladder!.top).toBe(b.table!.top);
+      expect(b.feedback.top).toBeGreaterThan(b.ladder!.bottom);
+      // Nothing under the ranking: every column reaches the sheet's foot.
+      expect(b.table!.bottom).toBeCloseTo(b.sheet.bottom);
+      expect(b.feedback.bottom).toBeCloseTo(b.sheet.bottom);
+    }
   });
 
   it('shows the whole ranking and both teams on every desktop, tightened on a short one', () => {
@@ -236,12 +227,14 @@ describe('the end screens', () => {
   });
 
   it('lets the table give up its height before anything else on a short screen', () => {
-    // A phone with its browser's bars: the ranking scrolls in its box, the
-    // result and its buttons stay whole on the first screen.
+    // A phone with its browser's bars: the table scrolls in its box when
+    // its rows want more than the room (the scoreboard's both teams; the
+    // ranking's ten rows just fit), the result and its buttons stay whole
+    // on the first screen.
     for (const c of [RESPAWN, TEAMS]) {
       const b = endBoxes(844, 340, true, c);
       expect(b.kind).toBe('wide');
-      expect(b.tableScrolls).toBe(true);
+      expect(b.tableScrolls).toBe(c.card === 'teams');
       expect(height(b.head)).toBeGreaterThanOrEqual(headHeight(PHONE_END, c, width(b.head)));
       for (const button of b.buttons) expect(inside(screen(844, 340), button)).toBe(true);
       apart(named(b));
@@ -305,13 +298,12 @@ describe('the end screens', () => {
     }
     expect(css).toContain(`@container end (height < ${DESKTOP_END.tallFrom}px)`);
     // The 5v5's scoreboard twice as wide as the columns beside it; the
-    // battle royale's offer under the ranking and the side column on a
-    // desktop, under the ranking alone on a phone.
+    // battle royale's three columns on one row.
     expect(css).toContain(
       `.teams {\n    grid-template-areas: 'lead table side';\n    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);`,
     );
-    expect(css).toContain(`grid-template-areas: 'lead table side' 'lead offer offer';`);
-    expect(css).toContain(`grid-template-areas: 'lead table side' 'lead offer side';`);
+    expect(css).toContain(`grid-template-rows: 1fr; grid-template-areas: 'lead table side';`);
+    expect(css).not.toContain('offer');
     expect(css).toContain('container: end / size');
     expect(END_SCREEN_CSS).toContain(css);
     // The icons never drawn larger than they are.

@@ -1,8 +1,10 @@
 // The ladder box, on the end screen and in the pause menu of a match that
 // scores (ADR 0027): where the player stands on the ladder of every human,
-// "You are #N on the ladder with P points", and for a Guest the name
-// beside those points, with a field to change it. An account has no field:
-// its name there is its account's. Reads /api/public/ladder (the reader's
+// "You are #N on the ladder with P points", and in the pause menu, for a
+// Guest, the name beside those points with a field to change it. An
+// account has no field: its name there is its account's. The end screen's
+// box shows the place and the level alone: the name is changed from the
+// landing's own panel. Reads /api/public/ladder (the reader's
 // own place rides on it) and writes /api/ladder/name; a refusal is shown
 // in the server's own words. The words are pure (ui/points_text.ts); this
 // is the drawing, built with the caller's element maker so the HUD's
@@ -88,6 +90,9 @@ export interface LadderBox {
 export interface LadderBoxOptions {
   fetchPlace?: () => Promise<LadderPlace | null>;
   saveName?: (name: string) => Promise<SaveOutcome>;
+  // false: the place and the level alone, without the name's hint and
+  // field (the end screen's box).
+  rename?: boolean;
 }
 
 export function buildLadderBox(
@@ -116,15 +121,19 @@ export function buildLadderBox(
   const row = el('div', 'hud-ladder-row');
   row.append(field, save);
   const status = el('div', 'hud-ladder-status');
-  root.append(line, level, hint, row, status);
+  const rename = opts.rename !== false;
+  root.append(line, level);
+  if (rename) root.append(hint, row, status);
 
   const show = (at: LadderPlace): void => {
     place.textContent = placeText(at);
     level.textContent = levelText(at.points);
     hint.textContent = nameHint(at);
-    row.hidden = !at.guest;
+    row.hidden = !rename || !at.guest;
     // Never under the fingers of someone typing.
-    if (at.guest && document.activeElement !== field) field.value = nameSuggestion(at);
+    if (rename && at.guest && document.activeElement !== field) {
+      field.value = nameSuggestion(at);
+    }
     root.hidden = false;
   };
   const refresh = (): void => {

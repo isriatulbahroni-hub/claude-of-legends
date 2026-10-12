@@ -17,7 +17,6 @@ import { followThumbScale, followUiScale, SETTINGS_EVENT } from '../game/ui_scal
 import type { PointsReason } from '../net/protocol';
 import { ownGraceFloor, type RoyaleNote } from '../net/royale_client';
 import type { RoyaleResult } from '../net/royale_wire';
-import { trackStep } from '../net/stats';
 import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
 import { championPortraitUrl } from '../render/portraits';
 import type { Status } from '../sim/combat/status';
@@ -51,7 +50,6 @@ import type { AbilityKey, TeamId, Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
 import { abilityIconUrl, passiveIconUrl, sigilIconUrl } from './ability_icons';
-import { accountOffer, OFFER_CALL } from './account_offer';
 import { chargeFace } from './charge_face';
 import {
   AuraWatch,
@@ -66,7 +64,7 @@ import {
 import { seatShops } from './coach_bar';
 import { COMPACT_ROW_GAP, COMPACT_SCALE, compactTapsCss } from './compact_taps';
 import { setText } from './dom_write';
-import { END_OFFER_CLASS, fillEndScreen } from './end_screen';
+import { fillEndScreen } from './end_screen';
 import {
   buildFeedbackBox,
   FEEDBACK_ASK,
@@ -1358,7 +1356,8 @@ export class Hud {
   private readonly portrait: MediaQueryList | null;
   private readonly onSettings: () => void;
   private endPlayed = false;
-  // No account behind this match (ui/account_offer.ts).
+  // No account behind this match: a Guest's (ADR 0024) or a visitor's
+  // practice.
   private readonly guest: boolean;
   // The two feedback boxes (ui/feedback_box.ts) and whether this match has
   // already had its line: one is asked for, not one per place it is asked.
@@ -1396,9 +1395,6 @@ export class Hud {
   // own), and what pressing it does, handed in by the host (game/boot.ts).
   private recallSlot: HTMLElement | null = null;
   private recallPress: (() => void) | null = null;
-  private readonly endOffer: HTMLElement;
-  private readonly endOfferLine: HTMLElement;
-  private readonly endOfferReason: HTMLElement;
   private lastTowerCount: number | null = null;
   private readonly rootEl: HTMLElement;
   // A touchscreen: the compact layout, and the one that may need the
@@ -2058,20 +2054,6 @@ export class Hud {
     this.endSub = el('div', 'hud-end-sub');
     this.endRating = el('div', 'hud-end-rating');
     this.endStats = el('div', 'hud-end-card');
-    // The account offer (ui/account_offer.ts): filled at the end of a
-    // visitor's practice match, never opened for an account.
-    this.endOffer = el('div', END_OFFER_CLASS);
-    const offerWords = el('div', 'hud-end-offer-words');
-    this.endOfferLine = el('b', '');
-    this.endOfferReason = el('span', '');
-    offerWords.append(this.endOfferLine, this.endOfferReason);
-    const offerBtn = el('button', 'hud-menu-btn', OFFER_CALL);
-    offerBtn.addEventListener('click', () => {
-      // The pace between playing and the form (net/stats.ts).
-      trackStep('offer');
-      onExit('account');
-    });
-    this.endOffer.append(offerWords, offerBtn);
     const endAgain = el('button', 'hud-menu-btn primary', 'Play again');
     endAgain.addEventListener('click', () => {
       // The rematch may reuse the last pick and skip the lock-in click, so
@@ -2099,21 +2081,20 @@ export class Hud {
     // since the end screen is where a match is over and there is nothing
     // left to interrupt.
     this.endFeedback = this.buildFeedback('end');
-    // Where the player stands on the ladder of every human, and a Guest's
-    // name beside the points (ui/ladder_box.ts, ADR 0027): right under the
-    // result, since it is the result that stays.
-    this.endLadder = buildLadderBox(el);
+    // Where the player stands on the ladder of every human (ui/ladder_box.ts,
+    // ADR 0027): right under the result, since it is the result that
+    // stays. The place and the level alone: a Guest's name is changed on
+    // the landing's own panel, and in the pause menu's box.
+    this.endLadder = buildLadderBox(el, { rename: false });
     this.pauseLadder = buildLadderBox(el);
     // Its boxes laid over the screen (ui/end_screen.ts): the result over
-    // the ladder, the scoreboard, the offer over the feedback box over the
-    // Discord line.
+    // the ladder, the scoreboard, the feedback box over the Discord line.
     fillEndScreen(this.endOverlay, 'teams', {
       head: this.endHead,
       lead: [],
       table: this.endStats,
-      side: [this.endOffer, this.endFeedback.root],
+      side: [this.endFeedback.root],
       foot: endJoin,
-      offer: null,
       ladder: this.endLadder.root,
     });
 
@@ -2250,8 +2231,8 @@ export class Hud {
   }
 
   // The battle royale's end screen, when the server says this person is
-  // out for good or the match is over (RoyaleResult). The ladder box, the
-  // account offer and the feedback box move under it from the 5v5's end
+  // out for good or the match is over (RoyaleResult). The ladder box and
+  // the feedback box move under it from the 5v5's end
   // screen, which a battle royale never opens.
   showRoyaleResult(result: RoyaleResult): void {
     if (!this.royale) return;
@@ -2261,25 +2242,7 @@ export class Hud {
       this.endLadder.refresh();
       extras.push(this.endLadder.root);
     }
-    const won = result.place === 1;
     const own = this.world.scoreboard().find((r) => r.unitId === this.selfId);
-    const me = this.world.units.get(this.selfId);
-    const def = me?.championId ? this.world.championDef(me.championId) : null;
-    const offer = accountOffer({
-      guest: this.guest,
-      scored: this.scores(),
-      won,
-      kills: own?.kills ?? result.score,
-      deaths: own?.deaths ?? 0,
-      assists: own?.assists ?? 0,
-      champion: def?.name ?? null,
-    });
-    if (offer) {
-      this.endOfferLine.textContent = offer.line;
-      this.endOfferReason.textContent = offer.reason;
-      this.endOffer.classList.add('open');
-      extras.push(this.endOffer);
-    }
     extras.push(this.endFeedback.root);
     // Respawn's best (ui/royale_result.ts cardBest): the one the line kept
     // before this match goes on the card, as the server sends it, else the
@@ -3800,24 +3763,8 @@ export class Hud {
       // rather than a thinner second one.
       this.endStats.textContent = '';
       const rows = this.world.scoreboard();
-      const own = rows.find((r) => r.unitId === this.selfId);
-      const def = u.championId ? this.world.championDef(u.championId) : null;
       // The place the match left the player on the ladder, when it scored.
       if (this.scores()) this.endLadder.refresh();
-      const offer = accountOffer({
-        guest: this.guest,
-        scored: this.scores(),
-        won: winner === this.selfTeam,
-        kills: own?.kills ?? 0,
-        deaths: own?.deaths ?? 0,
-        assists: own?.assists ?? 0,
-        champion: def?.name ?? null,
-      });
-      if (offer) {
-        this.endOfferLine.textContent = offer.line;
-        this.endOfferReason.textContent = offer.reason;
-        this.endOffer.classList.add('open');
-      }
       for (const t of [0, 1] as const) {
         const box = document.createElement('div');
         box.className = `hud-score-team ${t === 0 ? 'blue' : 'red'}`;

@@ -16,13 +16,13 @@ describe('after a battle royale', () => {
     expect(royaleNext('other', 'one_life')).toEqual({ to: 'match', variant: 'respawn' });
   });
 
-  it('leaves for home on the menu, and for the form on the account offer', () => {
+  it('leaves for home on the menu', () => {
     expect(royaleNext('menu', 'respawn')).toEqual({ to: 'home' });
-    expect(royaleNext('account', 'one_life')).toEqual({ to: 'register' });
+    expect(royaleNext('menu', 'one_life')).toEqual({ to: 'home' });
   });
 
   it('is home for the outer loop once its own loop is over', () => {
-    for (const action of ['menu', 'again', 'account', 'other'] as const) {
+    for (const action of ['menu', 'again', 'other'] as const) {
       expect(nextStep(action, 'royale')).toBe('home');
     }
     // Outside a battle royale there is no other rule set to try.

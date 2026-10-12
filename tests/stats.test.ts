@@ -146,7 +146,7 @@ describe('what an address is reduced to', () => {
 
 describe('the events', () => {
   it('name what the privacy page names', () => {
-    expect([...STATS_STEPS]).toEqual(['stayed', 'played', 'offer', 'form', 'account']);
+    expect([...STATS_STEPS]).toEqual(['stayed', 'played', 'form', 'account']);
   });
 
   it('reach the tracker when there is one, and nobody otherwise', () => {

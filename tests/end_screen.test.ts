@@ -14,11 +14,11 @@ const read = (file: string): string => readFileSync(path.join(ROOT, file), 'utf8
 
 describe('the end screen', () => {
   it('is walked by Tab from the result and its buttons, the ladder next', () => {
-    // The 5v5's ladder stands under the result: its name field is the
-    // next stop after the buttons, not the last one on the screen.
+    // The 5v5's ladder stands under the result: the place on the ladder
+    // is read right after the buttons, not last on the screen.
     expect(END_ORDER[0]).toBe('lead');
     expect(END_ORDER[1]).toBe('ladder');
-    expect([...END_ORDER].sort()).toEqual(['ladder', 'lead', 'offer', 'side', 'table']);
+    expect([...END_ORDER].sort()).toEqual(['ladder', 'lead', 'side', 'table']);
     expect(read('src/ui/end_screen.ts')).toContain('for (const key of END_ORDER)');
   });
 

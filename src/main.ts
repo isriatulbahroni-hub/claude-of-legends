@@ -98,7 +98,7 @@ import { takeDiscordResult } from './ui/discord_entry';
 import { takeConfirmResult } from './ui/email_status';
 import { preloadBackdrop } from './ui/home_backdrop';
 import { HOME_SECTION_KEYS, type HomeChoice, showHome } from './ui/home_screen';
-import { type LandingIntent, showLanding } from './ui/landing';
+import { showLanding } from './ui/landing';
 import type { LandingPlay } from './ui/landing_modes';
 import {
   type BotPick,
@@ -298,8 +298,7 @@ async function fetchBots(): Promise<BotPick[]> {
 
 // One offline practice match on the Star Orchard; resolves with the exit
 // the player chose.
-// `guest` when no account is behind it: the end screen then makes the
-// account offer (ui/account_offer.ts).
+// `guest` when no account is behind it.
 async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAction> {
   const loaded = await loadOrchard(pick.forged ? [pick.forged.id] : []);
   if (!loaded) return 'menu';
@@ -857,8 +856,7 @@ async function runSpectate(matchId: number, team: TeamId): Promise<PostMatchActi
 
 // One online session (queue or lobby, select, match); resolves with the
 // exit the player chose, or 'menu' when the connection story ends it.
-// `guest` when a Guest plays it (ADR 0024): the end screen then makes the
-// account offer, as it does after a practice match.
+// `guest` when a Guest plays it (ADR 0024).
 async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAction> {
   const orchard = await loadOrchardRecords();
   if (!orchard) return 'menu';
@@ -1653,8 +1651,7 @@ async function playAsGuest(guestName: string, play: LandingPlay): Promise<PostMa
 
 // Battle royales back to back (game/royale_flow.ts): the quick pick once,
 // then Play again and the other rule set straight into the next match with
-// the same pick. Resolves with the exit that left the loop: home, or the
-// account offer taken.
+// the same pick. Resolves with the exit that left the loop.
 async function royaleLoop(variant: RoyaleVariant, guest: boolean): Promise<PostMatchAction> {
   const pick = await pickForRoyale(variant);
   if (!pick) return 'menu';
@@ -1663,7 +1660,7 @@ async function royaleLoop(variant: RoyaleVariant, guest: boolean): Promise<PostM
     const action = await runRoyale(rules, pick, guest);
     const next = royaleNext(action, rules);
     if (next.to === 'match') rules = next.variant;
-    else return next.to === 'register' ? 'account' : 'menu';
+    else return 'menu';
   }
 }
 
@@ -1736,9 +1733,6 @@ async function boot(): Promise<void> {
   // The roster's illustrations, so the select screen opens with its cards
   // whole rather than filling in one by one.
   warmChampionArt();
-  // Why the landing comes back, when it does: the account offer taken at
-  // the end of a practice match opens it on the register tab.
-  let landingIntent: LandingIntent | null = null;
 
   for (;;) {
     // The way in (ADR 0006): everything but the offline practice match
@@ -1746,8 +1740,7 @@ async function boot(): Promise<void> {
     // screen rather than beside it. An invite code survives the detour and
     // lands in the join field on the other side.
     if (account === null) {
-      const entry = await showLanding(container, discordResult, landingIntent);
-      landingIntent = null;
+      const entry = await showLanding(container, discordResult);
       if (entry.kind === 'account') {
         // Signing in starts the page over rather than swapping the home
         // screen in over the landing (game/reentry.ts): the session
@@ -1763,8 +1756,7 @@ async function boot(): Promise<void> {
       if (entry.kind === 'guest') {
         const guestName = await openGuest();
         if (guestName !== null) {
-          const action = await playAsGuest(guestName, entry.play);
-          if (action === 'account') landingIntent = 'register';
+          await playAsGuest(guestName, entry.play);
           continue;
         }
       }
@@ -1777,7 +1769,6 @@ async function boot(): Promise<void> {
       if (!pick) continue;
       let action: PostMatchAction = 'again';
       while (action === 'again') action = await runOffline(pick, true);
-      if (action === 'account') landingIntent = 'register';
       continue;
     }
     if (joinCode !== null) next = { name: account.name, mode: 'join', code: joinCode };

@@ -100,11 +100,10 @@ it, and everything it takes away before a record leaves your browser.
 - The page that linked you here, as your browser reports it in the
   referrer header, which is how a Reddit thread can be told from a search
   result. Its query is stripped the same way.
-- Five events, each at most once per page: `stayed` (still here 30
+- Four events, each at most once per page: `stayed` (still here 30
   seconds later), `played` (a match started in this browser: practice, test
   drive or live game, never a replay, which is watching rather than
-  playing), `offer` (the account offer at the end of a practice match,
-  taken), `form` (the register tab opened) and `account` (an account
+  playing), `form` (the register tab opened) and `account` (an account
   created here). And one when a match ends for this browser: `finished`
   (the match had a winner) or `left` (you walked out, or closed the page,
   before one), carrying how many minutes it had run and whether it was

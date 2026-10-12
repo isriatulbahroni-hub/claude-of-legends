@@ -23,7 +23,7 @@ import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
 import { setPortrait } from './champion_art';
 import { setClassName, setData, setHidden } from './dom_write';
-import { fillEndScreen, isEndOffer } from './end_screen';
+import { fillEndScreen } from './end_screen';
 import { goalBar } from './royale_goal_bar';
 import { RoyaleHudGrafts } from './royale_hud_grafts';
 import { type MomentDeath, RoyaleHudMoments } from './royale_hud_moments';
@@ -717,7 +717,7 @@ export class RoyaleHud {
 
   // The end screen, from the result the server sent, its boxes laid over
   // the screen (ui/end_screen.ts); `extras` are the HUD's own boxes that
-  // belong on it (the ladder, the account offer, the feedback box); `mine`,
+  // belong on it (the ladder, the feedback box); `mine`,
   // what the card reads off this screen (the own assists, the best kept).
   showResult(
     result: RoyaleResult,
@@ -727,15 +727,13 @@ export class RoyaleHud {
     this.endEl?.remove();
     const model = royaleEnd(result, mine);
     const end = el('div', 'br-end');
-    const offer = extras.find(isEndOffer) ?? null;
     const progress = this.endProgress(model);
     fillEndScreen(end, 'royale', {
       head: this.endCard(model, result),
       lead: progress ? [progress] : [],
       table: this.endRank(model),
-      side: extras.filter((x) => x !== offer),
+      side: extras,
       foot: null,
-      offer,
       ladder: null,
     });
     this.host.root.appendChild(end);

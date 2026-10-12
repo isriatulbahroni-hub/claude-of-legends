@@ -414,9 +414,8 @@ The persistent identity a person plays under: one name, unique across the server
 whoever registered it, an email address if its owner adds one, plus the rating and match history
 earned with it.
 Everything on the server but the public queue requires one (ADR 0024: a Guest plays that
-queue without one); the offline practice match does not either, and the end screen of a match
-played without one makes the visitor the account offer: their score, and what an account adds
-to it, their points on every device (ADR 0027). The name is the whole public identity, so nothing is appended to it to tell two people apart, and the address is
+queue without one); the offline practice match does not either, and the landing's own panel
+offers a Guest the account: what it adds, their points on every device (ADR 0027). The name is the whole public identity, so nothing is appended to it to tell two people apart, and the address is
 never part of it: only the account itself ever sees its own.
 _Avoid_: profile (that is the screen that shows an account), user, login, player (ambiguous, see Participant)
 

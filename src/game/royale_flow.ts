@@ -6,21 +6,17 @@
 // champion arriving fresh in its Grace (the server moves nobody at an end,
 // server/royale_service.ts). Try One life or Try Respawn goes straight into
 // the other with the same pick, and everything else leaves the loop for the
-// page it came from (the landing's register tab for the account offer).
+// page it came from.
 
 import type { RoyaleVariant } from '../sim/royale/types';
 import type { PostMatchAction } from './flow';
 
-export type RoyaleNext =
-  | { to: 'match'; variant: RoyaleVariant }
-  | { to: 'home' }
-  | { to: 'register' };
+export type RoyaleNext = { to: 'match'; variant: RoyaleVariant } | { to: 'home' };
 
 export function royaleNext(action: PostMatchAction, variant: RoyaleVariant): RoyaleNext {
   if (action === 'again') return { to: 'match', variant };
   if (action === 'other') {
     return { to: 'match', variant: variant === 'respawn' ? 'one_life' : 'respawn' };
   }
-  if (action === 'account') return { to: 'register' };
   return { to: 'home' };
 }

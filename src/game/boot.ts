@@ -153,8 +153,8 @@ export function startPresentation(
     terrain: RenderTerrain;
     onRenderer?: (renderer: Renderer) => void;
     fullscreen?: boolean;
-    // No account behind this match: the end screen makes the account offer
-    // (ui/account_offer.ts).
+    // No account behind this match: a Guest's (ADR 0024) or a visitor's
+    // practice.
     guest?: boolean;
     // Which mode this match runs in, for the feedback box's context
     // (ui/feedback_box.ts). Practice unless the host says otherwise.

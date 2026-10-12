@@ -15,7 +15,7 @@
 import { POLICY_PERIOD_TICKS } from '../bot_driver';
 import { dealDamage } from '../combat/damage';
 import { addStatus, cancelRecall } from '../combat/status';
-import type { RoyaleSkillId } from '../content/bots/royale_skills';
+import { ROYALE_SKILL_RANK, type RoyaleSkillId } from '../content/bots/royale_skills';
 import { GRAFT_TRIGGERS, recoveryOf, takedownHealOf } from '../content/grafts';
 import { planetTuning } from '../content/royale_tuning';
 import { outOfCombat } from '../favors';
@@ -31,6 +31,15 @@ import { payAssists } from './assists';
 import { burrTakedown, clearBurrs, observeBurr, stepBurrs } from './burr';
 import { drawCacheSpots, openingBy, stepCaches } from './caches';
 import { noteClamor, observeClamors, stepClamors } from './clamors';
+import {
+  besideCrew,
+  byCrews,
+  type CrewSeat,
+  crewLandings,
+  crewLeaders,
+  crewStandings,
+  escortCrewLandings,
+} from './crews';
 import { dealEscorts, ESCORTS, escortLandings, normalizePick, resolveLandings } from './drop';
 import { type DuskSchedule, drawDusk, duskAt, insideCap } from './dusk';
 import { arrive, beginGrace, type Grace, observeGrace, stepGraces } from './grace';
@@ -62,6 +71,7 @@ import {
   wrathOnDeath,
 } from './risings';
 import {
+  compareStanding,
   edgeOfLight,
   type Fallen,
   oneLifeRanking,
@@ -94,6 +104,7 @@ import {
   PLAY_S,
   RESPAWN_S,
   ROYALE_HP_SCALE,
+  type RoyaleCrew,
   type RoyaleEvent,
   type RoyaleState,
   type RoyaleVariant,
@@ -105,6 +116,8 @@ import { beginUpstart, stepUpstarts, type Upstart, upstartOnDeath } from './upst
 export interface RoyaleOptions {
   variant: RoyaleVariant;
   layout: RoyaleLayout;
+  // The crew size (crews.ts); Solo when absent.
+  crew?: RoyaleCrew;
 }
 
 // What a match measured of itself: the numbers a test reads to tell a fun
@@ -157,6 +170,8 @@ export const NEWCOMER_ESCORT_ORDER: readonly RoyaleSkillId[] = ['gentle', 'norma
 
 export class RoyaleMode {
   readonly variant: RoyaleVariant;
+  // The crew size (crews.ts): 1 for Solo, each champion its own team.
+  readonly crew: RoyaleCrew;
   readonly layout: RoyaleLayout;
   readonly ground: RoyaleGround;
   readonly schedule: DuskSchedule;
@@ -209,6 +224,8 @@ export class RoyaleMode {
   };
   private hpBefore = new Map<number, number>();
   private aliveBefore = 0;
+  // One life in Crews: the crews with a champion standing before the tick.
+  private crewsBefore = 0;
   private fallen: Fallen[] = [];
   private fallenKiller = new Map<number, number>();
   private duskHit = new Set<number>();
@@ -217,9 +234,12 @@ export class RoyaleMode {
   private impactHit = new Set<number>();
   private obsTick = -1;
   private obsShared: Pick<ObsRoyale, 'caches' | 'pads' | 'dusk' | 'alive'> | null = null;
+  // Crews: each crew's anchor on the tick observed (ObsRoyale.anchor).
+  private obsAnchors = new Map<number, number>();
 
   constructor(rng: Rng, ground: Ground, options: RoyaleOptions) {
     this.variant = options.variant;
+    this.crew = options.crew ?? 1;
     this.layout = options.layout;
     this.ground = royaleGround(ground);
     const landAt = DROP_S;
@@ -234,6 +254,7 @@ export class RoyaleMode {
     );
     this.state = {
       variant: this.variant,
+      crew: this.crew,
       stage: 'drop',
       dropEndsAt: landAt,
       endsAt: landAt + PLAY_S,
@@ -244,6 +265,9 @@ export class RoyaleMode {
       scores: new Map(),
       eliminated: [],
       winnerId: null,
+      winnerTeam: null,
+      crewScores: new Map(),
+      crewsOut: [],
       leaderId: null,
       leaderShownAt: landAt,
       seedfalls: [],
@@ -402,7 +426,9 @@ export class RoyaleMode {
 
   // The drop's tick: at its end every seat lands, in id order, and house
   // bots come down beside each person (a seat no policy plays): a normal
-  // one first, the gentle first for a newcomer.
+  // one first, the gentle first for a newcomer. In Crews every crew lands
+  // around its leader's pick and a crew of house bots beside each crew
+  // with a person in it (crewDrop).
   stepDrop(sim: Sim): void {
     // The drop's Graft offer (grafts.ts): the tick after a seat's landing
     // pick, in seat order, then at the drop's end for any that made none.
@@ -410,15 +436,7 @@ export class RoyaleMode {
     if (sim.time + 1e-9 < this.state.dropEndsAt) return;
     const seats = this.champions(sim).map((u) => u.id);
     for (const id of seats) offerDrop(this, sim, id);
-    const at = resolveLandings(seats, this.state.drops, sim.rng, this.layout, this.ground);
-    const people = seats.filter((id) => !sim.policies.has(id));
-    const bots = seats.filter((id) => sim.policies.has(id));
-    const groups = dealEscorts(people, bots, ESCORTS[this.variant], (person) => {
-      const order = this.newcomers.has(person) ? NEWCOMER_ESCORT_ORDER : ESCORT_ORDER;
-      const rank = (id: number): number => order.indexOf(this.skillOf(id));
-      return (a, b) => rank(a) - rank(b) || a - b;
-    });
-    escortLandings(groups, at, sim.rng, this.layout, this.ground);
+    const at = this.crew > 1 ? this.crewDrop(sim, seats) : this.soloDrop(sim, seats);
     for (const id of seats) {
       const u = sim.units.get(id)!;
       const p = at.get(id);
@@ -429,16 +447,69 @@ export class RoyaleMode {
     this.state.stage = 'play';
   }
 
+  private soloDrop(sim: Sim, seats: readonly number[]): Map<number, Vec3> {
+    const at = resolveLandings(seats, this.state.drops, sim.rng, this.layout, this.ground);
+    const people = seats.filter((id) => !sim.policies.has(id));
+    const bots = seats.filter((id) => sim.policies.has(id));
+    const groups = dealEscorts(people, bots, ESCORTS[this.variant], (person) => {
+      const order = this.newcomers.has(person) ? NEWCOMER_ESCORT_ORDER : ESCORT_ORDER;
+      const rank = (id: number): number => order.indexOf(this.skillOf(id));
+      return (a, b) => rank(a) - rank(b) || a - b;
+    });
+    escortLandings(groups, at, sim.rng, this.layout, this.ground);
+    return at;
+  }
+
+  // The crews' landing (crews.ts): each crew's leader lands as a seat does
+  // alone, its pick or a quiet spot, the rest of the crew beside it; then a
+  // crew of house bots comes down near each crew with a person in it, the
+  // softest crew first for a crew with a newcomer, else the lowest.
+  private crewDrop(sim: Sim, seats: readonly number[]): Map<number, Vec3> {
+    const crewSeats: CrewSeat[] = seats.map((id) => ({
+      id,
+      team: sim.units.get(id)!.team,
+      person: !sim.policies.has(id),
+    }));
+    const leaders = crewLeaders(crewSeats, this.state.drops);
+    const leaderIds = [...leaders.values()].sort((a, b) => a - b);
+    const at = resolveLandings(leaderIds, this.state.drops, sim.rng, this.layout, this.ground);
+    crewLandings(crewSeats, leaders, at, sim.rng, this.layout, this.ground);
+    const withPeople = new Set(crewSeats.filter((c) => c.person).map((c) => c.team));
+    const newcomerCrews = new Set(
+      crewSeats.filter((c) => this.newcomers.has(c.id)).map((c) => c.team),
+    );
+    const teams = [...leaders.keys()];
+    const softness = new Map<number, number>();
+    for (const c of crewSeats) {
+      const rank = ROYALE_SKILL_RANK[this.skillOf(c.id)];
+      softness.set(c.team, (softness.get(c.team) ?? 0) + rank);
+    }
+    const groups = dealEscorts(
+      teams.filter((t) => withPeople.has(t)),
+      teams.filter((t) => !withPeople.has(t)),
+      1,
+      (team) =>
+        newcomerCrews.has(team)
+          ? (a, b) => (softness.get(a) ?? 0) - (softness.get(b) ?? 0) || a - b
+          : (a, b) => a - b,
+    );
+    escortCrewLandings(groups, crewSeats, leaders, at, sim.rng, this.layout, this.ground);
+    return at;
+  }
+
   beforeTick(sim: Sim): void {
     stepGraces(this, sim);
     stepUpstarts(this, sim);
     this.hpBefore.clear();
     this.aliveBefore = 0;
+    const crews = new Set<number>();
     for (const u of sim.units.values()) {
       if (u.kind !== 'champion' || u.dead) continue;
       this.hpBefore.set(u.id, u.hp);
       this.aliveBefore++;
+      crews.add(u.team);
     }
+    this.crewsBefore = crews.size;
     this.fallen = [];
     this.fallenKiller.clear();
     this.duskHit.clear();
@@ -586,6 +657,11 @@ export class RoyaleMode {
         // Respawn's Last light counts it double (last_light.ts).
         const score = pay.score * burr.factor * lastLightFactor(this.state, sim.time);
         this.state.scores.set(taker.id, (this.state.scores.get(taker.id) ?? 0) + score);
+        // A crew scores every takedown its champions land (crews.ts).
+        if (this.crew > 1) {
+          const crews = this.state.crewScores;
+          crews.set(taker.team, (crews.get(taker.team) ?? 0) + score);
+        }
         if (pay.snuffed !== null) {
           this.emit(sim, {
             type: 'royale_snuffed',
@@ -671,12 +747,17 @@ export class RoyaleMode {
     return this.variant === 'respawn' ? RESPAWN_S : Number.POSITIVE_INFINITY;
   }
 
+  // In Crews a return with no pick that would do comes back beside a
+  // crewmate standing clear of any fight (crews.ts besideCrew), else at the
+  // edge; the clearance and the edge read the other crews only, in Solo
+  // every other champion.
   respawnPoint(u: Unit, sim: Sim): Vec3 | null {
     if (this.variant !== 'respawn' || this.state.stage !== 'play') return null;
     const enemies: Vec3[] = [];
+    const mates: Vec3[] = [];
     for (const o of sim.units.values()) {
       if (o.kind !== 'champion' || o.dead || o.id === u.id || o.pos.y === undefined) continue;
-      enemies.push(o.pos as Vec3);
+      (o.team === u.team ? mates : enemies).push(o.pos as Vec3);
     }
     const cap = returnCap(this.state.dusk);
     const pick = this.state.respawnPicks.get(u.id);
@@ -686,6 +767,10 @@ export class RoyaleMode {
       this.tally.returnsPicked++;
       return at;
     }
+    if (this.crew > 1) {
+      const beside = besideCrew(sim.rng, cap, mates, enemies, this.layout, this.ground);
+      if (beside) return beside;
+    }
     return edgeOfLight(sim.rng, cap, enemies, this.layout, this.ground);
   }
 
@@ -693,7 +778,9 @@ export class RoyaleMode {
   stepAfterDeaths(sim: Sim): void {
     const time = sim.time;
     const s = this.state;
-    if (this.variant === 'one_life' && this.fallen.length > 0) {
+    if (this.variant === 'one_life' && this.fallen.length > 0 && this.crew > 1) {
+      this.crewsFallen(sim);
+    } else if (this.variant === 'one_life' && this.fallen.length > 0) {
       for (const { id, place } of placeFallen(this.fallen, this.aliveBefore)) {
         if (place === 1) {
           s.winnerId = id;
@@ -754,19 +841,79 @@ export class RoyaleMode {
     stepLastLight(this, sim);
     // The end.
     if (s.stage !== 'play') return;
-    if (this.variant === 'one_life') {
+    if (this.variant === 'one_life' && this.crew > 1) {
+      const standing = this.crewsStanding(sim);
+      if (standing.length === 1) s.winnerTeam = standing[0]!;
+      if (standing.length <= 1) this.finish(sim);
+    } else if (this.variant === 'one_life') {
       const alive = this.champions(sim).filter((u) => !u.dead);
       if (alive.length === 1) s.winnerId = alive[0]!.id;
       if (alive.length <= 1) this.finish(sim);
     } else if (time + 1e-9 >= s.endsAt) {
-      s.winnerId = respawnRanking(this.standings(sim))[0] ?? null;
+      if (this.crew > 1) s.winnerTeam = this.crewRanking(sim)[0] ?? null;
+      else s.winnerId = respawnRanking(this.standings(sim))[0] ?? null;
       this.finish(sim);
     }
   }
 
+  // One life in Crews, after the deaths: every champion fallen this tick is
+  // out for good, worst first as in Solo; a crew whose last champion fell
+  // is out, the crews out on one tick placed by the most health one of
+  // their fallen had before it (score.ts placeFallen over crews), the best
+  // of them the winner when no crew is left. Each champion of a crew out is
+  // told its crew's place, with whoever took its last champion down.
+  private crewsFallen(sim: Sim): void {
+    const s = this.state;
+    const order = [...this.fallen].sort((a, b) => a.hpBefore - b.hpBefore || b.id - a.id);
+    for (const f of order) {
+      s.eliminated.push(f.id);
+      clearOffers(this, f.id);
+    }
+    const standing = new Set(this.crewsStanding(sim));
+    const out = new Map<number, Fallen>();
+    const killers = new Map<number, number>();
+    for (const f of order) {
+      const team = sim.units.get(f.id)?.team;
+      if (team === undefined || standing.has(team)) continue;
+      const had = out.get(team);
+      if (!had || f.hpBefore > had.hpBefore) out.set(team, { id: team, hpBefore: f.hpBefore });
+      killers.set(team, this.fallenKiller.get(f.id) ?? 0);
+    }
+    for (const { id: team, place } of placeFallen([...out.values()], this.crewsBefore)) {
+      if (place === 1) {
+        s.winnerTeam = team;
+        continue;
+      }
+      s.crewsOut.push(team);
+      const killerId = killers.get(team) ?? 0;
+      for (const u of this.champions(sim)) {
+        if (u.team === team) this.emit(sim, { type: 'royale_out', unitId: u.id, killerId, place });
+      }
+    }
+  }
+
+  // The crews with a champion standing, by team.
+  crewsStanding(sim: Sim): number[] {
+    const out = new Set<number>();
+    for (const u of this.champions(sim)) if (!u.dead) out.add(u.team);
+    return [...out].sort((a, b) => a - b);
+  }
+
+  // The end: in Crews the winner is the winning crew's best champion (the
+  // first of it in the ranking), in Solo the winning crew is the winner's.
   private finish(sim: Sim): void {
-    this.state.stage = 'over';
-    this.emit(sim, { type: 'royale_end', winnerId: this.state.winnerId });
+    const s = this.state;
+    if (this.crew > 1) {
+      const team = s.winnerTeam;
+      s.winnerId =
+        team === null
+          ? null
+          : (this.ranking(sim).find((id) => sim.units.get(id)?.team === team) ?? null);
+    } else if (s.winnerId !== null) {
+      s.winnerTeam = sim.units.get(s.winnerId)?.team ?? null;
+    }
+    s.stage = 'over';
+    this.emit(sim, { type: 'royale_end', winnerId: s.winnerId });
   }
 
   standings(sim: Sim): Standing[] {
@@ -777,9 +924,33 @@ export class RoyaleMode {
     }));
   }
 
+  // The crews' order, best first, by team: in Respawn by the crew's score
+  // (then its deaths, then the lower team); in One life the winning crew,
+  // the crews still standing by the most health one of them has (when it
+  // is cut short), then the crews out, the last out first.
+  crewRanking(sim: Sim): number[] {
+    const champs = this.champions(sim);
+    if (this.variant === 'respawn') {
+      return respawnRanking(crewStandings(champs, this.state.crewScores));
+    }
+    const s = this.state;
+    const best = new Map<number, number>();
+    for (const u of champs) {
+      if (u.dead) continue;
+      best.set(u.team, Math.max(best.get(u.team) ?? 0, u.hp));
+    }
+    const standing = [...best.keys()]
+      .filter((t) => t !== s.winnerTeam)
+      .sort((a, b) => (best.get(b) ?? 0) - (best.get(a) ?? 0) || a - b);
+    const out = [...s.crewsOut].reverse().filter((t) => t !== s.winnerTeam);
+    return [...(s.winnerTeam !== null ? [s.winnerTeam] : []), ...standing, ...out];
+  }
+
   // The final order, best first: by score in Respawn, by survival in One
   // life (the ones still standing first, by health, when it is cut short).
+  // In Crews crew by crew (crewRanking), and within a crew the same way.
   ranking(sim: Sim): number[] {
+    if (this.crew > 1) return this.crewMembersRanking(sim);
     if (this.variant === 'respawn') return respawnRanking(this.standings(sim));
     const out = oneLifeRanking(this.state.winnerId, this.state.eliminated);
     const listed = new Set(out);
@@ -790,6 +961,27 @@ export class RoyaleMode {
     return this.state.winnerId === null
       ? [...standing, ...out]
       : [out[0]!, ...standing, ...out.slice(1)];
+  }
+
+  private crewMembersRanking(sim: Sim): number[] {
+    const champs = this.champions(sim);
+    const byId = new Map(champs.map((u) => [u.id, u]));
+    const stand = new Map(this.standings(sim).map((st) => [st.id, st]));
+    const outAt = new Map(this.state.eliminated.map((id, i) => [id, i]));
+    const within =
+      this.variant === 'respawn'
+        ? (a: number, b: number) => compareStanding(stand.get(a)!, stand.get(b)!)
+        : (a: number, b: number) => {
+            const oa = outAt.get(a);
+            const ob = outAt.get(b);
+            if (oa === undefined && ob === undefined) {
+              return (byId.get(b)?.hp ?? 0) - (byId.get(a)?.hp ?? 0) || a - b;
+            }
+            if (oa === undefined) return -1;
+            if (ob === undefined) return 1;
+            return ob - oa;
+          };
+    return byCrews(this.crewRanking(sim), champs, within);
   }
 
   // The champions still in: alive in One life, every seat in Respawn.
@@ -820,6 +1012,7 @@ export class RoyaleMode {
         pads: s.pads,
         alive: this.alive(sim),
       };
+      this.obsAnchors = this.crew > 1 ? this.anchors(sim) : new Map();
     }
     const opening = openingBy(s.caches, u.id);
     const drop = (s.stage === 'drop' ? s.drops.get(u.id) : s.respawnPicks.get(u.id)) ?? null;
@@ -853,7 +1046,26 @@ export class RoyaleMode {
       ...observeBurr(this, sim, u),
       ...observeClamors(this, sim, u),
       ...observeGrace(this, sim, u),
+      ...(this.crew > 1 ? { anchor: this.obsAnchors.get(u.team) ?? null } : {}),
     };
+  }
+
+  // Each crew's anchor (ObsRoyale.anchor), by team: its first champion
+  // standing that a person plays, else its first standing, in unit id
+  // order. Nothing outside the crew reads it: the house brain keeps to it
+  // (bot/brain.ts regroup).
+  anchors(sim: Sim): Map<number, number> {
+    const out = new Map<number, number>();
+    const person = new Set<number>();
+    for (const u of this.champions(sim)) {
+      if (u.dead) continue;
+      const mine = !sim.policies.has(u.id);
+      if (!out.has(u.team) || (mine && !person.has(u.team))) {
+        out.set(u.team, u.id);
+        if (mine) person.add(u.team);
+      }
+    }
+    return out;
   }
 
   // The mode's moving parts as plain data, and back (the sim's world

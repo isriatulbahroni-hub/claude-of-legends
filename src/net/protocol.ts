@@ -476,9 +476,10 @@ export type ServerMsg =
       // The match's team count (ADR 0030); absent for the 5v5's two.
       teams?: number;
       // A battle royale on the Wanderseed (ADR 0031): its variant and how
-      // many seats it holds. A new one on the same socket (Respawn's next
-      // match) starts the mirror over.
-      royale?: { v: RoyaleVariant; seats: number };
+      // many seats it holds, and in Crews the crew size (ADR 0034; absent
+      // in Solo). A new one on the same socket (Respawn's next match)
+      // starts the mirror over.
+      royale?: { v: RoyaleVariant; seats: number; c?: 3 | 5 };
       forged?: ForgedChampionDef[];
       forgedAssets?: Record<string, ForgedMatchAssets>;
     }

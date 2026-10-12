@@ -57,10 +57,12 @@ export function peopleText(n: number): string {
 // the takedowns out, and a drop-in's the gap too ("#4 since you landed"):
 // with it the row reached the points' pop beside the minimap (a playthrough
 // at 844x390, 2026-10-08), the end card telling the near miss instead.
+// In Crews (cw) the count is the crews' (crewCountLine).
 export function countLine(
-  r: Pick<SnapRoyale, 'v' | 'st' | 'alive' | 'people' | 'score' | 'rk' | 'gap' | 'rs'>,
+  r: Pick<SnapRoyale, 'v' | 'st' | 'alive' | 'people' | 'score' | 'rk' | 'gap' | 'rs' | 'cw'>,
   compact = false,
 ): string {
+  if (r.cw) return crewCountLine(r, r.cw, compact);
   if (r.st === 'drop') return `${r.alive} in the match, ${peopleText(r.people)}`;
   const takedowns = takedownsText(r.score ?? 0);
   if (r.v === 'one_life') return `${r.alive} left · ${takedowns}`;
@@ -71,6 +73,41 @@ export function countLine(
     return compact ? rank : `${rank} · ${takedowns} · ${gap}`;
   }
   const rank = `#${r.rk} of ${r.alive}`;
+  return compact ? `${rank} · ${gap}` : `${rank} · ${takedowns} · ${gap}`;
+}
+
+// One life in Crews, on the wash of a champion out for good: where its crew
+// placed once the crew is out, else that it watches the crew fight on.
+export function crewOutLine(place: number | undefined): string {
+  return place ? `Your crew placed ${ordinal(place)}` : 'Your crew fights on: watching them';
+}
+
+export function crewsText(n: number): string {
+  return n === 1 ? '1 crew' : `${n} crews`;
+}
+
+// The count in Crews (ADR 0034). Before anyone lands, the champions and
+// people in the match and how many crews; One life the crews still in
+// and the crew's takedowns, "5 crews left · 7 takedowns"; Respawn the
+// crew's rank among the crews, its takedowns and how far behind the crew
+// above, "Crew #3 of 16 · 12 takedowns · 2 behind #2". On a phone the
+// takedowns are left out.
+export function crewCountLine(
+  r: Pick<SnapRoyale, 'v' | 'st' | 'alive' | 'people' | 'rk' | 'gap'>,
+  cw: { n: number; s: number },
+  compact = false,
+): string {
+  if (r.st === 'drop') {
+    return `${r.alive} in the match, ${peopleText(r.people)} · ${crewsText(cw.n)}`;
+  }
+  const takedowns = takedownsText(cw.s);
+  if (r.v === 'one_life') {
+    const left = `${crewsText(cw.n)} left`;
+    return compact ? left : `${left} · ${takedowns}`;
+  }
+  if (r.rk === undefined) return takedowns;
+  const rank = `Crew #${r.rk} of ${cw.n}`;
+  const gap = gapText(r.rk, r.gap ?? 0);
   return compact ? `${rank} · ${gap}` : `${rank} · ${takedowns} · ${gap}`;
 }
 

@@ -10,7 +10,13 @@ import { CAMPS } from '../src/sim/content/camps';
 import { CHAMPIONS } from '../src/sim/content/champions';
 import type { Vec3 } from '../src/sim/geo';
 import type { Projectile } from '../src/sim/projectiles';
-import { DROP_S, PLAY_S, ROYALE_RULES_VERSION, type RoyaleState } from '../src/sim/royale/types';
+import {
+  DROP_S,
+  PLAY_S,
+  ROYALE_RULES_VERSION,
+  type RoyaleCrew,
+  type RoyaleState,
+} from '../src/sim/royale/types';
 import { type AbilityKey, DT, type ScoreRow, type Vec2 } from '../src/sim/types';
 import { createCamp, createChampion, createWarden, type Unit } from '../src/sim/unit';
 import type { Wall } from '../src/sim/walls';
@@ -64,9 +70,10 @@ export class FakeRoyaleSim implements RoyaleSim {
   readonly pending: RoyaleSimEvent[] = [];
   private nextId = 1;
 
-  constructor(variant: RoyaleVariant) {
+  constructor(variant: RoyaleVariant, crew: RoyaleCrew = 1) {
     this.royale = {
       variant,
+      crew,
       stage: 'drop',
       dropEndsAt: DROP_S,
       endsAt: DROP_S + PLAY_S,
@@ -84,6 +91,9 @@ export class FakeRoyaleSim implements RoyaleSim {
       scores: new Map(),
       eliminated: [],
       winnerId: null,
+      winnerTeam: null,
+      crewScores: new Map(),
+      crewsOut: [],
       leaderId: null,
       leaderShownAt: -999,
       seedfalls: [],
@@ -312,7 +322,12 @@ export class FakeRoyaleSim implements RoyaleSim {
 
 // The factory the service takes, keeping every sim it built for the test.
 export function fakeFactory(): {
-  factory: (seed: number, variant: RoyaleVariant, picks: readonly RoyaleSeatPick[]) => RoyaleBuild;
+  factory: (
+    seed: number,
+    variant: RoyaleVariant,
+    picks: readonly RoyaleSeatPick[],
+    crew?: RoyaleCrew,
+  ) => RoyaleBuild;
   sims: FakeRoyaleSim[];
   picks: (readonly RoyaleSeatPick[])[];
 } {
@@ -322,8 +337,9 @@ export function fakeFactory(): {
     _seed: number,
     variant: RoyaleVariant,
     picks: readonly RoyaleSeatPick[],
+    crew: RoyaleCrew = 1,
   ): RoyaleBuild => {
-    const sim = new FakeRoyaleSim(variant);
+    const sim = new FakeRoyaleSim(variant, crew);
     const unitIds = picks.map((p, i) => {
       const u = sim.addChampion(p.team, p.championId, spot(i, picks.length));
       u.skin = p.skin;
@@ -355,6 +371,7 @@ export function fakeFactory(): {
           guestsOnly: picks.some((p) => p.bot?.softened === true),
           rules: ROYALE_RULES_VERSION,
           ...(newcomers.length > 0 ? { newcomers } : {}),
+          ...(crew !== 1 ? { crew } : {}),
         },
       },
       standIn: (unitId) => {

@@ -1,6 +1,7 @@
 // Entering a battle royale (ADR 0031, ADR 0025's drop in): a person joins
-// the liveliest running match of the variant they asked for while it still
-// takes people, in a bot's seat, and a new match starts for them when none
+// the liveliest running match of the variant and crew size (ADR 0034) they
+// asked for while it still takes people, in a bot's seat (in Crews in the
+// crew with the most people), and a new match starts for them when none
 // does. Respawn takes people until JOIN_UNTIL_END_S before the end; One
 // life only during the drop and the calm, before anyone can have fallen
 // for good. Pure: the service hands in what it knows of its matches. And
@@ -10,6 +11,7 @@ import { type SeatStrength, strongerFirst } from '../src/sim/royale/strength';
 import {
   CALM_S,
   JOIN_UNTIL_END_S,
+  type RoyaleCrew,
   type RoyaleStage,
   type RoyaleVariant,
 } from '../src/sim/royale/types';
@@ -18,6 +20,8 @@ import { loadJson, saveJsonAtomic } from './store';
 export interface RoyaleCandidate {
   matchId: number;
   variant: RoyaleVariant;
+  // The crew size; Solo when absent.
+  crew?: RoyaleCrew;
   stage: RoyaleStage;
   // Sim time now, when everyone lands, and when the last light goes out.
   time: number;
@@ -38,15 +42,16 @@ export function takesPeople(c: RoyaleCandidate): boolean {
   return c.stage === 'drop' || c.time < c.dropEndsAt + CALM_S;
 }
 
-// The match to join, or null to start one: the most people, then the
-// youngest, then the lowest id.
+// The match to join, or null to start one: of the variant and crew size
+// asked, the most people, then the youngest, then the lowest id.
 export function chooseRoyaleMatch(
   candidates: readonly RoyaleCandidate[],
   variant: RoyaleVariant,
+  crew: RoyaleCrew = 1,
 ): number | null {
   let best: RoyaleCandidate | null = null;
   for (const c of candidates) {
-    if (c.variant !== variant || !takesPeople(c)) continue;
+    if (c.variant !== variant || (c.crew ?? 1) !== crew || !takesPeople(c)) continue;
     if (
       !best ||
       c.people > best.people ||
@@ -66,9 +71,13 @@ export interface BotSeatCandidate extends SeatStrength {
   // Down for now (Respawn brings it back), or out for good (One life).
   dead: boolean;
   out: boolean;
+  // Crews only: the people playing in the seat's crew now.
+  crewPeople?: number;
 }
 
-// The seat a drop-in takes: never one out for good; a bot playing the
+// The seat a drop-in takes: never one out for good; in Crews one in the
+// crew with the most people first (ADR 0034: people play together, the
+// champion picked second); a bot playing the
 // champion they picked first, then one standing; within that, when
 // `strongest` (Respawn's RoyaleMatch.takeBotSeat), the strongest seat: the
 // higher level, then the build worth more, then more Grafts held
@@ -84,7 +93,10 @@ export function chooseBotSeat(
   const rank = (s: BotSeatCandidate): number =>
     (s.championId === championId ? 0 : 2) + (s.dead ? 1 : 0);
   const compare = (a: BotSeatCandidate, b: BotSeatCandidate): number =>
-    rank(a) - rank(b) || (strongest ? strongerFirst(a, b) : 0) || a.unitId - b.unitId;
+    (b.crewPeople ?? 0) - (a.crewPeople ?? 0) ||
+    rank(a) - rank(b) ||
+    (strongest ? strongerFirst(a, b) : 0) ||
+    a.unitId - b.unitId;
   for (const s of seats) {
     if (s.out) continue;
     if (!best || compare(s, best) < 0) best = s;

@@ -463,9 +463,15 @@ export class RoyaleHudMoments {
     line.dataset.tier = tier;
     if (k.killerId === selfId || k.unitId === selfId) line.classList.add('mine');
     const dusk = k.killerId === k.unitId || k.killerId === 0;
+    // A crewmate's name in the ally's blue (ADR 0034; none in Solo).
+    const mate = (id: number): boolean =>
+      id !== selfId &&
+      world.units.get(id)?.kind === 'champion' &&
+      world.units.get(id)?.team === selfTeam;
     const who = (id: number, name: string, bot: boolean): HTMLElement => {
       const wrap = el('span', 'br-who');
-      wrap.appendChild(el('span', id === selfId ? 'me' : '', id === selfId ? 'You' : name));
+      const cls = id === selfId ? 'me' : mate(id) ? 'mate' : '';
+      wrap.appendChild(el('span', cls, id === selfId ? 'You' : name));
       if (id !== selfId && bot) wrap.appendChild(el('span', 'br-bot', 'BOT'));
       return wrap;
     };
@@ -664,7 +670,9 @@ export class RoyaleHudMoments {
     const projector = royaleProjector();
     const stage = this.edges.parentElement;
     const seen = new Set<string>();
-    const hunted = r ? huntedTargets(r, this.host.world.time, this.host.selfId) : [];
+    const { world, selfId, selfTeam } = this.host;
+    const crewmate = (id: number): boolean => world.units.get(id)?.team === selfTeam;
+    const hunted = r ? huntedTargets(r, world.time, selfId, crewmate) : [];
     const standing = this.host.world.units.get(this.host.selfId)?.dead === false;
     const burr = standing ? burrTarget(r, this.host.world.time) : null;
     const any = (r?.sf?.length ?? 0) > 0 || hunted.length > 0 || burr !== null;

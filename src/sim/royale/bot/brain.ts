@@ -10,7 +10,8 @@
 // kite between strikes; a low enemy finished; a leaving one chased while
 // it can be caught; never a chase into the Dusk); holding still while a
 // cache opens; ahead of the Dusk's next cap; a winning bot after its
-// target into the bush; a big body in reach it takes on; the calls (a
+// target into the bush; in Crews back to the crew's anchor once too far
+// from it; a big body in reach it takes on; the calls (a
 // gentle bot's care near a mark, a Seedfall, a Clamor, a Rising, its
 // Burr's carrier, the hunt of a mark); the nearest cache; a camp when
 // nothing better is near; a cache or a Seedfall further off, a wander
@@ -198,6 +199,28 @@ function awayFrom(sense: Sense, from: Vec3, len: number): Vec3 {
   const n = norm(rel);
   if (n < 1e-6) return sense.me;
   return along(sense.me, scale(rel, 1 / n) as Vec3, Math.max(0.5, len), R);
+}
+
+// In Crews (ADR 0034): a bot farther than REGROUP_M from its crew's
+// anchor (ObsRoyale.anchor: a person playing in the crew, else its first
+// champion standing) walks back to within REGROUP_NEAR_M of it, unless
+// the anchor stands in the dark; the anchor itself, and every bot in Solo,
+// never. Within the leash the bot loots, takes camps and answers calls as
+// alone, and its crewmates in reach weigh in its odds (fight.ts).
+export const REGROUP_M = 14;
+export const REGROUP_NEAR_M = 5;
+export function regroup(sense: Sense): Action | null {
+  const anchorId = sense.r.anchor;
+  if (anchorId === undefined || anchorId === null || anchorId === sense.s.id) return null;
+  const anchor = sense.allies.find((a) => a.id === anchorId);
+  if (!anchor) return null;
+  const at = p3(anchor);
+  const d = dist(sense.me, at);
+  if (d <= REGROUP_M) return null;
+  if (sense.now.radius > 0 && !insideCap(sense.now, at)) return null;
+  const dir = dirTo(at, sense.me);
+  const near = dir ? along(at, dir as Vec3, REGROUP_NEAR_M, sense.layout.radius) : at;
+  return moveTo(sense, near);
 }
 
 // A walk ending this close is all but over.
@@ -566,6 +589,9 @@ export function decide(
 
   const follow = followLastSeen(sense);
   if (follow) return why('follow', follow);
+
+  const crew = regroup(sense);
+  if (crew) return why('regroup', crew);
 
   // A big body in reach comes before the calls (a Rising's call walks the
   // bot here), a camp after the near caches.

@@ -112,10 +112,12 @@ describe("the landing's ways to play", () => {
 
   it('says the rules of each in a line, the same words the home uses', () => {
     expect(RESPAWN_LINE).toBe(
-      'Fifty champions on a small planet. Come back five seconds after a death; the most ' +
-        'takedowns when the last light goes out wins.',
+      'Fifty champions on a small planet, alone or in crews. Come back five seconds after a ' +
+        'death; the most takedowns when the last light goes out wins.',
     );
-    expect(ONE_LIFE_LINE).toBe('Fifty champions, one life each. The last one standing wins.');
+    expect(ONE_LIFE_LINE).toBe(
+      'Fifty champions, one life each, alone or in crews. The last one standing wins.',
+    );
     expect(LANDING_WAYS[0]?.line).toBe(RESPAWN_LINE);
     expect(LANDING_WAYS[1]?.line).toBe(ONE_LIFE_LINE);
     expect(LANDING_WAYS[2]?.line).toMatch(/Star Orchard/);

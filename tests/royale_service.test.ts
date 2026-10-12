@@ -862,3 +862,75 @@ describe('the champion picked', () => {
     }
   });
 });
+
+describe('Crews (ADR 0034)', () => {
+  const enterCrew = (
+    h: ReturnType<typeof harness>,
+    c: RoyaleClient,
+    crew: 3 | 5,
+    v: 'respawn' | 'one_life' = 'respawn',
+  ) =>
+    h.say(c, { t: 'royale', v, championId: 'fenn', sigils: ['zephyr', 'sear'], skin: 1, c: crew });
+
+  it('starts a match of Trios with sixteen crews of three, its size on the start', () => {
+    const h = harness();
+    const a = h.connect(1, 'alice');
+    enterCrew(h, a, 3);
+    const start = h.last(1, 'match_start')!;
+    expect(start.royale).toEqual({ v: 'respawn', seats: 48, c: 3 });
+    expect(start.teams).toBe(16);
+    expect(start.team).toBe(0);
+    const picks = h.fake.picks[0]!;
+    expect(picks).toHaveLength(48);
+    expect(picks.map((p) => p.team).slice(0, 7)).toEqual([0, 0, 0, 1, 1, 1, 2]);
+    expect(h.fake.sims[0]!.royale.crew).toBe(3);
+  });
+
+  it("puts the next person of the same size in the first person's crew, apart from Solo", () => {
+    const h = harness();
+    const a = h.connect(1, 'alice');
+    enterCrew(h, a, 5);
+    h.step(10);
+    const b = h.connect(2, 'bob');
+    enterCrew(h, b, 5);
+    const sa = h.last(1, 'match_start')!;
+    const sb = h.last(2, 'match_start')!;
+    expect(sb.dropIn).toBe(true);
+    expect(h.fake.sims).toHaveLength(1);
+    expect(sb.team).toBe(sa.team);
+    expect(sb.royale?.c).toBe(5);
+    // Solo and Trios are other matches.
+    const c = h.connect(3, 'carol');
+    h.enter(c);
+    expect(h.last(3, 'match_start')!.royale).toEqual({ v: 'respawn', seats: ROYALE_SEATS });
+    const d = h.connect(4, 'dan');
+    enterCrew(h, d, 3);
+    expect(h.last(4, 'match_start')!.royale?.c).toBe(3);
+    expect(h.fake.sims).toHaveLength(3);
+  });
+
+  it('keeps no match of Crews running for visitors: Play now is Solo Respawn', () => {
+    const h = harness({ standing: true });
+    h.step(1);
+    expect(h.fake.sims).toHaveLength(1);
+    expect(h.fake.sims[0]!.royale.crew).toBe(1);
+    const a = h.connect(1, 'alice');
+    enterCrew(h, a, 3);
+    expect(h.last(1, 'match_start')!.dropIn).toBeUndefined();
+    expect(h.fake.sims).toHaveLength(2);
+    expect(h.service.presence().joinable).toBe(true);
+  });
+
+  it('reads anything but three or five as Solo', () => {
+    const h = harness();
+    const a = h.connect(1, 'alice');
+    h.say(a, {
+      t: 'royale',
+      v: 'one_life',
+      championId: 'fenn',
+      sigils: ['zephyr', 'sear'],
+      c: 4 as unknown as 3,
+    });
+    expect(h.last(1, 'match_start')!.royale).toEqual({ v: 'one_life', seats: ROYALE_SEATS });
+  });
+});

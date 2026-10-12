@@ -5,7 +5,7 @@
 // and ui/home_screen.ts draw it.
 
 import { versioned } from '../game/asset_version';
-import type { RoyaleVariant } from '../sim/royale/types';
+import type { RoyaleCrew, RoyaleVariant } from '../sim/royale/types';
 
 export interface RoyaleMode {
   variant: RoyaleVariant;
@@ -21,9 +21,10 @@ export interface RoyaleMode {
 export const ROYALE_LABEL = 'Battle royale';
 
 export const RESPAWN_LINE =
-  'Fifty champions on a small planet. Come back five seconds after a death; the most ' +
-  'takedowns when the last light goes out wins.';
-export const ONE_LIFE_LINE = 'Fifty champions, one life each. The last one standing wins.';
+  'Fifty champions on a small planet, alone or in crews. Come back five seconds after a ' +
+  'death; the most takedowns when the last light goes out wins.';
+export const ONE_LIFE_LINE =
+  'Fifty champions, one life each, alone or in crews. The last one standing wins.';
 
 // Respawn first: it is what Play now launches.
 export const ROYALE_MODES: readonly RoyaleMode[] = [
@@ -33,6 +34,25 @@ export const ROYALE_MODES: readonly RoyaleMode[] = [
 
 export function royaleMode(variant: RoyaleVariant): RoyaleMode {
   return ROYALE_MODES.find((m) => m.variant === variant) ?? ROYALE_MODES[0]!;
+}
+
+// The crew sizes either rule set is played in (CONTEXT.md: Crew; ADR 0034),
+// Solo first: the quick pick offers them (ui/royale_pick.ts), the joining
+// card and the HUD name them.
+export interface CrewChoice {
+  crew: RoyaleCrew;
+  title: string;
+  line: string;
+}
+
+export const CREW_CHOICES: readonly CrewChoice[] = [
+  { crew: 1, title: 'Solo', line: 'Each for themself, fifty champions.' },
+  { crew: 3, title: 'Trios', line: 'Sixteen crews of three: shared sight, one score.' },
+  { crew: 5, title: 'Fives', line: 'Ten crews of five: shared sight, one score.' },
+];
+
+export function crewChoice(crew: RoyaleCrew | undefined): CrewChoice {
+  return CREW_CHOICES.find((c) => c.crew === (crew ?? 1)) ?? CREW_CHOICES[0]!;
 }
 
 // The other rule set: what the end screen offers to try next.

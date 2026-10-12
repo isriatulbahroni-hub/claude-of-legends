@@ -20,6 +20,8 @@ export interface RoyaleEntry {
   championId: string;
   sigils: [string, string];
   skin: number;
+  // Trios or Fives (ADR 0034); Solo when absent.
+  crew?: 3 | 5;
 }
 
 // Enter a battle royale: a running match that takes people, else a new
@@ -35,6 +37,7 @@ export function royaleEnterMsg(
     championId: pick.championId,
     sigils: [pick.sigils[0], pick.sigils[1]],
     skin: pick.skin,
+    ...(pick.crew === 3 || pick.crew === 5 ? { c: pick.crew } : {}),
   };
 }
 

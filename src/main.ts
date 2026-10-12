@@ -1425,7 +1425,7 @@ async function runRoyale(
     // was held (src/net/stats.ts MatchState).
     let openedAt = 0;
     // The card between Play and the first snapshot, Cancel its way out.
-    const joining = showRoyaleJoining(container, variant, () => finish('menu'));
+    const joining = showRoyaleJoining(container, variant, () => finish('menu'), pick.crew ?? 1);
     let opened = false;
     let matchEnded = false;
     let finished = false;

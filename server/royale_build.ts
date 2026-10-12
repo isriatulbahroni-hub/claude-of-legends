@@ -21,7 +21,7 @@ export function royaleSimOf(sim: Sim): RoyaleSim {
 }
 
 export function royaleFactory(planet: () => RoyalePlanet): RoyaleSimFactory {
-  return (seed, variant, picks) => {
+  return (seed, variant, picks, crew = 1) => {
     const guestsOnly = picks.some((p) => p.bot?.softened === true);
     const replayPicks: ReplayPick[] = picks.map((p) => ({
       name: p.name,
@@ -39,6 +39,7 @@ export function royaleFactory(planet: () => RoyalePlanet): RoyaleSimFactory {
     const { sim, unitIds } = buildRoyaleSim(planet(), seed, replayPicks, variant, {
       guestsOnly,
       newcomers,
+      crew,
     });
     return {
       sim: royaleSimOf(sim),
@@ -50,6 +51,7 @@ export function royaleFactory(planet: () => RoyalePlanet): RoyaleSimFactory {
           guestsOnly,
           rules: ROYALE_RULES_VERSION,
           ...(newcomers.length > 0 ? { newcomers } : {}),
+          ...(crew !== 1 ? { crew } : {}),
         },
       },
       standIn: (unitId) => attachRoyaleBot(sim, unitId),

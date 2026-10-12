@@ -372,6 +372,11 @@ export interface ObsRoyale {
   arriving?: boolean;
   graced?: readonly { id: number; until: number }[];
   reprieveAt?: number | null;
+  // Crews only (ADR 0034; additive v0 field, absent in Solo): the crew's
+  // anchor, the crewmate standing whom the crew keeps to (a person when
+  // one plays in the crew, the lowest unit id first; this seat itself when
+  // it is the one), the bot mark being public; null while none stands.
+  anchor?: number | null;
 }
 
 // A ring's clock as the team reads it (additive v0 block, ADR 0022): the

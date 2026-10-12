@@ -36,8 +36,28 @@ const CARDS: Readonly<Record<RoyaleVariant, WinCardWords>> = {
   },
 };
 
-export function winCardWords(v: RoyaleVariant): WinCardWords {
-  return CARDS[v];
+// In Crews (ADR 0034): the crew wins or falls as one.
+const CREW_CARDS: Readonly<Record<RoyaleVariant, WinCardWords>> = {
+  respawn: {
+    title: 'The crew with the most takedowns when the light goes out wins',
+    lines: [
+      'Your crew shares its sight and its score',
+      'Open caches for your build',
+      'Stay in the light: the Dusk burns',
+    ],
+  },
+  one_life: {
+    title: 'Last crew standing wins',
+    lines: [
+      'One life: a fall leaves you watching your crew',
+      'Open caches for your build',
+      'Stay in the light: the Dusk burns',
+    ],
+  },
+};
+
+export function winCardWords(v: RoyaleVariant, crews = false): WinCardWords {
+  return (crews ? CREW_CARDS : CARDS)[v];
 }
 
 // The close button's name, for a screen reader.

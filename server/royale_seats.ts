@@ -5,8 +5,10 @@
 // skin. Each bot's skill is the sim's to deal from the seed
 // (src/net/replay.ts buildRoyaleSim): about half gentle, a third normal,
 // the rest strong, softer when everyone the match started with is a Guest,
-// which the seats tell it. Pure: the same seed and people seat the same
-// match.
+// which the seats tell it. In Crews (ADR 0034) every seat sits in its crew
+// in seat order (src/sim/royale/crews.ts crewOfSeat), the people first, so
+// the people a match starts with share the first crews. Pure: the same
+// seed and people seat the same match.
 
 import {
   CHAMPION_LIST,
@@ -17,7 +19,8 @@ import {
 import { SIGIL_LIST, SIGILS } from '../src/sim/content/sigils';
 import { clampSkin, SKINS } from '../src/sim/content/skins';
 import { Rng } from '../src/sim/rng';
-import { ROYALE_SEATS } from '../src/sim/royale/types';
+import { crewOfSeat } from '../src/sim/royale/crews';
+import { ROYALE_SEATS, type RoyaleCrew } from '../src/sim/royale/types';
 import { botNames } from './royale_names';
 import type { RoyaleSeatPick } from './royale_sim';
 
@@ -82,13 +85,14 @@ export function royaleSeats(
   people: readonly RoyalePerson[],
   seed: number,
   seats: number = ROYALE_SEATS,
+  crew: RoyaleCrew = 1,
 ): RoyaleSeat[] {
   const rng = new Rng(seed ^ 0x5eed);
   const out: RoyaleSeat[] = [];
   for (const p of people.slice(0, seats)) {
     out.push({
       name: p.name,
-      team: out.length,
+      team: crewOfSeat(out.length, crew),
       championId: p.pick.championId,
       sigils: [p.pick.sigils[0], p.pick.sigils[1]],
       skin: p.pick.skin,
@@ -125,7 +129,7 @@ export function royaleSeats(
     const skins = SKINS[champion.id]?.length ?? 1;
     out.push({
       name: names[i]!,
-      team: out.length,
+      team: crewOfSeat(out.length, crew),
       championId: champion.id,
       sigils: [SIGIL_LIST[a]!.id, SIGIL_LIST[b]!.id],
       skin: rng.int(skins),

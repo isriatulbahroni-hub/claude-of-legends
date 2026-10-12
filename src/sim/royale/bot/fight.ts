@@ -44,9 +44,14 @@ export const BYSTANDERS = 2;
 // duel. The nearest other enemies in reach count too, at a bystander's
 // weight, those within the skill's bystanderFullM at full weight (a
 // strong bot reads the champion beside the fight as a third fighter);
-// with no target, every enemy in reach at full weight.
+// with no target, every enemy in reach at full weight. In Crews the
+// crewmates in reach fight beside it, at full weight (ADR 0034).
 export function royaleOdds(sense: Sense, target?: ObsUnit, within = ODDS_RADIUS): number {
-  const own = strength(sense.s.hpFrac, sense.s.level, sense.s.items);
+  let own = strength(sense.s.hpFrac, sense.s.level, sense.s.items);
+  for (const a of sense.allies) {
+    if (dist(sense.me, p3(a)) > within) break;
+    own += strength(a.hpFrac, a.level, a.items);
+  }
   let enemy = 0;
   let bystanders = 0;
   // sense.enemies is nearest first.

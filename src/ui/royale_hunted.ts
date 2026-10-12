@@ -98,10 +98,13 @@ export interface HuntedTarget {
 
 export const RISING_POINTED_S = 30;
 
+// A crewmate's mark (ADR 0034) is nobody's hunt: `crewmate` says whose,
+// and none is in Solo.
 export function huntedTargets(
   r: Pick<SnapRoyale, 'st' | 'ri' | 'mk'> | null,
   time: number,
   selfId: number,
+  crewmate: (unitId: number) => boolean = () => false,
 ): HuntedTarget[] {
   const out: HuntedTarget[] = [];
   if (r?.st !== 'play') return out;
@@ -116,6 +119,7 @@ export function huntedTargets(
   }
   for (const m of r.mk ?? []) {
     if (m[0] === selfId || m[1] === 'slayer' || !markShownNow(m, time)) continue;
+    if (crewmate(m[0])) continue;
     out.push({ key: `mk-${m[0]}-${m[1]}`, kind: m[1], at: at(m[2], m[3], m[4]) });
   }
   return out;

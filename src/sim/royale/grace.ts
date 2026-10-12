@@ -36,6 +36,7 @@ import type { ObsRoyale } from '../policy';
 import type { Sim } from '../sim';
 import type { Unit } from '../unit';
 import { inMutualSight } from '../vision';
+import { besideCrew } from './crews';
 import { arrivalSpot, deepInLight, type FoeCandidate, fairFoeSpot } from './drop';
 import { seatBuild } from './loot';
 import type { RoyaleMode } from './mode';
@@ -176,8 +177,11 @@ export function observeGrace(
 // the bot fights on sight after that; in Respawn the Grace waits on the
 // seat's first order (beginGrace), so it lasts until the person can see.
 // With no such bot, and always in One life, a quiet spot (drop.ts
-// arrivalSpot). Either is in the light that holds until the phase ends
-// (score.ts returnCap); every draw from the match's stream.
+// arrivalSpot). In Crews it first comes down beside a crewmate standing
+// clear of any fight (crews.ts besideCrew); the foe, the quiet spot and
+// the crowding read the other crews only. Each is in the light that holds
+// until the phase ends (score.ts returnCap); every draw from the match's
+// stream.
 export function arrive(mode: RoyaleMode, sim: Sim, u: Unit): boolean {
   const s = mode.state;
   if (s.stage !== 'play' || u.kind !== 'champion') return false;
@@ -194,16 +198,39 @@ export function arrive(mode: RoyaleMode, sim: Sim, u: Unit): boolean {
   }
   const cap = returnCap(s.dusk);
   const others: { id: number; pos: Vec3 }[] = [];
+  const mates: Vec3[] = [];
   for (const o of sim.units.values()) {
     if (o.kind !== 'champion' || o.dead || o.id === u.id || o.pos.y === undefined) continue;
-    others.push({ id: o.id, pos: o.pos as Vec3 });
+    if (o.team === u.team) mates.push(o.pos as Vec3);
+    else others.push({ id: o.id, pos: o.pos as Vec3 });
   }
+  const beside =
+    mode.crew > 1
+      ? besideCrew(
+          sim.rng,
+          cap,
+          mates,
+          others.map((o) => o.pos),
+          mode.layout,
+          mode.ground,
+        )
+      : null;
   const sees = (a: Vec3, b: Vec3): boolean => inMutualSight(sim.map, a, b);
-  const fair = respawn
-    ? fairFoeSpot(sim.rng, cap, fairFoes(mode, sim, u, cap), others, mode.layout, mode.ground, sees)
-    : null;
+  const fair =
+    respawn && !beside
+      ? fairFoeSpot(
+          sim.rng,
+          cap,
+          fairFoes(mode, sim, u, cap),
+          others,
+          mode.layout,
+          mode.ground,
+          sees,
+        )
+      : null;
   if (fair) mode.tally.fairArrivals++;
   const at =
+    beside ??
     fair?.at ??
     arrivalSpot(
       sim.rng,
@@ -228,7 +255,7 @@ function fairFoes(mode: RoyaleMode, sim: Sim, u: Unit, cap: DuskCap): FoeCandida
   const R = mode.layout.radius;
   const out: FoeCandidate[] = [];
   for (const o of sim.units.values()) {
-    if (o.kind !== 'champion' || o.dead || o.id === u.id || o.pos.y === undefined) continue;
+    if (o.kind !== 'champion' || o.dead || o.team === u.team || o.pos.y === undefined) continue;
     if (!sim.policies.has(o.id)) continue;
     if (inGrace(mode, o.id, sim.time) || mode.isFlying(o.id)) continue;
     if (!outOfCombat(o, sim.time) || o.level > u.level) continue;

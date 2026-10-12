@@ -9,7 +9,7 @@ import type { ReplayPick, RoyaleRecord } from '../src/net/replay';
 import type { RoyaleVariant } from '../src/net/royale_wire';
 import type { Vec3 } from '../src/sim/geo';
 import type { Projectile } from '../src/sim/projectiles';
-import type { RoyaleEvent, RoyaleState } from '../src/sim/royale/types';
+import type { RoyaleCrew, RoyaleEvent, RoyaleState } from '../src/sim/royale/types';
 import type { SimEvent } from '../src/sim/sim';
 import type { AbilityKey, ScoreRow, Vec2 } from '../src/sim/types';
 import type { Unit } from '../src/sim/unit';
@@ -22,7 +22,7 @@ export type RoyaleSimEvent = SimEvent | RoyaleEvent;
 export interface RoyaleSim {
   readonly time: number;
   readonly tickCount: number;
-  // Each champion its own team (ADR 0030): as many teams as seats.
+  // One team per crew (ADR 0030, ADR 0034): as many teams as seats in Solo.
   readonly teamCount: number;
   readonly units: ReadonlyMap<number, Unit>;
   readonly projectiles: ReadonlyMap<number, Projectile>;
@@ -30,8 +30,8 @@ export interface RoyaleSim {
   readonly walls: ReadonlyMap<number, Wall>;
   readonly royale: RoyaleState;
   tick(): readonly RoyaleSimEvent[];
-  // Each champion is its own team (ADR 0030): a seat sees what its own
-  // champion's sight shows.
+  // A crew is a team (ADR 0030, ADR 0034): a seat sees what its crew's
+  // sight shows, its own champion's alone in Solo.
   isVisible(team: number, unitId: number): boolean;
   isPointVisible(team: number, x: number, z: number, y?: number): boolean;
   // Whether a seat sees a zone: its own, an enemy pod only under the seat's
@@ -59,7 +59,7 @@ export interface RoyaleSim {
   setLoadout(unitId: number, sigils: readonly string[], skin: number): void;
 }
 
-// One seat as the builder takes it, in seat order: each its own team.
+// One seat as the builder takes it, in seat order, on its crew's team.
 export interface RoyaleSeatPick {
   name: string;
   team: number;
@@ -94,4 +94,6 @@ export type RoyaleSimFactory = (
   seed: number,
   variant: RoyaleVariant,
   picks: readonly RoyaleSeatPick[],
+  // The crew size (ADR 0034); Solo when absent.
+  crew?: RoyaleCrew,
 ) => RoyaleBuild;

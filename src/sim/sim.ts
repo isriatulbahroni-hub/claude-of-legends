@@ -353,7 +353,9 @@ export class Sim {
       dead: this.dead,
       killers: this.killers,
       teamBuffs: this.teamBuffs,
-      freeForAll: this.teamCount > TWO_TEAMS,
+      // Every team one champion: more than two teams, and a battle royale
+      // in Solo (a crew of Trios or Fives has allies, ADR 0034).
+      freeForAll: this.teamCount > TWO_TEAMS && (this.royaleMode?.crew ?? 1) === 1,
       ...(this.royaleMode ? { neutralScale: PLANET_NEUTRAL_SCALE } : {}),
       allocId: () => this.nextId++,
     };

@@ -33,7 +33,13 @@ import {
   type RoyaleState,
 } from '../src/sim/royale/types';
 import type { Unit } from '../src/sim/unit';
-import { type RankedSeat, rankAndGapIn, royaleRanking, windowStanding } from './royale_ranking';
+import {
+  crewRankAndGap,
+  type RankedSeat,
+  rankAndGapIn,
+  royaleRanking,
+  windowStanding,
+} from './royale_ranking';
 import type { RoyaleSim } from './royale_sim';
 import type { RoyaleSnapContext, RoyaleViewer } from './royale_snapshot';
 import { round2 } from './snapshot';
@@ -219,20 +225,28 @@ export const clamorsBlock: Builder<SnapClamor[]> = (sim, viewer) => {
   }
   return sentOnChange(viewer, 'cl', list, sim.time);
 };
-// Respawn's ranking, made once a tick for every viewer of the match.
-const rankings = new WeakMap<RoyaleSim, { tick: number; ranking: number[] }>();
+// Respawn's ranking, made once a tick for every viewer of the match, and
+// the seats it ranked.
+const rankings = new WeakMap<RoyaleSim, { tick: number; ranking: number[]; seats: RankedSeat[] }>();
 
-function respawnRankingOf(sim: RoyaleSim): number[] {
+function respawnRankingOf(sim: RoyaleSim): { ranking: number[]; seats: RankedSeat[] } {
   const kept = rankings.get(sim);
-  if (kept && kept.tick === sim.tickCount) return kept.ranking;
+  if (kept && kept.tick === sim.tickCount) return kept;
   const seats: RankedSeat[] = [];
   for (const u of sim.units.values()) {
     if (u.kind !== 'champion') continue;
-    seats.push({ unitId: u.id, name: '', championId: '', bot: false, deaths: u.deaths });
+    seats.push({
+      unitId: u.id,
+      name: '',
+      championId: '',
+      bot: false,
+      deaths: u.deaths,
+      team: u.team,
+    });
   }
-  const ranking = royaleRanking(sim.royale, seats);
-  rankings.set(sim, { tick: sim.tickCount, ranking });
-  return ranking;
+  const made = { tick: sim.tickCount, ranking: royaleRanking(sim.royale, seats), seats };
+  rankings.set(sim, made);
+  return made;
 }
 
 // The standing the top line tells: in the whole match, or for a drop-in
@@ -246,7 +260,10 @@ function standing(
 ): { rank: number; gap: number; since?: 1 } | null {
   const r = sim.royale;
   if (r.variant !== 'respawn' || r.stage !== 'play') return null;
-  const ranking = respawnRankingOf(sim);
+  const { ranking, seats } = respawnRankingOf(sim);
+  // Crews (ADR 0034): the crew's rank among the crews, the gap in its
+  // takedowns, from the drop.
+  if (r.crew > 1) return crewRankAndGap(r, seats, viewer.team);
   if (ctx.windowBase) {
     const w = windowStanding(r.scores, ctx.windowBase, ranking, viewer.unitId);
     return w.score > 0 ? { rank: w.rank, gap: w.gap, since: 1 } : null;

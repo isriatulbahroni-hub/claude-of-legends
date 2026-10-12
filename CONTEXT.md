@@ -106,15 +106,26 @@ the Lakes, the Cliffs, the Open ground) and eight crossroads where three of them
 _Avoid_: the island, the BR map, the globe (the drop view is a globe; the planet is the Wanderseed)
 
 **Battle royale**:
-The mode of fifty champions each for themself on the Wanderseed, ten minutes under the Dusk
-(ADR 0031), in two variants, Respawn and One life. Every other match is the classic 5v5.
+The mode of fifty champions on the Wanderseed, ten minutes under the Dusk (ADR 0031), in two
+variants, Respawn and One life, each played Solo (each for themself) or in Crews of three or
+five (ADR 0034). Every other match is the classic 5v5.
 _Avoid_: BR in game text, royale alone, free-for-all as the mode's name (a free-for-all is
 how its teams are counted, ADR 0030)
+
+**Crew**:
+A battle royale team (ADR 0034): champions who share their sight, never hurt one another,
+land together, score together and win or fall as one. A match is played in one crew size:
+Solo (crews of one, each for themself, the mode as it began, fifty seats), Trios (sixteen
+crews of three, forty-eight seats) or Fives (ten crews of five, fifty seats). House bots fill
+every crew; a person is put in the crew with the most people that still has a bot's seat.
+In code the crew is the sim's team (ADR 0030) and its size `crew`.
+_Avoid_: squad, party (a party enters the Ranked queue), group, team in game text
 
 **Respawn**:
 The battle royale variant where a death costs five seconds: the champion comes back at the edge
 of the light (of the light it closes to, while the Dusk closes) with everything it had, and the
-most takedowns when the last light goes out wins. A takedown's experience goes to its last hit,
+most takedowns when the last light goes out wins: a champion's own, or in Crews the crew's,
+every takedown its champions scored. A takedown's experience goes to its last hit,
 and a share of it to every champion with an assist on it. During the wait the globe shows, and a
 tap on it picks where the champion comes back instead: inside that light, at least ten meters
 from every champion standing, the nearest such point to the pick.
@@ -125,7 +136,8 @@ _Avoid_: loop mode, deathmatch
 
 **One life**:
 The battle royale variant where a death is the end of the match for that champion: the last one
-standing wins.
+standing wins, or in Crews the last crew with a champion standing; a champion fallen while its
+crew stands watches it.
 _Avoid_: sudden death, hardcore
 
 **Dusk**:

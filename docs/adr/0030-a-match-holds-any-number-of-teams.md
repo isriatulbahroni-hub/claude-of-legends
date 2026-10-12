@@ -23,5 +23,6 @@ free-for-all of fifty champions: every champion is its own team.
 
 ## Consequences
 
-- The HUD reads a free-for-all as one ally (the player) and everyone else an enemy.
+- The HUD reads a free-for-all as one ally (the player) and everyone else an enemy; a battle
+  royale in Crews (ADR 0034) holds teams of three or five, the crewmates allies.
 - Points (ADR 0027) weigh "a human on the other team" as any other human in the match.

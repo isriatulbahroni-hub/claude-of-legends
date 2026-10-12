@@ -28,6 +28,7 @@ on 2026-10-02; this file keeps them in one place and tracks the build.
 | Champions | The 10 of the roster, a quick pick (last one ready, Random, skin), duplicates allowed. |
 | Points | ADR 0027's ladder and rules, plus One life 50 / 25 / 15 for the last, the top 5, the top 10; Respawn 50 to the best score. |
 | Entry | Play now launches Respawn; One life and the 5v5 are tiles. |
+| Crews | Added 2026-10-12 (ADR 0034): either variant Solo, in Trios (16 crews of 3, 48 seats) or in Fives (10 crews of 5); chosen on the quick pick; people put in the crew with the most people; One life's fallen watch their crew. |
 | Production | The real planet from the start, built by a Blender script from one seeded layout (`docs/planet.md`). |
 
 ## The build
@@ -47,3 +48,7 @@ on 2026-10-02; this file keeps them in one place and tracks the build.
    for the drop and the minimap, the HUD, the end screens, the landing.
 9. Test cycles: headless 50 bot matches measured, browser runs on a computer and a phone,
    tuning.
+10. Crews (ADR 0034): the sim's crews (`src/sim/royale/crews.ts`), the bots keeping to their
+    crew, the server's crew sizes, ranking and points, the quick pick's Crew row, the HUD and
+    the end screen in Crews; measured with `node scripts/royale_crews.mjs`. Done. Left open:
+    crew chat and pings, entering with friends, a knocked-down state.

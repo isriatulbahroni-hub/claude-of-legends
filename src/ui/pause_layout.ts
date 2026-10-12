@@ -15,8 +15,7 @@
 // a screen at interface size 1, so a test keeps the boxes apart, Resume
 // and Leave match on the first screen and the grid across the width at
 // every size played. A box's height here is its tallest (a ladder line
-// that wraps, a refusal under the name field); the browser draws it at
-// most that tall.
+// that wraps); the browser draws it at most that tall.
 
 import type { ScreenBox } from './royale_layout';
 
@@ -53,10 +52,10 @@ export interface PauseMetrics {
   // The width of a settings row's label.
   rowLabelW: number;
   // The ladder box and the feedback box at their tallest, border included:
-  // the ladder's line on two lines, its level line and a refusal under the
-  // name field, the feedback field at its least. Measured in a browser at
-  // the narrowest column (169 and 149 on a desktop, 150 and 103 on a
-  // phone), the ladder's then grown by its level line.
+  // the ladder's line at its longest and its level line, the feedback
+  // field at its least. Measured in a browser at the narrowest column (106
+  // and 149 on a desktop, 69 and 103 on a phone), the ladder's with the
+  // room for its level line to wrap.
   ladderH: number;
   feedbackH: number;
 }
@@ -80,7 +79,7 @@ export const DESKTOP_PAUSE: PauseMetrics = {
   rowGap: 10,
   settingsMinH: 144,
   rowLabelW: 112,
-  ladderH: 198,
+  ladderH: 124,
   feedbackH: 156,
 };
 
@@ -104,7 +103,7 @@ export const PHONE_PAUSE: PauseMetrics = {
   rowGap: 6,
   settingsMinH: 128,
   rowLabelW: 100,
-  ladderH: 174,
+  ladderH: 88,
   feedbackH: 112,
 };
 

@@ -88,7 +88,9 @@ export interface EndMetrics {
   scoreRowTwoH: number;
   // The HUD's own boxes at their tallest, border included, in a third of
   // the sheet (the battle royale's columns) and in a quarter (the 5v5's
-  // beside the scoreboard): the ladder box (ui/ladder_box.ts), the
+  // beside the scoreboard): the ladder box (ui/ladder_box.ts: 102 and 117
+  // measured on a desktop, 69 on a phone, with the room for its level line
+  // to wrap), the
   // feedback box (ui/feedback_box.ts) at its least (its field grows into
   // what the column leaves), and the 5v5's line under it that names the
   // Discord.
@@ -133,8 +135,8 @@ export const DESKTOP_END: EndMetrics = {
   csW: 30,
   tableTightW: 560,
   scoreRowTwoH: 34,
-  ladderH: 180,
-  ladderQH: 196,
+  ladderH: 120,
+  ladderQH: 136,
   feedbackH: 152,
   feedbackQH: 168,
   joinH: 32,
@@ -175,8 +177,8 @@ export const PHONE_END: EndMetrics = {
   csW: 26,
   tableTightW: 560,
   scoreRowTwoH: 30,
-  ladderH: 150,
-  ladderQH: 180,
+  ladderH: 88,
+  ladderQH: 88,
   feedbackH: 121,
   feedbackQH: 122,
   joinH: 28,

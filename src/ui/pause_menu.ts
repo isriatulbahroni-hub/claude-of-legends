@@ -103,7 +103,7 @@ ${M} .hud-feedback { flex: 1 1 auto; display: flex; flex-direction: column; min-
 /* Send at the field's foot, a button's height, rather than stretched
    along a field that grows with the box. */
 ${M} .hud-feedback-row { flex: 1 1 auto; min-height: 0; align-items: flex-end; }
-${M} .hud-feedback-row .hud-menu-btn, ${M} .hud-ladder-row .hud-menu-btn { margin: 0; }
+${M} .hud-feedback-row .hud-menu-btn { margin: 0; }
 ${M} .hud-feedback-row .hud-menu-btn { align-self: flex-end; min-height: 40px; }
 ${M} .hud-feedback-field { align-self: stretch; min-height: 72px; }
 /* A phone: smaller words, the buttons still a finger wide. */
@@ -115,7 +115,6 @@ ${C} .hud-pause-label::after { margin-top: 6px; }
 ${C} .hud-pause-btn { font-size: 13px; padding: 0 8px; border-radius: 7px; }
 ${C} .hud-pause-settings .set-row { font-size: 12px; gap: 8px; }
 ${C} .hud-pause-settings .set-row select { min-height: 28px; }
-${C} .hud-ladder-row .hud-menu-btn { min-height: 40px; padding: 0 14px; }
 ${C} .hud-feedback-field { min-height: 44px; }
 ${C} .hud-feedback-row .hud-menu-btn { min-height: 44px; padding: 0 16px; }
 ${pauseLayoutCss()}

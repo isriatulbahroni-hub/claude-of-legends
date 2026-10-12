@@ -77,15 +77,6 @@ export function levelText(points: number): string {
   return goalLine(points).text;
 }
 
-// Under the line: what the name box is for, for a Guest; what the name is,
-// for an account, which has no field.
-export function nameHint(place: LadderPlace): string {
-  if (!place.guest) return `Your name there is your account's: ${place.name}.`;
-  return place.named
-    ? 'The name beside your points. Change it any time.'
-    : 'Pick the name you want beside your points.';
-}
-
 // What the name box offers before the player types. A Guest that never
 // chose a name stands on the ladder as its handed-out "Wanderer 4821",
 // whose space no chosen name may hold (server/account_name.ts: letters,
@@ -99,6 +90,3 @@ export function nameSuggestion(place: LadderPlace): string {
   if (!place.guest || place.named) return place.name;
   return place.name.replace(/[^A-Za-z0-9_-]/g, '').slice(0, NAME_FIELD_MAX);
 }
-
-export const NAME_SAVE = 'Save';
-export const NAME_SAVED = 'Saved.';

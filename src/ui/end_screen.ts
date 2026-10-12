@@ -139,10 +139,7 @@ ${S} .hud-ladder {
   border-color: #6e5c26;
   background: linear-gradient(180deg, rgba(44, 37, 15, 0.97), rgba(26, 22, 10, 0.97));
 }
-${S} .hud-ladder-row .hud-menu-btn, ${S} .hud-feedback-row .hud-menu-btn {
-  margin: 0; min-height: 36px;
-}
-${S} .hud-ladder-row .hud-menu-btn { padding: 0 16px; }
+${S} .hud-feedback-row .hud-menu-btn { margin: 0; min-height: 36px; }
 ${S} .hud-feedback { display: flex; flex-direction: column; container: feedback / inline-size; }
 ${S} .end-side > .hud-feedback { flex: 1 1 auto; }
 ${S} .hud-feedback-row { flex: 1 1 auto; min-height: 0; align-items: flex-end; }
@@ -169,7 +166,7 @@ ${C} .end-progress .br-goal-line { font-size: 11px; }
 ${C} .end-progress .br-end-grafts { font-size: 11.5px; line-height: 14px; }
 ${C} .br-end-row { font-size: 12px; padding: 0 6px; gap: 6px; }
 ${C} .hud-score-row { font-size: 11.5px; padding: 0 5px; gap: 5px; }
-${C} .hud-ladder-row .hud-menu-btn, ${C} .hud-feedback-row .hud-menu-btn { min-height: 44px; }
+${C} .hud-feedback-row .hud-menu-btn { min-height: 44px; }
 ${C} .hud-feedback-field { min-height: 44px; }
 @container feedback (width < 300px) {
   ${C} .hud-feedback-words b { font-size: 11px; }

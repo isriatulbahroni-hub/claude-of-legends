@@ -9,7 +9,6 @@ import {
   earnedText,
   firstPointsText,
   levelText,
-  nameHint,
   nameSuggestion,
   placeText,
   pointsCount,
@@ -57,12 +56,6 @@ describe('the ladder box', () => {
     expect(earnedText(0)).toBe('');
     expect(earnedText(1)).toBe('+1 this match');
     expect(earnedText(1_250)).toBe('+1,250 this match');
-  });
-
-  it('asks a Guest for a name, and tells an account its name is its own', () => {
-    expect(nameHint(guest)).toMatch(/pick the name/i);
-    expect(nameHint({ ...guest, named: true, name: 'Starling' })).toMatch(/change it/i);
-    expect(nameHint({ ...guest, guest: false, named: true, name: 'bob' })).toContain('bob');
   });
 
   // The handed-out name has a space no chosen name may hold: the box must

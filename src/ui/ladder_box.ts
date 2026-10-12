@@ -1,26 +1,13 @@
 // The ladder box, on the end screen and in the pause menu of a match that
 // scores (ADR 0027): where the player stands on the ladder of every human,
-// "You are #N on the ladder with P points", and in the pause menu, for a
-// Guest, the name beside those points with a field to change it. An
-// account has no field: its name there is its account's. The end screen's
-// box shows the place and the level alone: the name is changed from the
-// landing's own panel. Reads /api/public/ladder (the reader's
-// own place rides on it) and writes /api/ladder/name; a refusal is shown
-// in the server's own words. The words are pure (ui/points_text.ts); this
-// is the drawing, built with the caller's element maker so the HUD's
-// classes stay in the HUD.
+// "You are #N on the ladder with P points", the points this match banked
+// and the level. A Guest's name is changed on the landing's own panel
+// (ui/own_panel_view.ts), which writes /api/ladder/name with saveName
+// below. Reads /api/public/ladder (the reader's own place rides on it).
+// The words are pure (ui/points_text.ts); this is the drawing, built with
+// the caller's element maker so the HUD's classes stay in the HUD.
 
-import {
-  earnedText,
-  type LadderPlace,
-  levelText,
-  NAME_FIELD_MAX,
-  NAME_SAVE,
-  NAME_SAVED,
-  nameHint,
-  nameSuggestion,
-  placeText,
-} from './points_text';
+import { earnedText, type LadderPlace, levelText, placeText } from './points_text';
 
 export const LADDER_ROUTE = '/api/public/ladder';
 export const NAME_ROUTE = '/api/ladder/name';
@@ -89,10 +76,6 @@ export interface LadderBox {
 
 export interface LadderBoxOptions {
   fetchPlace?: () => Promise<LadderPlace | null>;
-  saveName?: (name: string) => Promise<SaveOutcome>;
-  // false: the place and the level alone, without the name's hint and
-  // field (the end screen's box).
-  rename?: boolean;
 }
 
 export function buildLadderBox(
@@ -110,30 +93,11 @@ export function buildLadderBox(
   const earned = el('span', 'hud-ladder-earned');
   line.append(place, earned);
   const level = el('span', 'hud-ladder-level');
-  const hint = el('span', 'hud-ladder-hint');
-  const field = el('input', 'hud-ladder-field');
-  field.type = 'text';
-  field.maxLength = NAME_FIELD_MAX;
-  field.autocomplete = 'off';
-  field.spellcheck = false;
-  field.setAttribute('aria-label', 'Your name on the ladder');
-  const save = el('button', 'hud-menu-btn', NAME_SAVE);
-  const row = el('div', 'hud-ladder-row');
-  row.append(field, save);
-  const status = el('div', 'hud-ladder-status');
-  const rename = opts.rename !== false;
   root.append(line, level);
-  if (rename) root.append(hint, row, status);
 
   const show = (at: LadderPlace): void => {
     place.textContent = placeText(at);
     level.textContent = levelText(at.points);
-    hint.textContent = nameHint(at);
-    row.hidden = !rename || !at.guest;
-    // Never under the fingers of someone typing.
-    if (rename && at.guest && document.activeElement !== field) {
-      field.value = nameSuggestion(at);
-    }
     root.hidden = false;
   };
   const refresh = (): void => {
@@ -141,35 +105,6 @@ export function buildLadderBox(
       if (place) show(place);
     });
   };
-  let busy = false;
-  const submit = (): void => {
-    if (busy) return;
-    busy = true;
-    save.disabled = true;
-    status.textContent = '';
-    status.className = 'hud-ladder-status';
-    void (opts.saveName ?? saveName)(field.value.trim()).then((out) => {
-      busy = false;
-      save.disabled = false;
-      if (out.ok) {
-        field.value = out.name;
-        status.textContent = NAME_SAVED;
-        status.className = 'hud-ladder-status ok';
-        refresh();
-      } else {
-        status.textContent = out.error;
-        status.className = 'hud-ladder-status bad';
-      }
-    });
-  };
-  save.addEventListener('click', submit);
-  // A field inside the match must not fire the game's keys; Enter saves.
-  for (const type of ['keydown', 'keyup', 'keypress']) {
-    field.addEventListener(type, (e) => {
-      e.stopPropagation();
-      if (type === 'keydown' && (e as KeyboardEvent).key === 'Enter') submit();
-    });
-  }
   const setEarned = (points: number): void => {
     earned.textContent = earnedText(points);
   };

@@ -952,39 +952,20 @@ const CSS = `
 .hud-end-join a { color: #cbd9b4; }
 /* The ladder box (ui/ladder_box.ts), on the end screen and in the pause
    menu of a match that scores: where the player stands on the ladder of
-   every human, in gold like the account offer, and a Guest's name. */
+   every human, in gold. */
 .hud-ladder {
   pointer-events: auto; margin: 12px 0 8px; width: min(520px, 90vw); box-sizing: border-box;
   padding: 10px 14px; border-radius: 10px; border: 1px solid #8a7430;
   background: rgba(30, 26, 12, 0.92); text-align: left; text-shadow: none; color: #e6dcb8;
 }
-.hud-ladder[hidden], .hud-ladder-row[hidden] { display: none; }
+.hud-ladder[hidden] { display: none; }
 .hud-ladder-line { display: block; font-size: 15px; color: #ffe08a; }
 .hud-ladder-earned { margin-left: 8px; color: #8fd06a; white-space: nowrap; }
-.hud-ladder-hint { display: block; margin-top: 2px; font-size: 12.5px; color: #c9bd93; }
 .hud-ladder-level { display: block; margin-top: 3px; font-size: 13px; font-weight: 700;
   color: #f0d27a; }
-.hud-ladder-row { display: flex; gap: 8px; margin-top: 8px; align-items: stretch; }
-.hud-ladder-field {
-  flex: 1; min-width: 0; border-radius: 7px; border: 1px solid #8a7430; background: #16120a;
-  color: #f2e6c0; font: inherit; font-size: 13px; padding: 7px 10px;
-}
-.hud-ladder-field:focus { outline: none; border-color: #c9a84a; }
-.hud-ladder-row .hud-menu-btn {
-  margin: 0; flex: none; border-color: #8a7430; background: #3a3014; color: #f2e6c0;
-}
-.hud-ladder-row .hud-menu-btn:hover { border-color: #c9a84a; }
-.hud-ladder-status { font-size: 12.5px; }
-.hud-ladder-status.ok, .hud-ladder-status.bad { margin-top: 6px; }
-.hud-ladder-status.ok { color: #8fd06a; }
-.hud-ladder-status.bad { color: #f0a090; }
 .hud.compact .hud-ladder { margin-top: 8px; padding: 8px 10px; width: min(520px, 94vw); }
 .hud.compact .hud-ladder-line { font-size: 13px; }
-.hud.compact .hud-ladder-hint { font-size: 11.5px; }
 .hud.compact .hud-ladder-level { font-size: 12px; }
-.hud.compact .hud-ladder-row { margin-top: 6px; gap: 6px; }
-.hud.compact .hud-ladder-field { font-size: 12px; padding: 6px 8px; }
-.hud.compact .hud-ladder-row .hud-menu-btn { padding: 7px 14px; font-size: 12.5px; }
 /* The battle royale (ADR 0031, ui/royale_hud.ts) has no gold, no shop,
    no recall, no lanes, no towers and no teams: what would say so stands
    down, and its own layer takes the top of the screen. */
@@ -2083,9 +2064,8 @@ export class Hud {
     this.endFeedback = this.buildFeedback('end');
     // Where the player stands on the ladder of every human (ui/ladder_box.ts,
     // ADR 0027): right under the result, since it is the result that
-    // stays. The place and the level alone: a Guest's name is changed on
-    // the landing's own panel, and in the pause menu's box.
-    this.endLadder = buildLadderBox(el, { rename: false });
+    // stays. A Guest's name is changed on the landing's own panel.
+    this.endLadder = buildLadderBox(el);
     this.pauseLadder = buildLadderBox(el);
     // Its boxes laid over the screen (ui/end_screen.ts): the result over
     // the ladder, the scoreboard, the feedback box over the Discord line.

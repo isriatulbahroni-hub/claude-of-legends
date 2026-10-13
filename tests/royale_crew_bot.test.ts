@@ -135,6 +135,32 @@ describe('the crew bot', () => {
     expect(regroup(sense(obs([champion(2, far, true, { hpFrac: 0 })], { anchor: 2 })))).toBeNull();
   });
 
+  it('walks a way back to its anchor out, past the leash on the way in', () => {
+    const mid = sph(1, 0.35, 0.1);
+    expect(dist(here, mid)).toBeLessThan(REGROUP_M);
+    expect(dist(here, mid)).toBeGreaterThan(REGROUP_NEAR_M + 1);
+    const back = obs([champion(2, mid, true)], { anchor: 2 });
+    back.self.dest = { x: mid.x, y: mid.y, z: mid.z };
+    expect(regroup(sense(back))?.kind).toBe('move');
+    // A walk of its own elsewhere, within the leash: its own play.
+    const own = obs([champion(2, mid, true)], { anchor: 2 });
+    own.self.dest = { x: far.x, y: far.y, z: far.z };
+    expect(regroup(sense(own))).toBeNull();
+  });
+
+  it('stands with its crew against a far stronger enemy rather than flee', () => {
+    const foe = champion(9, sph(1, 0.27, 0.1), false, { level: 12 });
+    const beside = (id: number) => champion(id, sph(1, 0.215, 0.1), true, { level: 6 });
+    const hurt = { hpFrac: 0.5, level: 6 };
+    const alone = obs([foe]);
+    Object.assign(alone.self, hurt);
+    const crew = obs([foe, beside(2), beside(3)]);
+    Object.assign(crew.self, hurt);
+    const strong = ROYALE_SKILLS.strong;
+    expect(royaleOdds(sense(alone, strong), foe, 0)).toBeLessThan(0.3);
+    expect(royaleOdds(sense(crew, strong), foe, 0)).toBeGreaterThan(0.5);
+  });
+
   it('weighs its crewmates in reach in a fight', () => {
     const foe = champion(9, near, false);
     const alone = royaleOdds(sense(obs([foe])), foe);

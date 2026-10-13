@@ -757,7 +757,10 @@ export class RoyaleMode {
     const mates: Vec3[] = [];
     for (const o of sim.units.values()) {
       if (o.kind !== 'champion' || o.dead || o.id === u.id || o.pos.y === undefined) continue;
-      (o.team === u.team ? mates : enemies).push(o.pos as Vec3);
+      // A crewmate a pad carries is no place to come back beside: its
+      // point is on the chord under the flight (pads.ts flightPos).
+      if (o.team !== u.team) enemies.push(o.pos as Vec3);
+      else if (!this.flights.has(o.id)) mates.push(o.pos as Vec3);
     }
     const cap = returnCap(this.state.dusk);
     const pick = this.state.respawnPicks.get(u.id);

@@ -201,8 +201,9 @@ export function arrive(mode: RoyaleMode, sim: Sim, u: Unit): boolean {
   const mates: Vec3[] = [];
   for (const o of sim.units.values()) {
     if (o.kind !== 'champion' || o.dead || o.id === u.id || o.pos.y === undefined) continue;
-    if (o.team === u.team) mates.push(o.pos as Vec3);
-    else others.push({ id: o.id, pos: o.pos as Vec3 });
+    // A crewmate a pad carries is no place to come down beside.
+    if (o.team !== u.team) others.push({ id: o.id, pos: o.pos as Vec3 });
+    else if (!mode.isFlying(o.id)) mates.push(o.pos as Vec3);
   }
   const beside =
     mode.crew > 1

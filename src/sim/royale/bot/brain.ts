@@ -205,10 +205,15 @@ function awayFrom(sense: Sense, from: Vec3, len: number): Vec3 {
 // anchor (ObsRoyale.anchor: a person playing in the crew, else its first
 // champion standing) walks back to within REGROUP_NEAR_M of it, unless
 // the anchor stands in the dark; the anchor itself, and every bot in Solo,
-// never. Within the leash the bot loots, takes camps and answers calls as
-// alone, and its crewmates in reach weigh in its odds (fight.ts).
+// never. A walk back goes on until it arrives (its destination still
+// within REGROUP_KEEP_M of the anchor): stopped at the leash, a bot whose
+// own goal lay past it took the two orders in turn, a step each way every
+// slot, and stood at 14 m for minutes (the review's probe, Trios seed 1).
+// Within the leash the bot loots, takes camps and answers calls as alone,
+// and its crewmates in reach weigh in its odds (fight.ts).
 export const REGROUP_M = 14;
 export const REGROUP_NEAR_M = 5;
+export const REGROUP_KEEP_M = 4;
 export function regroup(sense: Sense): Action | null {
   const anchorId = sense.r.anchor;
   if (anchorId === undefined || anchorId === null || anchorId === sense.s.id) return null;
@@ -216,7 +221,10 @@ export function regroup(sense: Sense): Action | null {
   if (!anchor) return null;
   const at = p3(anchor);
   const d = dist(sense.me, at);
-  if (d <= REGROUP_M) return null;
+  const dest = sense.s.dest ? p3(sense.s.dest) : null;
+  const walkingBack =
+    dest !== null && d > REGROUP_NEAR_M + 1 && dist(dest, at) <= REGROUP_NEAR_M + REGROUP_KEEP_M;
+  if (d <= REGROUP_M && !walkingBack) return null;
   if (sense.now.radius > 0 && !insideCap(sense.now, at)) return null;
   const dir = dirTo(at, sense.me);
   const near = dir ? along(at, dir as Vec3, REGROUP_NEAR_M, sense.layout.radius) : at;

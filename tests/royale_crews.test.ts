@@ -26,8 +26,10 @@ import {
   crewStandings,
   isRoyaleCrew,
 } from '../src/sim/royale/crews';
+import { startFlight } from '../src/sim/royale/pads';
 import { DROP_S, type DuskCap, TRIO_SEATS } from '../src/sim/royale/types';
 import type { Sim } from '../src/sim/sim';
+import type { Unit } from '../src/sim/unit';
 import { fakeGround, fakeLayout, R, sph } from './royale_fixture';
 import { loadPlanet } from './royale_planet';
 
@@ -237,6 +239,29 @@ describe('a match in crews', () => {
     const best = Math.max(...[...r.crewScores.values()]);
     expect(r.crewScores.get(r.winnerTeam!)).toBe(best);
     expect(sim.units.get(r.winnerId!)!.team).toBe(r.winnerTeam);
+  });
+
+  it('brings a Respawn return beside a crewmate on the ground, never one a pad carries', () => {
+    const { match, sim } = crewMatch('respawn', 23);
+    while (sim.time < DROP_S + 3) match.tick();
+    const mode = sim.royaleMode!;
+    const crew = teamsOf(sim)
+      .get(1)!
+      .map((id) => sim.units.get(id)!);
+    const [back, flier, other] = crew as [Unit, Unit, Unit];
+    // Its one crewmate standing is in a pad's flight; nobody else is near.
+    other.dead = true;
+    for (const u of sim.units.values()) {
+      if (u.kind === 'champion' && u.team !== 1) u.dead = true;
+    }
+    const pad = mode.state.pads[0]!;
+    mode.flights.set(flier.id, startFlight(flier.id, pad, flier.pos as Vec3, sim.time));
+    const at = mode.respawnPoint(back, sim)!;
+    expect(dist(at, flier.pos as Vec3)).toBeGreaterThan(CREW_LAND_MAX_M + 0.5);
+    // On the ground again, the return comes down beside it.
+    mode.flights.delete(flier.id);
+    const beside = mode.respawnPoint(back, sim)!;
+    expect(dist(beside, flier.pos as Vec3)).toBeLessThanOrEqual(CREW_LAND_MAX_M + 0.1);
   });
 
   it('is the same match from the same seed', () => {

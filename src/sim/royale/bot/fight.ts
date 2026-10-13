@@ -45,11 +45,13 @@ export const BYSTANDERS = 2;
 // weight, those within the skill's bystanderFullM at full weight (a
 // strong bot reads the champion beside the fight as a third fighter);
 // with no target, every enemy in reach at full weight. In Crews the
-// crewmates in reach fight beside it, at full weight (ADR 0034).
+// crewmates within ODDS_RADIUS fight beside it, at full weight (ADR 0034),
+// whatever reach the enemies are read in (`within` 0, the flight from a
+// far stronger enemy, still counts the crew beside the bot).
 export function royaleOdds(sense: Sense, target?: ObsUnit, within = ODDS_RADIUS): number {
   let own = strength(sense.s.hpFrac, sense.s.level, sense.s.items);
   for (const a of sense.allies) {
-    if (dist(sense.me, p3(a)) > within) break;
+    if (dist(sense.me, p3(a)) > ODDS_RADIUS) break;
     own += strength(a.hpFrac, a.level, a.items);
   }
   let enemy = 0;

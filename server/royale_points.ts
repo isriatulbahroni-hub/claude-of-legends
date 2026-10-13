@@ -10,8 +10,9 @@
 // score. In Crews (ADR 0034) a person on the same crew is no opponent, the
 // places are the crews' (the top tenth of the crews for 25, the top fifth
 // for 15, as fifty seats give five and ten), and every seat of the winning
-// crew is paid its end. Pure over what the sim counts and the mode's
-// events.
+// crew is paid its end; a One life champion fallen while its crew stands
+// counts as still playing when it was at its fall, since it can only
+// watch from there. Pure over what the sim counts and the mode's events.
 
 import type { RoyaleVariant } from '../src/net/royale_wire';
 import { activeNearEnd, POINTS, type PointsAward, weighted } from './points';
@@ -76,6 +77,8 @@ export class RoyalePoints {
   private readonly creatures = new Set<number>();
   // Seats already paid for their place (One life), and the end, once.
   private readonly placed = new Set<number>();
+  // One life in Crews: the tick each champion fell, by unit id.
+  private readonly fellAt = new Map<number, number>();
   private ended = false;
 
   constructor(
@@ -104,8 +107,15 @@ export class RoyalePoints {
       if (had) had.delta += delta;
       else earned.set(key, { clientId: seat.clientId, owner: seat.owner, reason, delta });
     };
+    if (this.crews !== null && this.variant === 'one_life') {
+      for (const ev of events) {
+        if (ev.type !== 'death' || this.fellAt.has(ev.unitId)) continue;
+        if (world.units.get(ev.unitId)?.kind === 'champion')
+          this.fellAt.set(ev.unitId, world.tickCount);
+      }
+    }
     const ending = (seat: RoyalePointsSeat): boolean =>
-      activeNearEnd(world.tickCount, seat.lastCommandAt);
+      activeNearEnd(this.fellAt.get(seat.unitId) ?? world.tickCount, seat.lastCommandAt);
 
     for (const seat of seats) {
       const u = world.units.get(seat.unitId);

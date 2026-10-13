@@ -252,9 +252,10 @@ export class RoyaleMatch {
       ack: 0,
       ackAt: 0,
       dropIn,
-      // Crews rank the crews from the drop: no window.
+      // In Crews the crews are ranked from the drop (the rank line and the
+      // result read the crew's), the window keeps when the seat landed.
       window:
-        arrived && this.variant === 'respawn' && this.crew === 1
+        arrived && this.variant === 'respawn'
           ? { from: this.sim.time, base: new Map(r.scores) }
           : null,
       cachesSent: false,

@@ -921,6 +921,47 @@ describe('Crews (ADR 0034)', () => {
     expect(h.service.presence().joinable).toBe(true);
   });
 
+  it('pays a takedown once with a crewmate on, twice with a person on another crew', () => {
+    const h = harness();
+    const a = h.connect(1, 'alice');
+    enterCrew(h, a, 3);
+    h.step(10);
+    const b = h.connect(2, 'bob');
+    enterCrew(h, b, 3);
+    h.runTo(DROP_S + 1);
+    const sim = h.fake.sims[0]!;
+    const self = h.last(1, 'match_start')!.selfUnitId;
+    const foe = (n: number) =>
+      [...sim.units.values()].filter((u) => u.kind === 'champion' && u.team !== 0)[n]!;
+    sim.takedown(foe(0).id, self);
+    h.step(1);
+    expect(h.last(1, 'points')).toMatchObject({ delta: 10, reason: 'kill' });
+    // A third person, in another crew: now the takedown doubles.
+    const c = h.connect(3, 'carol');
+    enterCrew(h, c, 3);
+    expect(h.last(3, 'match_start')!.team).toBe(0);
+    const d = h.connect(4, 'dan');
+    enterCrew(h, d, 3);
+    expect(h.last(4, 'match_start')!.team).not.toBe(0);
+    sim.takedown(foe(1).id, self);
+    h.step(1);
+    expect(h.last(1, 'points')).toMatchObject({ delta: 20, reason: 'kill' });
+  });
+
+  it("counts a drop-in's time on the end card from its landing", () => {
+    const h = harness();
+    const a = h.connect(1, 'alice');
+    enterCrew(h, a, 3);
+    h.runTo(DROP_S + 120);
+    const b = h.connect(2, 'bob');
+    enterCrew(h, b, 3);
+    h.runTo(DROP_S + PLAY_S + 1);
+    const result = h.last(2, 'royale_result')!;
+    expect(result.crew?.size).toBe(3);
+    expect(result.held).toBeGreaterThan(PLAY_S - 125);
+    expect(result.held).toBeLessThan(PLAY_S - 115);
+  });
+
   it('reads anything but three or five as Solo', () => {
     const h = harness();
     const a = h.connect(1, 'alice');

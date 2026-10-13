@@ -216,6 +216,28 @@ describe('points in Crews', () => {
     expect(placeReason(4, 16)).toBeNull();
   });
 
+  it('pays a One life crewmate fallen long before its crew wins, judged at its fall', () => {
+    const sim = new FakeRoyaleSim('one_life', 3);
+    const a = sim.addChampion(0, 'fenn', spot(0, 4));
+    const b = sim.addChampion(0, 'torv', spot(1, 4));
+    sim.addChampion(1, 'vesk', spot(2, 4));
+    const points = new RoyalePoints(sim, 'one_life', 2);
+    // Bob ordered last at tick 100 and fell then; Alice keeps playing.
+    const bob = { clientId: 2, owner: 20, unitId: b.id, lastCommandAt: 100, team: 0 };
+    sim.tickCount = 100;
+    points.observe(sim, [], [seat(1, a.id, 0), bob]);
+    b.dead = true;
+    points.observe(sim, [{ type: 'death', unitId: b.id, killerId: 0 }], [seat(1, a.id, 0), bob]);
+    // Four minutes on, the crew wins.
+    sim.tickCount = 100 + 2 * ACTIVE_END_TICKS;
+    const alice = { ...seat(1, a.id, 0), lastCommandAt: sim.tickCount };
+    const awards = points.observe(sim, [{ type: 'royale_end', winnerId: a.id }], [alice, bob]);
+    expect(awards.map((x) => [x.clientId, x.reason])).toEqual([
+      [1, 'last_standing'],
+      [2, 'last_standing'],
+    ]);
+  });
+
   it('pays every seat of the winning crew its end, a fallen one too', () => {
     const sim = new FakeRoyaleSim('respawn', 3);
     const a = sim.addChampion(0, 'fenn', spot(0, 4));

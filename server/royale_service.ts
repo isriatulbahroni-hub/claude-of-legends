@@ -513,11 +513,13 @@ export class RoyaleService {
     const { send } = this.deps;
     const m = entry.match;
     m.tick();
+    // In Crews the seat's crew, so a crewmate is no opponent (ADR 0034).
     const seats = [...m.players.values()].map((p) => ({
       clientId: p.clientId,
       owner: p.owner,
       unitId: p.unitId,
       lastCommandAt: p.lastCommandAt,
+      ...(m.crew > 1 ? { team: p.team } : {}),
     }));
     bankAwards(m.points.observe(m.sim, m.lastEvents, seats), this.deps.bank, (cid, msg) => {
       m.notePoints(cid, msg.delta);

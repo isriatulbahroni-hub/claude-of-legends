@@ -9,7 +9,7 @@ five as well, and settled three choices: a person's crewmates are house bots, an
 who enter the same crew size are put in the same crew while it has a bot's seat (no party, no
 invitation); in One life a fallen champion is out for good and watches its crew, with no
 knocked-down state to be lifted from; the crew size is chosen on the battle royale's quick pick
-card, Solo, Trios or Fives, and Play now stays Respawn in Solo. This records the decisions the
+card, Solo, Trios or Fives, and Play now stays Respawn in Solo (its quick pick opens on Solo). This records the decisions the
 code rests on (CONTEXT.md: Crew).
 
 ## Decision
@@ -30,7 +30,8 @@ code rests on (CONTEXT.md: Crew).
   as before, the crewmates' apart in the ally's blue.
 - **Coming back and arriving beside the crew.** A Respawn return with no pick of its own, and an
   Arrival, come down 3 to 6 m from a crewmate standing deep in the light with no enemy within
-  12 m of it (`crews.ts` besideCrew); with none, the edge of the light, the fair first fight or
+  12 m of it (`crews.ts` besideCrew), never one a launch pad carries; with none, the edge of the
+  light, the fair first fight or
   the quiet spot as in Solo. In every crew size the clearance of a return and of an Arrival, the
   edge's distance, an Arrival's fair foe and its crowding read the other crews only (in Solo:
   every other champion, as before).
@@ -45,22 +46,27 @@ code rests on (CONTEXT.md: Crew).
 - **The bots.** The observation's royale block names the crew's anchor (`ObsRoyale.anchor`: a
   person playing in the crew, else its first champion standing; the bot mark is public). A bot
   farther than 14 m from its anchor walks back to 5 m of it, unless the anchor stands in the
-  dark; within the leash it loots, takes camps and answers calls as alone. Its crewmates within
-  the odds' reach weigh beside it in a fight's odds, and a crewmate's mark is nobody's hunt.
+  dark, and a walk back goes on until it arrives (its destination still within 9 m of the
+  anchor); within the leash it loots, takes camps and answers calls as alone. Its crewmates
+  within 16 m (the odds' reach) weigh beside it in every fight's odds, the flight from a far
+  stronger enemy included, and a crewmate's mark is nobody's hunt.
 - **Entering.** The 'royale' message carries the crew size (`c`: 3 or 5, Solo when absent). A
   person joins the liveliest match of the variant and size asked, in a bot's seat of the crew
   with the most people first, then the champion picked as before (`server/royale_join.ts`). The
   match kept running for visitors is Solo Respawn's alone; a match of Crews starts with the
-  person who asks. A Respawn drop-in in Crews is ranked with its crew from the drop: no window
-  since landing.
+  person who asks. A Respawn drop-in in Crews is ranked with its crew from the drop; its end
+  card counts its own takedowns and its time from its landing.
 - **Points (ADR 0027).** A person on the same crew is no opponent: the weight doubles only for a
   person on another crew. One life's places are the crews', out of the crews: the last crew
   standing 50, the top tenth of the crews 25, the top fifth 15 (fifty seats in Solo give five and
   ten, as before). Respawn's 50 for the best score and One life's 50 go to every seat of the
-  winning crew still playing, a fallen one too.
-- **The screens.** The quick pick card has a Crew row (Solo, Trios, Fives) remembered with the
-  pick. In Crews the top line counts crews ("Crew #3 of 16 · 12 takedowns · 2 behind #2", "5
-  crews left · 7 takedowns"), the win line and the win card say what wins a crew, crewmates are
+  winning crew still playing, a fallen one too: a One life champion fallen while its crew
+  stands can only watch, so it counts as still playing when it was at its fall.
+- **The screens.** The quick pick card has a Crew choice (Solo, Trios, Fives) at the right of
+  its head, remembered with the pick; Play now opens it on Solo, the tiles on the size last
+  played. In Crews the top line counts crews ("Crew #3 of 16 · 12 takedowns · 2 behind #2", "5
+  crews left · 7 takedowns"), the win line ("Top crew wins · 4:12 left · your crew is 3rd",
+  "Last crew standing wins · 5 left") and the win card say what wins a crew, crewmates are
   drawn as allies (the health bar, the ring, the minimap) and named in the ally's blue in the
   kill feed, a One life champion out for good watches a crewmate standing
   (`src/game/crew_watch.ts`), and the end screen says the crew's place, what the seat and its
@@ -71,23 +77,33 @@ code rests on (CONTEXT.md: Crew).
 ## Measured
 
 `node scripts/royale_crews.mjs --seeds 6`: seeds 1 to 6 of each variant and crew size, every
-seat a house bot, no person (so no escort crew), rules 13.
+seat a house bot, no person (so no escort crew), rules 13 with the review's fixes (the walk
+back that goes on until it arrives, the crew in the flight's odds). Solo's figures are the
+same script's on the same seeds; nothing changed in Solo moves them.
 
-- **One life** ends at 7:43 on average in Solo, 7:10 in Trios and 7:05 in Fives, with 49, 46
-  and 48 takedowns. The winning crew ends with 2.2 of its three champions standing in Trios on
-  average, 2.3 of its five in Fives. Crews still in by minute, Trios seed 1: 16 16 16 15 12 9 7
-  3 2; Fives seed 1: 10 10 10 8 6 5 3 3 2.
-- **Respawn** runs its ten minutes with 962 takedowns in Solo, 982 in Trios, 1029 in Fives. The
-  best crew scores 198 against the second's 149 in Trios on average, 346 against 221 in Fives
+- **One life** ends at 7:43 on average in Solo, 7:36 in Trios and 6:58 in Fives, with 49, 47
+  and 47 takedowns. The winning crew ends with 1.3 of its three champions standing in Trios on
+  average, 2.7 of its five in Fives. Crews still in by minute, Trios seed 1: 16 16 15 14 10 7
+  6 4 2; Fives seed 1: 10 10 10 10 8 5 4.
+- **Respawn** runs its ten minutes with 962 takedowns in Solo, 970 in Trios, 1030 in Fives. The
+  best crew scores 210 against the second's 138 in Trios on average, 280 against 221 in Fives
   (the best champion in Solo: 143 against 82).
 - **Together.** Of every standing champion's seconds, the share with a crewmate standing within
-  the 14 m leash: 69 percent in Respawn Trios, 85 in Respawn Fives, 81 in One life Trios, 90 in
-  One life Fives; the median distance to the nearest crewmate 6.4, 3.3, 5.3 and 2.5 m.
-- **Left open.** A Respawn crew of five that pulls ahead stays ahead (a 57 percent lead over the
-  second on average, 495 against 200 on seed 6); nothing slows a leading crew yet but the
-  Lodestar's mark on its best champion. No person played in these matches: a person's crew, its
-  escort crew and a drop-in beside its crew are pinned by tests (`tests/royale_crews.test.ts`,
-  `tests/royale_crew_bot.test.ts`) and one browser run, not measured.
+  the 14 m leash, a champion left alone counting as apart: 67 percent in Respawn Trios, 85 in
+  Respawn Fives, 74 in One life Trios, 84 in One life Fives; the median distance to the
+  nearest crewmate standing 6.0, 3.2, 4.4 and 2.2 m.
+- **Beside a person.** A seat that gives no order after the landing, its crew's anchor, seeds 1
+  to 4 of Respawn Trios and Fives, the first 90 s: its crewmates stand within 10 m of it for 34
+  percent of their seconds, 12.3 m away at the median. Before the walk back went on until it
+  arrived, 13 percent and 14.0 m: the bots stood at the leash, one step each way a slot
+  (an ad hoc probe beside the script; a 10 m leash gave 49 percent and 10.2 m, but a quarter
+  of the seconds past 57 m, and was left).
+- **Left open.** A Respawn crew that pulls ahead stays ahead: Trios' best crew leads the second
+  by half again on average (298 against 106 on seed 2), Fives' by a quarter. Nothing slows a
+  leading crew yet but the Lodestar's mark on its best champion. No person played in these
+  matches: a person's crew, its escort crew and a drop-in beside its crew are pinned by tests
+  (`tests/royale_crews.test.ts`, `tests/royale_crew_bot.test.ts`) and browser runs, not
+  measured.
 
 ## Consequences
 

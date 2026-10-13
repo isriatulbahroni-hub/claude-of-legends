@@ -2,9 +2,11 @@
 // 0034): plays N seeds of each variant and crew size headless on the
 // Wanderseed, every seat a house bot, and prints per match and on average
 // how long it ran, the takedowns, how close each champion kept to its
-// crew (the share of its standing seconds with a crewmate within 14 m, the
-// regroup leash, bot/brain.ts REGROUP_M, and the median distance to the
-// nearest crewmate standing), and the end: One life's crews still in by
+// crew (of every standing champion's seconds, the share with a crewmate
+// standing within the regroup leash, bot/brain.ts REGROUP_M, a champion
+// left alone counting as apart; and the median distance to the nearest
+// crewmate standing, over the seconds one stands, every match's seconds
+// pooled in the summary), and the end: One life's crews still in by
 // minute and the winning crew's champions standing; Respawn's best two
 // crew scores and the spread of the crews' scores.
 //
@@ -53,9 +55,10 @@ interface Match {
   duration: number;
   takedowns: number;
   // Of every standing champion's sampled seconds, the share with a
-  // crewmate standing within REGROUP_M; the median distance to the
-  // nearest one.
+  // crewmate standing within REGROUP_M (alone counts as apart); the
+  // distances to the nearest one standing, and their median.
   together: number;
+  nearest: number[];
   nearestMedian: number;
   // One life: crews (or champions in Solo) still in at each minute, and
   // the winning crew's champions standing at the end.
@@ -99,8 +102,8 @@ function play(planet: RoyalePlanet, variant: RoyaleVariant, crew: RoyaleCrew, se
           if (o.id === u.id || o.team !== u.team) continue;
           best = Math.min(best, dist(u.pos as Vec3, o.pos as Vec3));
         }
-        if (!Number.isFinite(best)) continue;
         sampled++;
+        if (!Number.isFinite(best)) continue;
         if (best <= REGROUP_M) near++;
         nearest.push(best);
       }
@@ -123,6 +126,7 @@ function play(planet: RoyalePlanet, variant: RoyaleVariant, crew: RoyaleCrew, se
     duration: sim.time - DROP_S,
     takedowns: mode.tally.takedowns,
     together: sampled > 0 ? near / sampled : Number.NaN,
+    nearest,
     nearestMedian: median(nearest),
     inByMin,
     winnersStanding: champions().filter((u) => !u.dead && u.team === s.winnerTeam).length,
@@ -167,7 +171,7 @@ for (const variant of variants) {
     console.log(
       `  ${variant} ${name(crew)}: over at ${clock(avg((m) => m.duration))}, ` +
         `${avg((m) => m.takedowns).toFixed(0)} takedowns, together ${pct(avg((m) => m.together))}, ` +
-        `nearest crewmate ${avg((m) => m.nearestMedian).toFixed(1)} m, ${extra}`,
+        `nearest crewmate ${median(ms.flatMap((m) => m.nearest)).toFixed(1)} m (median), ${extra}`,
     );
   }
 }

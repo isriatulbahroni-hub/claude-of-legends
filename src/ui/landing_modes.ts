@@ -83,7 +83,10 @@ export function accountCardWords(own: LandingOwn | null): { title: string; line:
 
 // What a way in plays as a Guest (ADR 0024): the battle royale on one of its
 // two rule sets (ADR 0031), or the 5v5 on the Star Orchard.
-export type LandingPlay = { to: 'royale'; variant: RoyaleVariant } | { to: 'classic' };
+// `solo`: the quick pick opens on Solo whatever crew size it remembers
+// (ADR 0034: Play now stays Respawn in Solo, the match the landing's line
+// says is on); the person may still choose a crew on it.
+export type LandingPlay = { to: 'royale'; variant: RoyaleVariant; solo?: true } | { to: 'classic' };
 
 // The way in that needs nothing: what its button says, and what the
 // landing resolves with when it is pressed (ui/landing.ts). The Play now
@@ -101,7 +104,7 @@ export interface LandingDoor {
 export const PLAY_NOW: LandingDoor = {
   call: PLAY_NOW_CALL,
   kind: 'guest',
-  play: { to: 'royale', variant: 'respawn' },
+  play: { to: 'royale', variant: 'respawn', solo: true },
 };
 
 // The Play now card's ways in, one row each, in the order they stand: the

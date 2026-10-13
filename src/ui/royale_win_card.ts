@@ -39,9 +39,9 @@ const CARDS: Readonly<Record<RoyaleVariant, WinCardWords>> = {
 // In Crews (ADR 0034): the crew wins or falls as one.
 const CREW_CARDS: Readonly<Record<RoyaleVariant, WinCardWords>> = {
   respawn: {
-    title: 'The crew with the most takedowns when the light goes out wins',
+    title: 'The crew with the most takedowns wins',
     lines: [
-      'Your crew shares its sight and its score',
+      'Your crew shares its sight and score',
       'Open caches for your build',
       'Stay in the light: the Dusk burns',
     ],
@@ -49,7 +49,7 @@ const CREW_CARDS: Readonly<Record<RoyaleVariant, WinCardWords>> = {
   one_life: {
     title: 'Last crew standing wins',
     lines: [
-      'One life: a fall leaves you watching your crew',
+      'One life: then you watch your crew',
       'Open caches for your build',
       'Stay in the light: the Dusk burns',
     ],

@@ -8,6 +8,7 @@ import { crewWatchTarget } from '../src/game/crew_watch';
 import { clampSettings } from '../src/game/settings';
 import { royaleEnterMsg } from '../src/net/royale_client';
 import type { RoyaleResult, SnapMark } from '../src/net/royale_wire';
+import { LANDING_WAYS, PLAY_NOW } from '../src/ui/landing_modes';
 import { huntedTargets } from '../src/ui/royale_hunted';
 import { CREW_CHOICES, crewChoice } from '../src/ui/royale_modes';
 import { joiningLine } from '../src/ui/royale_pick';
@@ -44,6 +45,12 @@ describe('the crew size on the quick pick', () => {
     expect(initialPick(memory, ['dain'], () => 1, ['riftstep', 'mend'], 'dain').crew).toBe(3);
   });
 
+  it("opens Play now's pick on Solo, the match the landing says is on", () => {
+    expect(PLAY_NOW.play).toEqual({ to: 'royale', variant: 'respawn', solo: true });
+    const oneLife = LANDING_WAYS.find((w) => w.id === 'one_life')!;
+    expect(oneLife.door.play).toEqual({ to: 'royale', variant: 'one_life' });
+  });
+
   it('says what the joining card waits on', () => {
     expect(joiningLine(1)).toMatch(/fifty seats/);
     expect(joiningLine(3)).toBe('Finding you a crew of three, bots in the empty seats.');
@@ -75,10 +82,13 @@ describe('the top line and the win line in Crews', () => {
 
   it('says what wins in Crews', () => {
     const r = { ...base, end: 610, rk: 3, cw: { n: 16, s: 4 } };
-    expect(winLine(r, 358)).toBe('Most crew takedowns wins · 4:12 left · your crew is 3rd');
-    expect(winLine({ ...r, v: 'one_life', cw: { n: 5, s: 0 } }, 100)).toBe(
-      'Last crew standing wins · 5 crews left',
-    );
+    expect(winLine(r, 358)).toBe('Top crew wins · 4:12 left · your crew is 3rd');
+    expect(winLine(r, 358, true)).toBe('Top crew wins · 4:12 left');
+    const oneLife = { ...r, v: 'one_life' as const, cw: { n: 5, s: 0 } };
+    expect(winLine(oneLife, 100)).toBe('Last crew standing wins · 5 left');
+    // On a phone the count beside the Dusk line says the crews left.
+    expect(winLine(oneLife, 100, true)).toBe('Last crew standing wins');
+    expect(winCardWords('respawn', true).title).toBe('The crew with the most takedowns wins');
     expect(winCardWords('one_life', true).title).toBe('Last crew standing wins');
     expect(winCardWords('one_life').title).toBe('Last one standing wins');
   });

@@ -61,7 +61,7 @@ describe("the landing's New banner", () => {
     // (the maintainer, 2026-10-03).
     expect(landing).not.toContain('bots in every empty seat');
     // The gold button still plays Respawn, and still says where it plays.
-    expect(PLAY_NOW.play).toEqual({ to: 'royale', variant: 'respawn' });
+    expect(PLAY_NOW.play).toEqual({ to: 'royale', variant: 'respawn', solo: true });
     expect(PLAY_NOW_CALL).toBe('Play in the browser now');
   });
 });

@@ -92,7 +92,7 @@ describe("the landing's ways to play", () => {
     expect(PLAY_NOW).toEqual({
       call: PLAY_NOW_CALL,
       kind: 'guest',
-      play: { to: 'royale', variant: 'respawn' },
+      play: { to: 'royale', variant: 'respawn', solo: true },
     });
   });
 
@@ -103,7 +103,7 @@ describe("the landing's ways to play", () => {
     // Respawn's row is the gold button's own door, so the two cannot differ.
     expect(LANDING_WAYS[0]?.door).toBe(PLAY_NOW);
     expect(LANDING_WAYS.map((w) => w.door.play)).toEqual([
-      { to: 'royale', variant: 'respawn' },
+      { to: 'royale', variant: 'respawn', solo: true },
       { to: 'royale', variant: 'one_life' },
       { to: 'classic' },
     ]);

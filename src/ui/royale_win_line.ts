@@ -3,9 +3,11 @@
 // viewer stands. Respawn: "Most takedowns wins · 4:12 left · you are 11th",
 // the time until the last light goes out and the own rank (the count line
 // above qualifies a drop-in's, "since you landed"). One life: "Last one
-// standing wins · 23 left". In Crews (ADR 0034) the crews': "Most crew
-// takedowns wins · 4:12 left · your crew is 3rd", "Last crew standing wins
-// · 5 crews left". On a phone (`compact`) the line shares its row
+// standing wins · 23 left". In Crews (ADR 0034) the crews': "Top crew
+// wins · 4:12 left · your crew is 3rd", "Last crew standing wins · 5 left"
+// (the crews; the count line above names them, alone on a phone), no wider
+// than Solo's. On a
+// phone (`compact`) the line shares its row
 // with the Dusk's pill and leaves the rank to the count beside the Dusk
 // line, which carries it there; on a desktop the pill takes its place
 // while it shows (winLineAside).
@@ -14,7 +16,7 @@
 // ui/royale_win_view.ts draws it.
 
 import type { SnapRoyale } from '../net/royale_wire';
-import { clockText, crewsText, ordinal } from './royale_text';
+import { clockText, ordinal } from './royale_text';
 
 // Its size and padding, a desktop's and a phone's, and the gap to the
 // Dusk's pill beside it on a phone (ui/royale_win_view.ts).
@@ -29,7 +31,7 @@ export const WIN_LINE_EM_PER_CHAR = 0.6;
 
 export const RESPAWN_WINS = 'Most takedowns wins';
 export const ONE_LIFE_WINS = 'Last one standing wins';
-export const CREW_RESPAWN_WINS = 'Most crew takedowns wins';
+export const CREW_RESPAWN_WINS = 'Top crew wins';
 export const CREW_ONE_LIFE_WINS = 'Last crew standing wins';
 
 export function winLine(
@@ -39,7 +41,9 @@ export function winLine(
 ): string | null {
   if (r.st !== 'play') return null;
   if (r.v === 'one_life') {
-    if (r.cw) return `${CREW_ONE_LIFE_WINS} · ${crewsText(r.cw.n)} left`;
+    // On a phone the count beside the Dusk line already says the crews
+    // left (royale_text.ts crewCountLine), and the row has no room for both.
+    if (r.cw) return compact ? CREW_ONE_LIFE_WINS : `${CREW_ONE_LIFE_WINS} · ${r.cw.n} left`;
     return `${ONE_LIFE_WINS} · ${r.alive} left`;
   }
   const parts = [r.cw ? CREW_RESPAWN_WINS : RESPAWN_WINS, `${clockText(r.end - time)} left`];

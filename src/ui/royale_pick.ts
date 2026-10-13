@@ -1,7 +1,9 @@
 // The battle royale's quick pick (ADR 0031): one card over the painted
-// backdrop, the ten champions of the roster on the left, the one chosen on
-// the right with the crew size (Solo, Trios, Fives; ADR 0034), its skins
-// and the two sigils, Random, and the big Play.
+// backdrop, the crew size (Solo, Trios, Fives; ADR 0034) at the right of
+// its head, the ten champions of the roster on the left, the one chosen on
+// the right with its skins and the two sigils, Random, and the big Play.
+// The crew stands in the head, not the rail: in the rail it pushed Random
+// and Back off a phone held sideways (the review, 2026-10-13).
 // No lanes, no bans, no clock, and nothing taken: duplicates are allowed.
 // It opens on the pick last played (ui/royale_pick_rules.ts decides, the
 // host remembers it); Back, Escape or the browser's Back leave it with no
@@ -47,9 +49,12 @@ const CSS = `
 .br-pick-role { font-size: 11px; font-weight: 800; letter-spacing: 1px; margin-top: 2px; }
 .br-pick-blurb { font-size: 12px; line-height: 1.45; color: #a9b9cf; margin: 6px 0 2px; }
 .br-pick-side .menu-sigils { flex-wrap: wrap; }
-.br-pick-crews { display: flex; gap: 6px; margin: 4px 0 2px; }
-.br-pick-crews .menu-sigil { flex: 1 1 0; }
-.br-pick-crew-line { font-size: 11.5px; line-height: 1.4; color: #a9b9cf; margin: 2px 0 4px; }
+.br-pick-head { flex-wrap: wrap; }
+.br-pick-words { flex: 1 1 200px; min-width: 0; }
+.br-pick-crew { margin-left: auto; width: 290px; flex: none; }
+.br-pick-crews { display: flex; gap: 6px; margin: 3px 0 0; }
+.br-pick-crews .menu-sigil { flex: 1 1 0; margin: 0; }
+.br-pick-crew-line { font-size: 11.5px; line-height: 1.4; color: #a9b9cf; margin: 3px 0 0; }
 .br-pick-side .menu-sigil { flex: 1 1 40%; }
 .br-pick-actions { margin-top: auto; padding-top: 10px; display: flex; flex-direction: column; gap: 0; }
 .br-pick-actions .menu-btn { min-height: 44px; }
@@ -64,6 +69,7 @@ const CSS = `
 }
 @media (max-width: 560px) {
   .br-pick-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .br-pick-crew { width: 100%; margin-left: 0; }
 }
 /* A phone held sideways (844x390): the head is one line, the cards sit
    in two rows of five on the left, the rail beside them with Play pinned
@@ -88,7 +94,10 @@ const CSS = `
   .br-pick-side .menu-skins, .br-pick-side .menu-sigils { margin: 2px 0 2px; gap: 4px; }
   .br-pick-side .menu-skin { padding: 4px 7px 4px 22px; font-size: 10px; }
   .br-pick-side .menu-sigil { padding: 5px 2px; font-size: 10px; min-height: 30px; }
-  .br-pick-crew-line { display: none; }
+  .br-pick-crew { width: 236px; }
+  .br-pick-crew small, .br-pick-crew-line { display: none; }
+  .br-pick-crews { margin: 0; gap: 4px; }
+  .br-pick-crews .menu-sigil { padding: 3px 2px; font-size: 10px; min-height: 24px; }
   .br-pick-actions { padding-top: 4px; }
   .br-pick-actions .menu-btn { margin-top: 4px; padding: 6px; font-size: 12px; }
   .br-pick-play.menu-btn.primary { padding: 8px 6px; font-size: 14px; }
@@ -132,7 +141,7 @@ export function showRoyalePick(
 
   const mode = royaleMode(opts.variant);
   const head = el('div', 'br-pick-head');
-  const words = el('div', '');
+  const words = el('div', 'br-pick-words');
   words.append(
     el('small', '', ROYALE_LABEL),
     el('h1', 'menu-title', mode.title),
@@ -180,6 +189,9 @@ export function showRoyalePick(
     crewButtons.set(c.crew, btn);
     crewRow.appendChild(btn);
   }
+  const crewBox = el('div', 'br-pick-crew');
+  crewBox.append(el('small', '', 'Crew'), crewRow, crewLine);
+  head.appendChild(crewBox);
   const skinRow = el('div', 'menu-skins');
   const sigilRow = el('div', 'menu-sigils');
   const sigilButtons = new Map<string, HTMLButtonElement>();
@@ -213,9 +225,6 @@ export function showRoyalePick(
     name,
     roleLine,
     blurb,
-    el('div', 'menu-label', 'Crew'),
-    crewRow,
-    crewLine,
     el('div', 'menu-label', 'Skin'),
     skinRow,
     el('div', 'menu-label', 'Sigils, two'),

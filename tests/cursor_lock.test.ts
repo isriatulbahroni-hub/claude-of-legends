@@ -259,6 +259,29 @@ class PointerEv extends FakeEvent {}
 class MouseEv extends FakeEvent {}
 class WheelEv extends FakeEvent {}
 
+// Firefox's mouse events while the pointer is locked: every one, a page's
+// own included, reads the point where the lock took, whatever its maker
+// said (Gecko's Event::GetClientCoords hands back the EventStateManager's
+// last client point while PointerLockManager::IsLocked()).
+const FROZEN: Record<'clientX' | 'clientY', number> = { clientX: 120, clientY: 80 };
+class GeckoPointerEv extends PointerEv {}
+class GeckoMouseEv extends MouseEv {}
+class GeckoWheelEv extends WheelEv {}
+for (const Ev of [GeckoPointerEv, GeckoMouseEv, GeckoWheelEv]) {
+  for (const axis of ['clientX', 'clientY'] as const) {
+    const made = Symbol(axis);
+    Object.defineProperty(Ev.prototype, axis, {
+      configurable: true,
+      get(this: Record<symbol, unknown>) {
+        return page.doc.pointerLockElement ? FROZEN[axis] : this[made];
+      },
+      set(this: Record<symbol, unknown>, value: unknown) {
+        this[made] = value;
+      },
+    });
+  }
+}
+
 interface Page {
   win: FakeTarget;
   doc: FakeTarget & {
@@ -281,8 +304,9 @@ interface Page {
 let page: Page;
 
 // The page: a root over a canvas, and a HUD with a slot (its key label
-// inside it) and a scrolling list, fullscreen.
-function buildPage(opts: { dpr?: number; fullscreen?: boolean } = {}): Page {
+// inside it) and a scrolling list, fullscreen; its events Firefox's when
+// `gecko`.
+function buildPage(opts: { dpr?: number; fullscreen?: boolean; gecko?: boolean } = {}): Page {
   const html = new FakeElement('html');
   const head = html.appendChild(new FakeElement('head'));
   const body = html.appendChild(new FakeElement('body'));
@@ -302,9 +326,9 @@ function buildPage(opts: { dpr?: number; fullscreen?: boolean } = {}): Page {
     devicePixelRatio: opts.dpr ?? 1,
     matchMedia: () => ({ matches: true }),
     getComputedStyle: (el: FakeElement) => el.computed,
-    PointerEvent: PointerEv,
-    MouseEvent: MouseEv,
-    WheelEvent: WheelEv,
+    PointerEvent: opts.gecko ? GeckoPointerEv : PointerEv,
+    MouseEvent: opts.gecko ? GeckoMouseEv : MouseEv,
+    WheelEvent: opts.gecko ? GeckoWheelEv : WheelEv,
   });
   const doc = Object.assign(new FakeTarget(), {
     defaultView: win,
@@ -438,6 +462,37 @@ describe('the lock over a page', () => {
     native('pointermove', { movementX: 0, movementY: 0 });
     native('mousemove', { movementX: 25, movementY: 0 });
     expect(moves).toEqual(['pointermove@425', 'pointermove@450']);
+    lock.dispose();
+  });
+
+  it('carries the virtual point on Firefox, whose locked events all read the frozen one', () => {
+    // The real cursor stood at (120, 80) when the lock took. The hand
+    // moves the painted one and right-clicks there: the ground's order,
+    // the aim, the edge pan, the minimap and the wheel's zoom all read the
+    // point off the event, which Firefox would have said was (120, 80).
+    buildPage({ gecko: true });
+    const lock = install();
+    const seen: string[] = [];
+    const types = ['pointermove', 'mousemove', 'pointerdown', 'mousedown', 'pointerup', 'mouseup'];
+    for (const t of [...types, 'auxclick', 'wheel']) {
+      page.canvas.addEventListener(t, (e) => {
+        seen.push(`${t}@${e.clientX},${e.clientY}`);
+        e.preventDefault();
+      });
+    }
+    native('pointermove', { movementX: 50, movementY: -20 });
+    native('pointerdown', { button: 2, buttons: 2 });
+    native('pointerup', { button: 2 });
+    native('auxclick', { button: 2 });
+    native('wheel', { deltaY: 120, deltaMode: 0 });
+    expect(seen).toEqual([
+      'pointermove@450,280',
+      'mousemove@450,280',
+      'pointerdown@450,280',
+      'pointerup@450,280',
+      'auxclick@450,280',
+      'wheel@450,280',
+    ]);
     lock.dispose();
   });
 

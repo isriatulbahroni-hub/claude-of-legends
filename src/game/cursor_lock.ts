@@ -8,7 +8,9 @@
 // at that position to whatever stands there, so the ground, the HUD and
 // the minimap keep their handlers unchanged. Native pointer events carry
 // frozen coordinates while locked and are stopped before anyone reads
-// them. What a browser does for a real pointer, the lock does by hand:
+// them; Firefox gives the re-dispatched ones the same frozen coordinates,
+// so each carries the virtual point on itself (pinPoint). What a browser
+// does for a real pointer, the lock does by hand:
 // the enter and leave pairs along the ancestors, :hover (the elements
 // under the virtual cursor get a `vhover` class, and every :hover rule of
 // the page's stylesheets is copied onto it), a click at the press and the
@@ -425,6 +427,28 @@ export function installCursorLock(root: HTMLElement, doc: Document = document): 
     pressure: native.buttons ? 0.5 : 0,
   });
 
+  // Firefox reads every mouse event's point off the lock while the pointer
+  // is locked, the page's own events too: Gecko's Event::GetClientCoords
+  // hands back the point where the lock took, whatever the event was made
+  // with. Each synthetic event then said that one frozen point, and every
+  // click on the ground ordered the same walk, a click on the champion
+  // included. The virtual point is written on the event itself, which
+  // stands before the browser's getters.
+  const pinPoint = (ev: Event): void => {
+    const pageX = vx + (win.scrollX || 0);
+    const pageY = vy + (win.scrollY || 0);
+    Object.defineProperties(ev, {
+      clientX: { value: vx },
+      clientY: { value: vy },
+      x: { value: vx },
+      y: { value: vy },
+      screenX: { value: vx },
+      screenY: { value: vy },
+      pageX: { value: pageX },
+      pageY: { value: pageY },
+    });
+  };
+
   // Dispatches one synthetic event; true unless a handler canceled it.
   const forward = (
     type: string,
@@ -436,6 +460,7 @@ export function installCursorLock(root: HTMLElement, doc: Document = document): 
     const ev = type.startsWith('pointer')
       ? new PointerEv(type, detail)
       : new win.MouseEvent(type, detail);
+    pinPoint(ev);
     synthetic.add(ev);
     return target.dispatchEvent(ev);
   };
@@ -529,6 +554,7 @@ export function installCursorLock(root: HTMLElement, doc: Document = document): 
     // pixel wheel's notch, so a notch zooms as far locked as free.
     const { deltaMode, deltaX, deltaY, deltaZ } = wheelDeltas(w);
     const ev = new win.WheelEvent('wheel', { ...init(w), deltaX, deltaY, deltaZ, deltaMode });
+    pinPoint(ev);
     synthetic.add(ev);
     const go = target.dispatchEvent(ev);
     // Ctrl and the wheel zoom the page, the browser's own to do.

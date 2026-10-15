@@ -11,10 +11,18 @@ export interface RoyalePick {
   championId: string;
   skin: number;
   sigils: [string, string];
+  // The crew size (ADR 0034): Trios or Fives, Solo when absent.
+  crew?: 3 | 5;
 }
 
 // A first pick's sigils, the ones champion select starts on too.
 export const DEFAULT_SIGILS: [string, string] = ['riftstep', 'mend'];
+
+// The crew size chosen on the card: Solo drops the field, as on the wire.
+export function withCrew(pick: RoyalePick, crew: 1 | 3 | 5): RoyalePick {
+  const { crew: _was, ...rest } = pick;
+  return crew === 1 ? rest : { ...rest, crew };
+}
 
 // The champion a browser's first battle royale opens the quick pick on,
 // with no pick remembered. A drop-in plays the champion it picked
@@ -29,7 +37,7 @@ export const FIRST_ROYALE_CHAMPION = 'dain';
 
 // What the card opens on: the pick remembered, kept to what exists now (a
 // champion still in the roster, a skin it still has, two sigils that still
-// exist), else the house default.
+// exist, the crew size last played), else the house default.
 export function initialPick(
   memory: RoyalePickMemory | null,
   roster: readonly string[],
@@ -45,7 +53,8 @@ export function initialPick(
     kept && kept[0] !== kept[1] && kept.every((id) => sigilIds.includes(id))
       ? [kept[0], kept[1]]
       : [...DEFAULT_SIGILS];
-  return { championId, skin, sigils };
+  const crew = memory?.crew;
+  return { championId, skin, sigils, ...(crew === 3 || crew === 5 ? { crew } : {}) };
 }
 
 // The Random button: any champion but the one on screen, so a press always

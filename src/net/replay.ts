@@ -14,9 +14,10 @@ import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { Ground } from '../sim/ground';
 import { NavGrid } from '../sim/navgrid';
 import type { LanePreference, PlaybookDef } from '../sim/playbook/types';
+import { crewCount, crewOfSeat } from '../sim/royale/crews';
 import { royaleSeatSkills } from '../sim/royale/fill';
 import { type PlanetLayoutRecord, planetGameMap, royaleLayoutOf } from '../sim/royale/planet_map';
-import { ROYALE_RULES_VERSION, type RoyaleVariant } from '../sim/royale/types';
+import { ROYALE_RULES_VERSION, type RoyaleCrew, type RoyaleVariant } from '../sim/royale/types';
 import { Sim } from '../sim/sim';
 import { TerrainNavGrid } from '../sim/terrain_nav';
 import type { TeamId } from '../sim/types';
@@ -138,7 +139,7 @@ export interface ReplayRecord {
   // data, not the reference. Absent for roster-only matches.
   forged?: ForgedChampionDef[];
   // A battle royale on the Wanderseed (ADR 0031), built by buildRoyaleSim
-  // from the same seed and picks (each pick's team its seat index), absent
+  // from the same seed and picks (each pick's team its crew, crews.ts crewOfSeat), absent
   // on every 5v5. Additive: a record without it is a 5v5 as it always was.
   // `rules` is the ROYALE_RULES_VERSION it ran under: the planet's rules
   // move without REPLAY_VERSION, and royaleReplayPlayable checks them.
@@ -205,6 +206,8 @@ export interface RoyaleBuildOptions {
   // The seats (pick indices) of the people new to the battle royale (the
   // server knows; RoyaleMode.newcomers). Nothing reads them yet.
   newcomers?: readonly number[];
+  // The crew size (CONTEXT.md: Crew; ADR 0034): Solo when absent.
+  crew?: RoyaleCrew;
 }
 
 // A battle royale's own part of a replay record (ReplayRecord.royale), the
@@ -214,12 +217,15 @@ export interface RoyaleRecord {
   guestsOnly?: boolean;
   rules?: number;
   newcomers?: number[];
+  // Trios or Fives (ADR 0034); absent for Solo, as every record before it.
+  crew?: 3 | 5;
 }
 
 // The one sim construction for a battle royale, live and replayed alike,
-// beside buildMatchSim: one team per seat (ADR 0030), the planet's map and
-// ground, the mode's rules, every seat seated in pick order (team = the
-// seat's index): no gold, level 3 with Q, W and E, its build fixed, its bot
+// beside buildMatchSim: one team per crew (ADR 0030, ADR 0034), the planet's
+// map and ground, the mode's rules, every seat seated in pick order (team =
+// its crew, the seat's index in Solo, crews.ts crewOfSeat): no gold, level
+// 3 with Q, W and E, its build fixed, its bot
 // skill dealt from the seed; the house seats' bots attached. Seats that
 // name no bot are people, driven by their commands.
 export function buildRoyaleSim(
@@ -230,14 +236,15 @@ export function buildRoyaleSim(
   options: RoyaleBuildOptions = {},
 ): { sim: Sim; unitIds: number[] } {
   const layout = royaleLayoutOf(planet.layout);
+  const crew = options.crew ?? 1;
   const sim = new Sim(seed, {
     map: planetGameMap(planet.layout),
     // The 5v5's own systems never run here; their grid is a token.
     nav: new NavGrid(1, [], 0),
     ground: planet.ground(),
-    teamCount: Math.max(1, picks.length),
+    teamCount: crewCount(picks.length, crew),
     separation: ['minion', 'champion'],
-    royale: { variant, layout },
+    royale: { variant, layout, crew },
   });
   const mode = sim.royaleMode!;
   const skills = royaleSeatSkills(seed, picks.length, options.guestsOnly === true);
@@ -245,7 +252,7 @@ export function buildRoyaleSim(
   const waiting = layout.regions[0]?.heart ?? { x: layout.radius, y: 0, z: 0 };
   const unitIds: number[] = [];
   picks.forEach((p, i) => {
-    const unit = sim.addChampion(i, { ...waiting }, p.championId, p.skin ?? 0);
+    const unit = sim.addChampion(crewOfSeat(i, crew), { ...waiting }, p.championId, p.skin ?? 0);
     unit.sigils = [...p.sigils];
     mode.seat(unit, p.playbook?.kit?.build, skills[i]);
     unitIds.push(unit.id);
@@ -279,6 +286,7 @@ export function loadRoyaleReplay(
   return buildRoyaleSim(planet, record.seed, record.picks, royale.variant, {
     guestsOnly: royale.guestsOnly === true,
     ...(royale.newcomers ? { newcomers: royale.newcomers } : {}),
+    ...(royale.crew === 3 || royale.crew === 5 ? { crew: royale.crew } : {}),
   });
 }
 

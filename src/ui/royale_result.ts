@@ -5,7 +5,10 @@
 // bot, and the three ways on: the same rule set again, the other one, and
 // home. Respawn counts a drop-in from their landing, says how close the
 // seat above was and the best the line kept; and what the end plays
-// (royaleSting). Pure; ui/royale_hud.ts draws it.
+// (royaleSting). In Crews (ADR 0034) the place is the crew's among the
+// crews, the lines say what the crew scored and which crew won, and the
+// rows are the top crews, the viewer's own crew marked. Pure;
+// ui/royale_hud.ts draws it.
 
 import type { RoyaleResult } from '../net/royale_wire';
 import type { GoalModel } from './royale_goal';
@@ -130,6 +133,7 @@ export function royaleEnd(
   r: RoyaleResult,
   mine: RoyaleEndMine = { assists: 0, best: 0 },
 ): RoyaleEndModel {
+  if (r.crew) return crewEnd(r, r.crew, mine);
   const oneLife = r.v === 'one_life';
   const won = r.place === 1;
   const w = windowOf(r);
@@ -163,6 +167,68 @@ export function royaleEnd(
     won,
     lines,
     heading: oneLife ? 'The top five' : 'The final ranking',
+    rows,
+    grafts: r.grafts && r.grafts.length > 0 ? `Grafts: ${graftNames(r.grafts).join(', ')}` : null,
+    goal,
+    again: oneLife ? 'Play again' : 'Play the next match',
+    againNote: nextMatchNote(goal),
+    other: `Try ${royaleMode(otherVariant(r.v)).title}`,
+    home: 'Back home',
+  };
+}
+
+// A crew's names, "Pinetinder, Ash and Moss".
+export function namesText(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? '';
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+// The end in Crews: the crew's place among the crews, what the seat and its
+// crew scored, the crew that won, and the top crews.
+function crewEnd(
+  r: RoyaleResult,
+  crew: NonNullable<RoyaleResult['crew']>,
+  mine: RoyaleEndMine,
+): RoyaleEndModel {
+  const oneLife = r.v === 'one_life';
+  const won = r.place === 1;
+  const goal = oneLife ? null : (mine.goal ?? null);
+  const title = won
+    ? oneLife
+      ? 'Last crew standing'
+      : 'Your crew wins'
+    : `Your crew placed ${placeText(r.place, r.of)}`;
+  const lines: string[] = [];
+  const assists = whole(mine.assists) ?? 0;
+  const own =
+    assists > 0 ? `${takedownsText(r.score)} and ${assistsText(assists)}` : takedownsText(r.score);
+  const held = whole(r.held);
+  lines.push(`You: ${held !== null && !oneLife ? `${own} in ${clockText(held)}` : own}`);
+  lines.push(`Your crew: ${takedownsText(whole(crew.score) ?? 0)}`);
+  if (!oneLife) {
+    const best = whole(mine.best) ?? 0;
+    if (best > 0 && r.score > best) lines.push(`A new best: ${takedownsText(r.score)}`);
+    else if (best > r.score) lines.push(`Your best: ${takedownsText(best)}`);
+  }
+  if (!won) {
+    const winners = namesText(crew.winners);
+    if (winners === '') lines.push('The match goes on without your crew.');
+    else if (oneLife) lines.push(`${winners} are the last crew standing.`);
+    else lines.push(`${winners} won with ${takedownsText(whole(crew.winnerScore) ?? 0)}`);
+  }
+  const rows = r.top.map((t, i) => ({
+    place: t.cr ?? i + 1,
+    name: t.name,
+    championId: t.championId,
+    score: t.score,
+    bot: t.bot,
+    self: (t.cr ?? i + 1) === r.place,
+  }));
+  return {
+    title,
+    won,
+    lines,
+    heading: 'The top crews',
     rows,
     grafts: r.grafts && r.grafts.length > 0 ? `Grafts: ${graftNames(r.grafts).join(', ')}` : null,
     goal,

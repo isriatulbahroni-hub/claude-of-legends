@@ -42,6 +42,7 @@ import { unlearnedLine } from '../ui/unlearned_line';
 import type { IWorld } from '../world_api';
 import type { AttackNote } from './attack_notes';
 import { castSoundOf } from './champion_sounds';
+import { CrewCamera } from './crew_watch';
 import { installCursorLock } from './cursor_lock';
 import { BeatCamera } from './death_beat';
 import type { PostMatchAction } from './flow';
@@ -777,6 +778,10 @@ export function startPresentation(
   // waits to come back, the camera is on whoever took it down when the
   // mirror knows where they stand, and back on the champion at the return.
   const beat = options.royale === 'respawn' ? new BeatCamera(world, renderer, selfId) : null;
+  // One life in Crews (game/crew_watch.ts): a champion out for good
+  // watches a crewmate standing; in Solo there is none and it never moves.
+  const crewCam =
+    options.royale === 'one_life' ? new CrewCamera(world, renderer, selfId, selfTeam) : null;
 
   let lastTick = performance.now();
   let wardenWasUp = false;
@@ -832,6 +837,7 @@ export function startPresentation(
         renderer.onCombatNotes(notes);
     }
     beat?.tick(notes?.kills ?? []);
+    crewCam?.tick();
     if (world.winner !== null) stopMusic();
   };
 

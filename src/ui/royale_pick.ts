@@ -1,6 +1,9 @@
 // The battle royale's quick pick (ADR 0031): one card over the painted
-// backdrop, the ten champions of the roster on the left, the one chosen on
+// backdrop, the crew size (Solo, Trios, Fives; ADR 0034) at the right of
+// its head, the ten champions of the roster on the left, the one chosen on
 // the right with its skins and the two sigils, Random, and the big Play.
+// The crew stands in the head, not the rail: in the rail it pushed Random
+// and Back off a phone held sideways (the review, 2026-10-13).
 // No lanes, no bans, no clock, and nothing taken: duplicates are allowed.
 // It opens on the pick last played (ui/royale_pick_rules.ts decides, the
 // host remembers it); Back, Escape or the browser's Back leave it with no
@@ -16,13 +19,14 @@ import { ROLE_COLORS, setPortrait } from './champion_art';
 import { describeSigil } from './describe';
 import { el, screen } from './menu';
 import { planetEmblem } from './planet_emblem';
-import { ROYALE_LABEL, royaleMode } from './royale_modes';
+import { CREW_CHOICES, crewChoice, ROYALE_LABEL, royaleMode } from './royale_modes';
 import {
   pickReady,
   type RoyalePick,
   randomChampion,
   toggleSigil,
   withChampion,
+  withCrew,
 } from './royale_pick_rules';
 import { attachTooltip, hideTooltip } from './tooltips';
 
@@ -45,6 +49,12 @@ const CSS = `
 .br-pick-role { font-size: 11px; font-weight: 800; letter-spacing: 1px; margin-top: 2px; }
 .br-pick-blurb { font-size: 12px; line-height: 1.45; color: #a9b9cf; margin: 6px 0 2px; }
 .br-pick-side .menu-sigils { flex-wrap: wrap; }
+.br-pick-head { flex-wrap: wrap; }
+.br-pick-words { flex: 1 1 200px; min-width: 0; }
+.br-pick-crew { margin-left: auto; width: 290px; flex: none; }
+.br-pick-crews { display: flex; gap: 6px; margin: 3px 0 0; }
+.br-pick-crews .menu-sigil { flex: 1 1 0; margin: 0; }
+.br-pick-crew-line { font-size: 11.5px; line-height: 1.4; color: #a9b9cf; margin: 3px 0 0; }
 .br-pick-side .menu-sigil { flex: 1 1 40%; }
 .br-pick-actions { margin-top: auto; padding-top: 10px; display: flex; flex-direction: column; gap: 0; }
 .br-pick-actions .menu-btn { min-height: 44px; }
@@ -59,6 +69,7 @@ const CSS = `
 }
 @media (max-width: 560px) {
   .br-pick-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .br-pick-crew { width: 100%; margin-left: 0; }
 }
 /* A phone held sideways (844x390): the head is one line, the cards sit
    in two rows of five on the left, the rail beside them with Play pinned
@@ -83,6 +94,10 @@ const CSS = `
   .br-pick-side .menu-skins, .br-pick-side .menu-sigils { margin: 2px 0 2px; gap: 4px; }
   .br-pick-side .menu-skin { padding: 4px 7px 4px 22px; font-size: 10px; }
   .br-pick-side .menu-sigil { padding: 5px 2px; font-size: 10px; min-height: 30px; }
+  .br-pick-crew { width: 236px; }
+  .br-pick-crew small, .br-pick-crew-line { display: none; }
+  .br-pick-crews { margin: 0; gap: 4px; }
+  .br-pick-crews .menu-sigil { padding: 3px 2px; font-size: 10px; min-height: 24px; }
   .br-pick-actions { padding-top: 4px; }
   .br-pick-actions .menu-btn { margin-top: 4px; padding: 6px; font-size: 12px; }
   .br-pick-play.menu-btn.primary { padding: 8px 6px; font-size: 14px; }
@@ -126,7 +141,7 @@ export function showRoyalePick(
 
   const mode = royaleMode(opts.variant);
   const head = el('div', 'br-pick-head');
-  const words = el('div', '');
+  const words = el('div', 'br-pick-words');
   words.append(
     el('small', '', ROYALE_LABEL),
     el('h1', 'menu-title', mode.title),
@@ -160,6 +175,23 @@ export function showRoyalePick(
   const name = el('div', 'br-pick-name');
   const roleLine = el('div', 'br-pick-role');
   const blurb = el('div', 'br-pick-blurb');
+  const crewRow = el('div', 'br-pick-crews');
+  const crewLine = el('div', 'br-pick-crew-line');
+  const crewButtons = new Map<number, HTMLButtonElement>();
+  for (const c of CREW_CHOICES) {
+    const btn = el('button', 'menu-sigil', c.title) as HTMLButtonElement;
+    btn.type = 'button';
+    btn.dataset.crew = String(c.crew);
+    btn.addEventListener('click', () => {
+      pick = withCrew(pick, c.crew);
+      render();
+    });
+    crewButtons.set(c.crew, btn);
+    crewRow.appendChild(btn);
+  }
+  const crewBox = el('div', 'br-pick-crew');
+  crewBox.append(el('small', '', 'Crew'), crewRow, crewLine);
+  head.appendChild(crewBox);
   const skinRow = el('div', 'menu-skins');
   const sigilRow = el('div', 'menu-sigils');
   const sigilButtons = new Map<string, HTMLButtonElement>();
@@ -228,6 +260,8 @@ export function showRoyalePick(
       skinRow.appendChild(btn);
     }
     for (const [id, b] of sigilButtons) b.classList.toggle('picked', sigils.includes(id));
+    for (const [crew, b] of crewButtons) b.classList.toggle('picked', crew === (pick.crew ?? 1));
+    crewLine.textContent = crewChoice(pick.crew).line;
     play.disabled = !pickReady(sigils);
   }
   render();
@@ -288,6 +322,7 @@ export function showRoyaleJoining(
   container: HTMLElement,
   variant: RoyaleVariant,
   onCancel: () => void,
+  crew: 1 | 3 | 5 = 1,
 ): RoyaleJoiningController {
   if (!joinCssInstalled) {
     joinCssInstalled = true;
@@ -305,7 +340,7 @@ export function showRoyaleJoining(
   card.append(
     planetEmblem(variant),
     el('h1', 'menu-title', royaleMode(variant).title),
-    el('p', 'menu-sub', 'Finding fifty seats on the planet, bots in the empty ones.'),
+    el('p', 'menu-sub', joiningLine(crew)),
     bar,
     cancel,
   );
@@ -313,4 +348,10 @@ export function showRoyaleJoining(
     remove: () => root.remove(),
     overMatch: () => root.classList.add('br-join-over'),
   };
+}
+
+// What the joining card says while the server seats the person.
+export function joiningLine(crew: 1 | 3 | 5): string {
+  if (crew === 1) return 'Finding fifty seats on the planet, bots in the empty ones.';
+  return `Finding you a crew of ${crew === 3 ? 'three' : 'five'}, bots in the empty seats.`;
 }

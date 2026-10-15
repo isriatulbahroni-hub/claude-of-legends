@@ -120,8 +120,14 @@ export interface SnapRoyale {
   // The recipient's own landing pick during the drop.
   drop?: WirePoint;
   // Everyone else's landing picks during the drop, sent with the caches
-  // once a second: the drop shows where the others mean to land.
+  // once a second: the drop shows where the others mean to land; in Crews
+  // the other crews' here and the recipient's crewmates' in `cp`.
   picks?: WirePoint[];
+  cp?: WirePoint[];
+  // Crews only (ADR 0034), every snapshot: the crews still in (One life)
+  // or in the match (Respawn), and the takedowns the recipient's crew
+  // scored. In Crews `place`, `rk` and `gap` are the crew's, among crews.
+  cw?: { n: number; s: number };
   // Respawn: where the recipient picked to come back, while dead and once
   // picked (src/sim/royale/return_pick.ts); absent otherwise.
   bk?: WirePoint;
@@ -168,8 +174,20 @@ export interface RoyaleResult {
   of: number;
   score: number;
   winner: string | null;
-  // The top of the final ranking: name, champion, takedowns, bot or not.
-  top: { name: string; championId: string; score: number; bot: boolean }[];
+  // The top of the final ranking: name, champion, takedowns, bot or not;
+  // in Crews (ADR 0034) whole crews, each row with its crew's place.
+  top: { name: string; championId: string; score: number; bot: boolean; cr?: number }[];
+  // Crews only: the place and `of` above are the recipient's crew's, out
+  // of the crews. The crew's takedowns, its other champions in rank order,
+  // and the names of the winning crew, its best first.
+  crew?: {
+    size: 3 | 5;
+    score: number;
+    mates: { name: string; championId: string; score: number; bot: boolean }[];
+    winners: string[];
+    // The winning crew's takedowns.
+    winnerScore: number;
+  };
   // Optional fields, absent until their rules ship (the end card reads them
   // tolerantly): seconds lived, the best run of takedowns without dying,
   // caches and Seedfall caches opened, big creatures slain, seconds holding
@@ -215,8 +233,16 @@ export interface RoyaleResult {
 // What a player sends for the mode.
 export type RoyaleClientMsg =
   // Enter a battle royale: joins a running match when one takes people
-  // (ADR 0025's drop in), else starts one at once.
-  | { t: 'royale'; v: RoyaleVariant; championId: string; sigils: [string, string]; skin?: number }
+  // (ADR 0025's drop in), else starts one at once; `c` the crew size,
+  // Trios or Fives (ADR 0034), Solo when absent.
+  | {
+      t: 'royale';
+      v: RoyaleVariant;
+      championId: string;
+      sigils: [string, string];
+      skin?: number;
+      c?: 3 | 5;
+    }
   // The landing point picked during the drop; in Respawn, while dead, the
   // point picked to come back at.
   | { t: 'drop'; x: number; y: number; z: number }

@@ -25,6 +25,11 @@ export interface Sense {
   readonly hints: ChampionHints;
   // Enemy champions in sight, nearest first.
   readonly enemies: ObsUnit[];
+  // Crewmates standing (ADR 0034: always in the crew's sight), nearest
+  // first; none in Solo.
+  readonly allies: ObsUnit[];
+  // Every crewmate's unit id, fallen ones too.
+  readonly crew: ReadonlySet<number>;
   // Camp bodies, the ring creatures and the Warden in sight, nearest first.
   readonly neutrals: ObsUnit[];
   readonly now: DuskCap;
@@ -52,6 +57,8 @@ export function buildSense(
   const me = p3(s);
   const byDist = (a: ObsUnit, b: ObsUnit) => dist(me, p3(a)) - dist(me, p3(b)) || a.id - b.id;
   const enemies = obs.units.filter((u) => !u.friendly && u.kind === 'champion').sort(byDist);
+  const mates = obs.units.filter((u) => u.friendly && u.kind === 'champion');
+  const allies = mates.filter((u) => u.hpFrac > 0).sort(byDist);
   const neutrals = obs.units
     .filter((u) => u.kind === 'camp' || u.kind === 'creature' || u.kind === 'warden')
     .sort(byDist);
@@ -65,6 +72,8 @@ export function buildSense(
     def: s.championId ? CHAMPIONS[s.championId] : undefined,
     hints: hintsFor(s.championId),
     enemies,
+    allies,
+    crew: new Set(mates.map((u) => u.id)),
     neutrals,
     now: r.dusk.now,
     next: r.dusk.next,

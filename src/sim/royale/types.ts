@@ -7,8 +7,17 @@ import type { Vec3 } from '../geo';
 
 export type RoyaleVariant = 'respawn' | 'one_life';
 
+// A match's crew size (CONTEXT.md: Crew; ADR 0034): Solo, each champion
+// its own crew, or crews of three or five who share their sight, land
+// together and win as one. In the sim a crew is a team (ADR 0030).
+export type RoyaleCrew = 1 | 3 | 5;
+
 // Seats in a match: house bots fill whatever people do not take.
 export const ROYALE_SEATS = 50;
+// Trios seat sixteen crews of three: fifty does not divide by three, and
+// two fewer champions keep the planet's ground per champion (ADR 0031)
+// where seventeen crews would crowd it.
+export const TRIO_SEATS = 48;
 // The drop: seconds over the globe to pick a landing point.
 export const DROP_S = 10;
 // The calm after landing, before the Dusk starts to close.
@@ -91,7 +100,11 @@ export const CLAMOR_S = 3;
 // 12: a Respawn drop-in takes the strongest standing seat of its champion
 // and its Arrival lifts it to the field's lower median level and build
 // value at least (strength.ts).
-export const ROYALE_RULES_VERSION = 12;
+// 13: Crews (crews.ts, ADR 0034): a match of Trios or Fives seats its
+// champions in crews that land, come back and arrive together and score
+// and fall as one; in every crew size an Arrival's foe, a return's and an
+// Arrival's clearance and a bot's hunt read only other crews.
+export const ROYALE_RULES_VERSION = 13;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {
@@ -210,6 +223,8 @@ export type LastLightStep = 'double';
 
 export interface RoyaleState {
   variant: RoyaleVariant;
+  // The crew size the match is played in (crews.ts): 1 for Solo.
+  crew: RoyaleCrew;
   stage: RoyaleStage;
   // Sim time the drop ends and everyone lands.
   dropEndsAt: number;
@@ -224,8 +239,18 @@ export interface RoyaleState {
   scores: Map<number, number>;
   // One life: champions in the order they fell, first out first.
   eliminated: number[];
-  // The winner once the match is over: the last standing, or the best score.
+  // The winner once the match is over: the last standing, or the best score;
+  // in Crews the winning crew's best champion.
   winnerId: number | null;
+  // The winning crew (its team), once the match is over: in Solo the
+  // winner's own.
+  winnerTeam: number | null;
+  // Crews only (crews.ts), empty in Solo. Respawn: every takedown its
+  // champions scored, by crew, kept when a drop-in's tally starts from zero.
+  crewScores: Map<number, number>;
+  // One life: the crews out, first out first, each once its last champion
+  // fell.
+  crewsOut: number[];
   // Respawn: the score leader, and when they were last shown to everyone.
   leaderId: number | null;
   leaderShownAt: number;

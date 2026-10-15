@@ -68,6 +68,8 @@ export interface RoyalePickMemory {
   championId: string;
   skin: number;
   sigils: [string, string];
+  // The crew size last played (ADR 0034): Trios or Fives, Solo when absent.
+  crew?: 3 | 5;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -124,7 +126,8 @@ function royalePickOf(v: unknown): RoyalePickMemory | null {
   if (sigils.length !== 2 || typeof a !== 'string' || typeof b !== 'string' || a === b) {
     return null;
   }
-  return { championId: r.championId, skin: Math.min(count(r.skin), 32), sigils: [a, b] };
+  const crew: { crew?: 3 | 5 } = r.crew === 3 || r.crew === 5 ? { crew: r.crew } : {};
+  return { championId: r.championId, skin: Math.min(count(r.skin), 32), sigils: [a, b], ...crew };
 }
 
 // Pure: any junk in, a valid settings object out.

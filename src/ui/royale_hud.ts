@@ -60,6 +60,7 @@ import {
 } from './royale_steps';
 import {
   countLine,
+  crewOutLine,
   doubleBadge,
   dropBanner,
   duskLine,
@@ -166,6 +167,7 @@ const CSS = `
   box-sizing: border-box; max-width: 100%; min-width: 0; overflow: hidden; }
 .br-feed-line.mine { border-color: #b8963f; }
 .br-feed-line .me { color: #ffd94a; font-weight: 800; }
+.br-feed-line .mate { color: #8fbcff; font-weight: 700; }
 .br-feed-line .gt { flex: none; color: #c9a84a; font-weight: 800; }
 .br-who { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
 .br-who > span:first-child { min-width: 0; max-width: ${FEED_NAME_MAX_W_PX}px; overflow: hidden;
@@ -694,9 +696,14 @@ export class RoyaleHud {
   }
 
   // The wash over a dead champion: Respawn counts the seconds back, One
-  // life says the champion is out and where it placed.
+  // life says the champion is out and where it placed; in Crews where the
+  // crew placed once it is out, else that the champion watches its crew
+  // (game/crew_watch.ts).
   deathWords(u: Readonly<Unit>): { title: string; sub: string } {
     const r = this.state();
+    if (this.host.variant === 'one_life' && r?.cw) {
+      return { title: 'OUT', sub: crewOutLine(r.place) };
+    }
     if (this.host.variant === 'one_life') {
       return {
         title: 'OUT',

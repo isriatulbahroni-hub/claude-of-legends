@@ -1,8 +1,10 @@
 // One live battle royale (ADR 0031): the authoritative sim of the mode and
 // the people in it, beside server/match.ts's 5v5. Fifty seats, each its own
-// team; the people who started it on the champions they picked, bots on the
-// rest. A newcomer takes a bot's seat (ADR 0025), a bot playing the
-// champion they picked when there is one: once the match is in play the
+// team in Solo, in crews of three or five otherwise (ADR 0034); the people
+// who started it on the champions they picked, bots on the rest. A newcomer
+// takes a bot's seat (ADR 0025), in Crews in the crew with the most people
+// that has one, a bot playing the champion they picked when there is one
+// (server/royale_join.ts chooseBotSeat): once the match is in play the
 // champion arrives fresh (in Respawn the strongest such seat, lifted to the
 // field's level and build, beside a fair first fight, else at a quiet
 // spot), in its Grace, its tally from zero (CONTEXT.md: Arrival;
@@ -20,8 +22,10 @@ import {
   type RoyaleRecord,
 } from '../src/net/replay';
 import type { RoyaleResult, RoyaleVariant, SeatLabel } from '../src/net/royale_wire';
+import { crewSeats } from '../src/sim/royale/crews';
 import { takesReturnPick } from '../src/sim/royale/return_pick';
 import { seatStrength } from '../src/sim/royale/strength';
+import type { RoyaleCrew } from '../src/sim/royale/types';
 import {
   freshStats,
   noteMoments,
@@ -33,7 +37,13 @@ import {
 import { applyRoyaleCommand, ROYALE_VERBS } from './royale_commands';
 import { chooseBotSeat } from './royale_join';
 import { RoyalePoints } from './royale_points';
-import { finalPlaces, type RankedSeat, royaleRanking, royaleResult } from './royale_ranking';
+import {
+  crewRanking,
+  finalPlaces,
+  type RankedSeat,
+  royaleRanking,
+  royaleResult,
+} from './royale_ranking';
 import { type RoyalePerson, royaleSeats } from './royale_seats';
 import type { RoyaleBuild, RoyaleSim, RoyaleSimEvent, RoyaleSimFactory } from './royale_sim';
 import { buildRoyaleSnapshot, CACHES_EVERY_TICKS } from './royale_snapshot';
@@ -99,7 +109,8 @@ export interface RoyaleReplay {
   royale: RoyaleRecord;
 }
 
-// Every seat of a match this many seats wide, by default the mode's fifty.
+// Every seat of a match this many seats wide, by default the crew size's
+// (src/sim/royale/crews.ts crewSeats: fifty, Trios forty-eight).
 export class RoyaleMatch {
   readonly sim: RoyaleSim;
   readonly players = new Map<number, RoyalePlayer>();
@@ -122,9 +133,10 @@ export class RoyaleMatch {
     people: readonly RoyalePerson[],
     factory: RoyaleSimFactory,
     seatCount?: number,
+    readonly crew: RoyaleCrew = 1,
   ) {
-    const seats = royaleSeats(people, seed, seatCount);
-    const build = factory(seed, variant, seats);
+    const seats = royaleSeats(people, seed, seatCount ?? crewSeats(crew), crew);
+    const build = factory(seed, variant, seats, crew);
     this.sim = build.sim;
     this.standIn = build.standIn;
     this.replay = build.replay;
@@ -133,7 +145,7 @@ export class RoyaleMatch {
       if (unitId === undefined) return;
       this.seats.set(unitId, {
         unitId,
-        // The team the sim seated the champion on: each its own.
+        // The team the sim seated the champion on: its crew.
         team: this.sim.units.get(unitId)?.team ?? s.team,
         name: s.name,
         championId: s.championId,
@@ -147,7 +159,7 @@ export class RoyaleMatch {
       const person = people.find((p) => p.clientId === s.clientId);
       if (person) this.seat(person, unitId, false);
     });
-    this.points = new RoyalePoints(this.sim, variant);
+    this.points = new RoyalePoints(this.sim, variant, crew > 1 ? this.sim.teamCount : null);
   }
 
   get seatCount(): number {
@@ -189,7 +201,15 @@ export class RoyaleMatch {
     return s ? { name: s.name, bot: s.bot } : undefined;
   }
 
-  // Out for good: fallen in One life.
+  // How many people play in each crew now, by team.
+  private crewPeople(): Map<number, number> {
+    const out = new Map<number, number>();
+    for (const p of this.players.values()) out.set(p.team, (out.get(p.team) ?? 0) + 1);
+    return out;
+  }
+
+  // Out for good: fallen in One life (in Crews, the champion; its crew may
+  // stand on).
   isOut(unitId: number): boolean {
     return this.variant === 'one_life' && this.sim.royale.eliminated.includes(unitId);
   }
@@ -232,6 +252,8 @@ export class RoyaleMatch {
       ack: 0,
       ackAt: 0,
       dropIn,
+      // In Crews the crews are ranked from the drop (the rank line and the
+      // result read the crew's), the window keeps when the seat landed.
       window:
         arrived && this.variant === 'respawn'
           ? { from: this.sim.time, base: new Map(r.scores) }
@@ -260,6 +282,7 @@ export class RoyaleMatch {
   // is left to take.
   takeBotSeat(person: RoyalePerson): RoyalePlayer | null {
     const candidates = [...this.seats.values()].filter((s) => this.takeable(s));
+    const crewPeople = this.crew > 1 ? this.crewPeople() : null;
     const unitId = chooseBotSeat(
       candidates.map((s) => {
         const u = this.sim.units.get(s.unitId);
@@ -268,6 +291,7 @@ export class RoyaleMatch {
           championId: u?.championId ?? s.championId,
           dead: u?.dead === true,
           out: this.isOut(s.unitId),
+          ...(crewPeople ? { crewPeople: crewPeople.get(s.team) ?? 0 } : {}),
           ...(u ? seatStrength(u) : { level: 1, build: 0, grafts: 0 }),
         };
       }),
@@ -423,9 +447,7 @@ export class RoyaleMatch {
     if (!p) return null;
     const caches = !p.cachesSent || this.sim.tickCount % CACHES_EVERY_TICKS === 0;
     p.cachesSent = true;
-    if (this.over && !this.places) {
-      this.places = finalPlaces(royaleRanking(this.sim.royale, this.rankedSeats()));
-    }
+    if (this.over && !this.places) this.places = this.finalPlaces();
     const finalPlace = this.places?.get(p.unitId);
     return buildRoyaleSnapshot(
       this.sim,
@@ -458,7 +480,16 @@ export class RoyaleMatch {
       championId: this.sim.units.get(s.unitId)?.championId ?? s.championId,
       bot: s.bot,
       deaths: this.sim.units.get(s.unitId)?.deaths ?? 0,
+      team: s.team,
     }));
+  }
+
+  // Every seat's place at the end: its own in Solo, its crew's in Crews.
+  private finalPlaces(): Map<number, number> {
+    const seats = this.rankedSeats();
+    if (this.crew === 1) return finalPlaces(royaleRanking(this.sim.royale, seats));
+    const crewPlace = finalPlaces(crewRanking(this.sim.royale, seats));
+    return new Map(seats.map((s) => [s.unitId, crewPlace.get(s.team ?? -1) ?? crewPlace.size]));
   }
 
   resultFor(clientId: number): RoyaleResult | null {

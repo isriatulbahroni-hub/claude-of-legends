@@ -34,6 +34,8 @@ export interface SeatReport {
   queue: SeatQueue;
   // A battle royale's variant (ADR 0031); absent on every other seat.
   variant?: RoyaleVariant;
+  // A battle royale's crew size in Crews (ADR 0034); absent in Solo.
+  crew?: 3 | 5;
   guest: boolean;
   dropIn: boolean;
   mobile: boolean;
@@ -118,6 +120,7 @@ export interface SeatReportInput {
   how: SeatEnd;
   queue: SeatQueue;
   variant?: RoyaleVariant;
+  crew?: 3 | 5;
   guest: boolean;
   dropIn: boolean;
   mobile: boolean;
@@ -143,6 +146,7 @@ export function buildSeatReport(i: SeatReportInput): SeatReport {
     how: i.how,
     queue: i.queue,
     ...(i.variant !== undefined ? { variant: i.variant } : {}),
+    ...(i.crew !== undefined ? { crew: i.crew } : {}),
     guest: i.guest,
     dropIn: i.dropIn,
     mobile: i.mobile,

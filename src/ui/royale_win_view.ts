@@ -131,6 +131,9 @@ export class RoyaleWinView {
   readonly line: HTMLElement;
   private state: WinCardState;
   private time = 0;
+  private readonly title: HTMLElement;
+  private readonly list: HTMLElement;
+  private crews = false;
 
   constructor(host: WinViewHost) {
     this.host = host;
@@ -140,11 +143,11 @@ export class RoyaleWinView {
     document.head.appendChild(this.style);
     this.line = el('span', 'br-win');
     this.line.hidden = true;
-    const words = winCardWords(host.variant);
     this.card = el('div', 'br-win-card');
     this.card.setAttribute('role', 'status');
-    const list = el('ul', '');
-    for (const line of words.lines) list.appendChild(el('li', '', line));
+    this.title = el('h3', '', '');
+    this.list = el('ul', '');
+    this.say(false);
     const close = el('button', 'br-win-close', '×');
     close.type = 'button';
     close.setAttribute('aria-label', WIN_CARD_CLOSE);
@@ -153,8 +156,17 @@ export class RoyaleWinView {
       this.state = closeWinCard(this.state, this.time);
       this.card.classList.remove('on');
     });
-    this.card.append(el('h3', '', words.title), list, close);
+    this.card.append(this.title, this.list, close);
     host.layer.appendChild(this.card);
+  }
+
+  // The card's words, Solo's or the crews' (the first snapshot tells).
+  private say(crews: boolean): void {
+    this.crews = crews;
+    const words = winCardWords(this.host.variant, crews);
+    this.title.textContent = words.title;
+    this.list.textContent = '';
+    for (const line of words.lines) this.list.appendChild(el('li', '', line));
   }
 
   // One update: the card's clock, from the landing (`since`, null before
@@ -168,6 +180,7 @@ export class RoyaleWinView {
     burning = false,
   ): void {
     this.time = time;
+    if ((r.cw !== undefined) !== this.crews) this.say(r.cw !== undefined);
     const root = this.host.root;
     const cardsOpen = root.classList.contains('br-cards-open');
     const aside =

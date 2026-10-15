@@ -119,7 +119,12 @@ import { showReloadNotice } from './ui/reload_notice';
 import { buildReplayBar, type ReplayBar } from './ui/replay_bar';
 import { replayRefusal } from './ui/replay_notice';
 import { showRoyaleJoining, showRoyalePick } from './ui/royale_pick';
-import { FIRST_ROYALE_CHAMPION, initialPick, type RoyalePick } from './ui/royale_pick_rules';
+import {
+  FIRST_ROYALE_CHAMPION,
+  initialPick,
+  type RoyalePick,
+  withCrew,
+} from './ui/royale_pick_rules';
 import { seatLine } from './ui/seat_lines';
 import { attachTurnAsk } from './ui/turn_ask';
 import type { IWorld } from './world_api';
@@ -1332,7 +1337,7 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
 // from: the pick last played already chosen, remembered on Play for next
 // time. Null when it is left without a pick: its Back, Escape, or the
 // browser's Back.
-async function pickForRoyale(variant: RoyaleVariant): Promise<RoyalePick | null> {
+async function pickForRoyale(variant: RoyaleVariant, solo = false): Promise<RoyalePick | null> {
   // The map downloads while the person picks, as for every other match.
   prefetchStarOrchard();
   return new Promise((resolve) => {
@@ -1341,13 +1346,14 @@ async function pickForRoyale(variant: RoyaleVariant): Promise<RoyalePick | null>
       frame.closed();
       resolve(null);
     };
-    const initial = initialPick(
+    const remembered = initialPick(
       getSettings().royalePick,
       CHAMPION_LIST.map((c) => c.id),
       (id) => SKINS[id]?.length ?? 1,
       SIGIL_LIST.map((s) => s.id),
       FIRST_ROYALE_CHAMPION,
     );
+    const initial = solo ? withCrew(remembered, 1) : remembered;
     const picker = showRoyalePick(container, {
       variant,
       initial,
@@ -1436,7 +1442,7 @@ async function runRoyale(
     // was held (src/net/stats.ts MatchState).
     let openedAt = 0;
     // The card between Play and the first snapshot, Cancel its way out.
-    const joining = showRoyaleJoining(container, variant, () => finish('menu'));
+    const joining = showRoyaleJoining(container, variant, () => finish('menu'), pick.crew ?? 1);
     let opened = false;
     let matchEnded = false;
     let finished = false;
@@ -1654,7 +1660,7 @@ async function runRoyale(
 // the battle royale, which Play now launches, or the 5v5's public queue,
 // Play again queueing again. Resolves with the exit that ended it.
 async function playAsGuest(guestName: string, play: LandingPlay): Promise<PostMatchAction> {
-  if (play.to === 'royale') return royaleLoop(play.variant, true);
+  if (play.to === 'royale') return royaleLoop(play.variant, true, play.solo === true);
   let action: PostMatchAction = 'again';
   while (action === 'again') action = await runOnline({ name: guestName, mode: 'queue' }, true);
   return action;
@@ -1662,9 +1668,14 @@ async function playAsGuest(guestName: string, play: LandingPlay): Promise<PostMa
 
 // Battle royales back to back (game/royale_flow.ts): the quick pick once,
 // then Play again and the other rule set straight into the next match with
-// the same pick. Resolves with the exit that left the loop.
-async function royaleLoop(variant: RoyaleVariant, guest: boolean): Promise<PostMatchAction> {
-  const pick = await pickForRoyale(variant);
+// the same pick. Play now's quick pick opens on Solo (`solo`, ADR 0034).
+// Resolves with the exit that left the loop.
+async function royaleLoop(
+  variant: RoyaleVariant,
+  guest: boolean,
+  solo = false,
+): Promise<PostMatchAction> {
+  const pick = await pickForRoyale(variant, solo);
   if (!pick) return 'menu';
   let rules = variant;
   for (;;) {

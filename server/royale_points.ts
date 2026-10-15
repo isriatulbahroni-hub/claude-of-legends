@@ -7,7 +7,12 @@
 // seat still playing (a command in the last three minutes): One life 50 to
 // the last standing, 25 to the rest of the top five, 15 to the rest of the
 // top ten, each paid when the place is known; Respawn 50 to the best
-// score. Pure over what the sim counts and the mode's events.
+// score. In Crews (ADR 0034) a person on the same crew is no opponent, the
+// places are the crews' (the top tenth of the crews for 25, the top fifth
+// for 15, as fifty seats give five and ten), and every seat of the winning
+// crew is paid its end; a One life champion fallen while its crew stands
+// counts as still playing when it was at its fall, since it can only
+// watch from there. Pure over what the sim counts and the mode's events.
 
 import type { RoyaleVariant } from '../src/net/royale_wire';
 import { activeNearEnd, POINTS, type PointsAward, weighted } from './points';
@@ -21,12 +26,16 @@ export interface RoyalePointsSeat {
   unitId: number;
   // sim.tickCount of the seat's last command.
   lastCommandAt: number;
+  // The seat's crew (the sim's team); unset reads as every person an
+  // opponent, as in Solo.
+  team?: number;
 }
 
 export interface RoyalePointsUnit {
   kind: string;
   kills: number;
   assists: number;
+  team?: number;
 }
 
 export interface RoyalePointsWorld {
@@ -40,12 +49,24 @@ export function royaleWeight(peopleConnected: number): number {
   return peopleConnected > 1 ? 2 : 1;
 }
 
-// The end's award for a place in One life, or null below the top ten.
-export function placeReason(place: number): 'last_standing' | 'top_five' | 'top_ten' | null {
+// The end's award for a place in One life, or null below the top ten:
+// the top tenth and fifth of `of` places (fifty seats: five and ten; ten
+// crews of five: one and two).
+export function placeReason(
+  place: number,
+  of = 50,
+): 'last_standing' | 'top_five' | 'top_ten' | null {
   if (place === 1) return 'last_standing';
-  if (place <= 5) return 'top_five';
-  if (place <= 10) return 'top_ten';
+  if (place <= of / 10) return 'top_five';
+  if (place <= of / 5) return 'top_ten';
   return null;
+}
+
+// The weight a seat's awards take: another person on another crew in the
+// match doubles it (every other person in Solo).
+export function seatWeight(seat: RoyalePointsSeat, seats: readonly RoyalePointsSeat[]): number {
+  if (seat.team === undefined) return royaleWeight(seats.length);
+  return seats.some((o) => o.clientId !== seat.clientId && o.team !== seat.team) ? 2 : 1;
 }
 
 export class RoyalePoints {
@@ -56,11 +77,15 @@ export class RoyalePoints {
   private readonly creatures = new Set<number>();
   // Seats already paid for their place (One life), and the end, once.
   private readonly placed = new Set<number>();
+  // One life in Crews: the tick each champion fell, by unit id.
+  private readonly fellAt = new Map<number, number>();
   private ended = false;
 
   constructor(
     world: RoyalePointsWorld,
     private readonly variant: RoyaleVariant,
+    // Crews only: how many crews the places count out of.
+    private readonly crews: number | null = null,
   ) {
     this.note(world);
   }
@@ -71,20 +96,26 @@ export class RoyalePoints {
     seats: readonly RoyalePointsSeat[],
   ): PointsAward[] {
     if (this.ended) return [];
-    const weight = royaleWeight(seats.length);
     const bySeat = new Map(seats.map((s) => [s.unitId, s]));
     const earned = new Map<string, PointsAward>();
     const give = (seat: RoyalePointsSeat, reason: PointsAward['reason'], count = 1): void => {
       if (count <= 0) return;
-      const delta = count * weighted(POINTS[reason], weight);
+      const delta = count * weighted(POINTS[reason], seatWeight(seat, seats));
       if (delta <= 0) return;
       const key = `${seat.clientId}:${reason}`;
       const had = earned.get(key);
       if (had) had.delta += delta;
       else earned.set(key, { clientId: seat.clientId, owner: seat.owner, reason, delta });
     };
+    if (this.crews !== null && this.variant === 'one_life') {
+      for (const ev of events) {
+        if (ev.type !== 'death' || this.fellAt.has(ev.unitId)) continue;
+        if (world.units.get(ev.unitId)?.kind === 'champion')
+          this.fellAt.set(ev.unitId, world.tickCount);
+      }
+    }
     const ending = (seat: RoyalePointsSeat): boolean =>
-      activeNearEnd(world.tickCount, seat.lastCommandAt);
+      activeNearEnd(this.fellAt.get(seat.unitId) ?? world.tickCount, seat.lastCommandAt);
 
     for (const seat of seats) {
       const u = world.units.get(seat.unitId);
@@ -112,17 +143,25 @@ export class RoyalePoints {
       } else if (ev.type === 'royale_out') {
         if (this.variant !== 'one_life') continue;
         const seat = bySeat.get(ev.unitId);
-        const reason = placeReason(ev.place);
+        const reason =
+          this.crews !== null ? placeReason(ev.place, this.crews) : placeReason(ev.place);
         if (seat && reason && !this.placed.has(seat.unitId) && ending(seat)) {
           this.placed.add(seat.unitId);
           give(seat, reason);
         }
       } else if (ev.type === 'royale_end') {
         this.ended = true;
-        const seat = ev.winnerId !== null ? bySeat.get(ev.winnerId) : undefined;
-        if (seat && !this.placed.has(seat.unitId) && ending(seat)) {
+        const reason = this.variant === 'one_life' ? 'last_standing' : 'best_score';
+        // In Crews every seat of the winning crew, the fallen too.
+        const team = ev.winnerId !== null ? world.units.get(ev.winnerId)?.team : undefined;
+        const winners =
+          this.crews !== null && team !== undefined
+            ? seats.filter((s) => world.units.get(s.unitId)?.team === team)
+            : [bySeat.get(ev.winnerId ?? -1)].filter((s) => s !== undefined);
+        for (const seat of winners) {
+          if (this.placed.has(seat.unitId) || !ending(seat)) continue;
           this.placed.add(seat.unitId);
-          give(seat, this.variant === 'one_life' ? 'last_standing' : 'best_score');
+          give(seat, reason);
         }
       }
     }

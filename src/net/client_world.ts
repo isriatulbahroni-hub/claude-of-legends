@@ -244,6 +244,8 @@ export class ClientWorld implements IWorld {
   private royaleBlock: RoyaleView | null = null;
   private caches: SnapCache[] = [];
   private dropPicks: WirePoint[] = [];
+  // In Crews (ADR 0034), the crewmates' landing picks, kept like the others'.
+  private dropMates: WirePoint[] = [];
   // The blocks sent on change (the Seedfalls, the Risings, the marks, the
   // Clamors, the own Grafts): the last of each, kept between sends.
   private kept: Pick<SnapRoyale, 'sf' | 'ri' | 'mk' | 'cl' | 'gr'> = {};
@@ -352,6 +354,7 @@ export class ClientWorld implements IWorld {
     this.royaleBlock = null;
     this.caches = [];
     this.dropPicks = [];
+    this.dropMates = [];
     this.kept = {};
     this.seats.clear();
     this.watched = null;
@@ -389,14 +392,25 @@ export class ClientWorld implements IWorld {
 
   private applyRoyale(r: SnapRoyale): void {
     if (r.caches) this.caches = r.caches;
-    if (r.st !== 'drop') this.dropPicks = [];
-    else if (r.picks) this.dropPicks = r.picks;
+    if (r.st !== 'drop') {
+      this.dropPicks = [];
+      this.dropMates = [];
+    } else if (r.picks) {
+      this.dropPicks = r.picks;
+      this.dropMates = r.cp ?? [];
+    }
     if (r.sf) this.kept.sf = r.sf;
     if (r.ri) this.kept.ri = r.ri;
     if (r.mk) this.kept.mk = r.mk;
     if (r.cl) this.kept.cl = r.cl;
     if (r.gr) this.kept.gr = r.gr;
-    this.royaleBlock = { ...r, ...this.kept, caches: this.caches, picks: this.dropPicks };
+    this.royaleBlock = {
+      ...r,
+      ...this.kept,
+      caches: this.caches,
+      picks: this.dropPicks,
+      ...(this.dropMates.length > 0 ? { cp: this.dropMates } : {}),
+    };
   }
 
   championDef(championId: string): ChampionDef | null {

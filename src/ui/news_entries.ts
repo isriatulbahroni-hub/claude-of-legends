@@ -36,6 +36,23 @@ export interface NewsEntry {
 export const NEWS: readonly NewsEntry[] = [
   {
     day: '2026-10-15',
+    title: 'Crews on the Wanderseed',
+    body: [
+      'The battle royale plays in crews now, as well as alone. On the card where you pick your ' +
+        'champion, choose Solo, Trios or Fives: sixteen crews of three, or ten crews of five, in ' +
+        'Respawn and in One life.',
+      'A crew shares its sight and cannot hurt itself. It lands together, and a fall in Respawn ' +
+        'brings you back beside a crewmate who is clear of a fight. Your crewmates wear the blue ' +
+        'of an ally, and the bots in your crew keep close to you.',
+      'Respawn counts every takedown your crew lands, and the crew with the most when the last ' +
+        'light goes out wins. In One life a fall is still final: you watch your crew fight on, ' +
+        'and the last crew standing wins.',
+    ],
+    image: 'crews.webp',
+    link: { label: 'Play a match', to: 'play' },
+  },
+  {
+    day: '2026-10-15',
     title: 'The Range: try a champion on the Strikeposts',
     body: [
       'Practice has a third choice under Enemy bots: None (Range). Your champion starts alone ' +

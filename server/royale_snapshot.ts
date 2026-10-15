@@ -14,7 +14,7 @@ import type { SeatLabel, SnapCache, SnapDusk, SnapRoyale, WirePoint } from '../s
 import { heartwoodOf } from '../src/sim/content/grafts';
 import type { Vec3 } from '../src/sim/geo';
 import { type DuskState, MARK_SHOWN_S } from '../src/sim/royale/types';
-import { placeOf } from './royale_ranking';
+import { crewPlaceOf, placeOf } from './royale_ranking';
 import type { RoyaleSim, RoyaleSimEvent } from './royale_sim';
 import { addRoyaleBlocks, cacheKindOf, openingDuration } from './royale_snapshot_blocks';
 import {
@@ -89,8 +89,14 @@ export function royaleBlock(
     people: ctx.people,
     score: r.scores.get(self) ?? 0,
   };
-  const place = placeOf(r, ctx.seats, self) ?? ctx.finalPlace ?? null;
+  const crews = r.crew > 1;
+  const known = crews ? crewPlaceOf(r, sim.teamCount, viewer.team) : placeOf(r, ctx.seats, self);
+  const place = known ?? ctx.finalPlace ?? null;
   if (place !== null) block.place = place;
+  if (crews) {
+    const n = r.variant === 'one_life' ? sim.teamCount - r.crewsOut.length : sim.teamCount;
+    block.cw = { n, s: r.crewScores.get(viewer.team) ?? 0 };
+  }
   if (r.variant === 'respawn' && r.leaderId !== null) {
     const leader: NonNullable<SnapRoyale['leader']> = {
       i: r.leaderId,
@@ -127,8 +133,14 @@ export function royaleBlock(
       );
     if (r.stage === 'drop') {
       const picks: WirePoint[] = [];
-      for (const [unitId, p] of r.drops) if (unitId !== self) picks.push(point(p));
+      const mates: WirePoint[] = [];
+      for (const [unitId, p] of r.drops) {
+        if (unitId === self) continue;
+        const mate = crews && sim.units.get(unitId)?.team === viewer.team;
+        (mate ? mates : picks).push(point(p));
+      }
       block.picks = picks;
+      if (crews) block.cp = mates;
     }
   }
   addRoyaleBlocks(block, sim, viewer, ctx);

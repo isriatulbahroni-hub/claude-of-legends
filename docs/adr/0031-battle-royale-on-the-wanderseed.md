@@ -362,3 +362,10 @@ amendment of 2026-10-08 in Respawn; One life is unchanged.
   against 38.9, the stand-in's median life is 15.8 s against 17.2 (-3.4 to +0.8 s), the final
   level median stays 10. One life (`--variant one_life --dropin 60`, seeds 1 to 24) is
   identical, match for match.
+
+## Amended: Crews (2026-10-12)
+
+Either variant is now played Solo, as above, or in Crews of three (sixteen crews, forty-eight
+seats) or five (ten crews): a crew shares its sight, lands, comes back and arrives together,
+scores every takedown its champions land, and wins or falls as one. ADR 0034 records it; Solo
+is unchanged, match for match.

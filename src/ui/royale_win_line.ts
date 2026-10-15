@@ -3,7 +3,11 @@
 // viewer stands. Respawn: "Most takedowns wins · 4:12 left · you are 11th",
 // the time until the last light goes out and the own rank (the count line
 // above qualifies a drop-in's, "since you landed"). One life: "Last one
-// standing wins · 23 left". On a phone (`compact`) the line shares its row
+// standing wins · 23 left". In Crews (ADR 0034) the crews': "Top crew
+// wins · 4:12 left · your crew is 3rd", "Last crew standing wins · 5 left"
+// (the crews; the count line above names them, alone on a phone), no wider
+// than Solo's. On a
+// phone (`compact`) the line shares its row
 // with the Dusk's pill and leaves the rank to the count beside the Dusk
 // line, which carries it there; on a desktop the pill takes its place
 // while it shows (winLineAside).
@@ -27,16 +31,25 @@ export const WIN_LINE_EM_PER_CHAR = 0.6;
 
 export const RESPAWN_WINS = 'Most takedowns wins';
 export const ONE_LIFE_WINS = 'Last one standing wins';
+export const CREW_RESPAWN_WINS = 'Top crew wins';
+export const CREW_ONE_LIFE_WINS = 'Last crew standing wins';
 
 export function winLine(
-  r: Pick<SnapRoyale, 'v' | 'st' | 'end' | 'alive' | 'rk'>,
+  r: Pick<SnapRoyale, 'v' | 'st' | 'end' | 'alive' | 'rk' | 'cw'>,
   time: number,
   compact = false,
 ): string | null {
   if (r.st !== 'play') return null;
-  if (r.v === 'one_life') return `${ONE_LIFE_WINS} · ${r.alive} left`;
-  const parts = [RESPAWN_WINS, `${clockText(r.end - time)} left`];
-  if (!compact && r.rk !== undefined && r.rk > 0) parts.push(`you are ${ordinal(r.rk)}`);
+  if (r.v === 'one_life') {
+    // On a phone the count beside the Dusk line already says the crews
+    // left (royale_text.ts crewCountLine), and the row has no room for both.
+    if (r.cw) return compact ? CREW_ONE_LIFE_WINS : `${CREW_ONE_LIFE_WINS} · ${r.cw.n} left`;
+    return `${ONE_LIFE_WINS} · ${r.alive} left`;
+  }
+  const parts = [r.cw ? CREW_RESPAWN_WINS : RESPAWN_WINS, `${clockText(r.end - time)} left`];
+  if (!compact && r.rk !== undefined && r.rk > 0) {
+    parts.push(r.cw ? `your crew is ${ordinal(r.rk)}` : `you are ${ordinal(r.rk)}`);
+  }
   return parts.join(' · ');
 }
 

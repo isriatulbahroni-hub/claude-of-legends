@@ -93,6 +93,10 @@ const MAX_PICKS = 64;
 // champion fell.
 const PICK_COLOR = 0xffb85a;
 const FELL_COLOR = 0xff5a4a;
+// In Crews (ADR 0034) the crewmates' picks, in the ally's blue
+// (render/planet_ghost.ts).
+const MATE_PICK_COLOR = 0x6fa8ff;
+const MAX_MATE_PICKS = 4;
 
 const UP = new THREE.Vector3(0, 1, 0);
 const X_AXIS = new THREE.Vector3(1, 0, 0);
@@ -143,6 +147,8 @@ export class PlanetMarks {
   private readonly pickBeam: THREE.Mesh;
   private readonly picks: THREE.Points;
   private readonly pickMat: THREE.PointsMaterial;
+  private readonly matePicks: THREE.Points;
+  private readonly matePickMat: THREE.PointsMaterial;
   // The wait's globe: where the own Burr's carrier stands (thorn red).
   private readonly burrDot: THREE.Points;
   private readonly burrMat: THREE.PointsMaterial;
@@ -365,6 +371,26 @@ export class PlanetMarks {
     this.picks = new THREE.Points(picksGeo, this.pickMat);
     this.picks.frustumCulled = false;
     this.group.add(this.picks);
+    const mateGeo = new THREE.BufferGeometry();
+    mateGeo.setAttribute(
+      'position',
+      new THREE.BufferAttribute(new Float32Array(MAX_MATE_PICKS * 3), 3),
+    );
+    mateGeo.setDrawRange(0, 0);
+    this.matePickMat = new THREE.PointsMaterial({
+      size: 20,
+      sizeAttenuation: false,
+      map: glow,
+      color: MATE_PICK_COLOR,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      fog: false,
+    });
+    this.matePicks = new THREE.Points(mateGeo, this.matePickMat);
+    this.matePicks.frustumCulled = false;
+    this.group.add(this.matePicks);
+    this.owned.push(mateGeo, this.matePickMat);
     const burrGeo = new THREE.BufferGeometry();
     burrGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3), 3));
     this.burrMat = new THREE.PointsMaterial({
@@ -798,6 +824,17 @@ export class PlanetMarks {
     positions.needsUpdate = true;
     this.picks.geometry.setDrawRange(0, n);
     this.pickMat.size = 15 + 3 * Math.sin(t * 5);
+    const mates: readonly WirePoint[] = dropping ? (royale?.cp ?? []) : [];
+    const matePositions = this.matePicks.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const m = Math.min(MAX_MATE_PICKS, mates.length);
+    for (let i = 0; i < m; i++) {
+      const [x, y, z] = mates[i]!;
+      const g = this.point({ x, y, z }, 1.4);
+      matePositions.setXYZ(i, g.x, g.y, g.z);
+    }
+    matePositions.needsUpdate = true;
+    this.matePicks.geometry.setDrawRange(0, m);
+    this.matePickMat.size = 19 + 3 * Math.sin(t * 5);
     const burr = wait?.burr ?? null;
     this.burrDot.visible = burr !== null;
     if (burr) {

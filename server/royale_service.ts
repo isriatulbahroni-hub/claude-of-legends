@@ -1,8 +1,9 @@
 // The battle royale on the server (ADR 0031): entering one, the matches it
-// runs, their end, and the next. A person who asks for a variant joins the
-// liveliest running match of it that still takes people, in a bot's seat
-// (server/royale_join.ts, ADR 0025), else a new match starts at once with
-// them and forty-nine bots. Each tick runs every match, banks what the
+// runs, their end, and the next. A person who asks for a variant and a crew
+// size (Solo, Trios or Fives, ADR 0034) joins the liveliest running match
+// of it that still takes people, in a bot's seat (server/royale_join.ts,
+// ADR 0025), else a new match starts at once with them and bots on every
+// other seat. Each tick runs every match, banks what the
 // people earned (server/royale_points.ts), sends each person their own
 // snapshot, and tells a person their result when they are out for good
 // (One life) or the match ends. Respawn then lets every person go, and its
@@ -14,6 +15,7 @@
 
 import { type ClientMsg, type ServerMsg, stepOnWire } from '../src/net/protocol';
 import type { RoyaleVariant } from '../src/net/royale_wire';
+import type { RoyaleCrew } from '../src/sim/royale/types';
 import { bankAwards } from './points';
 import { ROYALE_VERBS } from './royale_commands';
 import { chooseRoyaleMatch, type RoyaleCandidate, takesPeople } from './royale_join';
@@ -136,9 +138,10 @@ export class RoyaleService {
     return this.matches.size * ROYALE_MATCH_WEIGHT;
   }
 
-  // People playing, whether Play now would drop into a running match, and
-  // the seconds left in the match it would drop into, for the landing's
-  // line (ADR 0025). People only: the house bots are never counted.
+  // People playing, whether Play now (Respawn, Solo) would drop into a
+  // running match, and the seconds left in the match it would drop into,
+  // for the landing's line (ADR 0025). People only: the house bots are
+  // never counted.
   presence(): { playing: number; joinable: boolean; endsInS: number | null } {
     let playing = 0;
     let joinable = false;
@@ -146,7 +149,7 @@ export class RoyaleService {
     for (const c of candidates) {
       if (c.closing) continue;
       playing += c.people;
-      if (c.variant === 'respawn' && takesPeople(c)) joinable = true;
+      if (c.variant === 'respawn' && (c.crew ?? 1) === 1 && takesPeople(c)) joinable = true;
     }
     const id = chooseRoyaleMatch(candidates, 'respawn');
     const into = candidates.find((c) => c.matchId === id);
@@ -179,7 +182,7 @@ export class RoyaleService {
         if (step !== null) entry.match.noteStep(client.id, step);
         return true;
       }
-      // Each for themself: nobody to chat with or ping for.
+      // No chat or ping on the planet yet, Crews included (ADR 0034).
       case 'chat':
       case 'ping':
         return true;
@@ -221,6 +224,7 @@ export class RoyaleService {
       out.push({
         matchId,
         variant: e.match.variant,
+        crew: e.match.crew,
         stage: r.stage,
         time: e.match.sim.time,
         dropEndsAt: r.dropEndsAt,
@@ -244,6 +248,8 @@ export class RoyaleService {
     const variant: RoyaleVariant | null =
       msg.v === 'respawn' || msg.v === 'one_life' ? msg.v : null;
     if (variant === null) return;
+    // Trios or Fives; anything else is Solo.
+    const crew: RoyaleCrew = msg.c === 3 || msg.c === 5 ? msg.c : 1;
     const current = this.entryOf(client.id);
     if (current) {
       // Play again: a seat whose match is over, or whose champion is out
@@ -258,7 +264,7 @@ export class RoyaleService {
     this.deps.leaveQueues(client.id);
     if (this.rejoin(client)) return;
     const person = this.person(client, this.pickOf(client));
-    const matchId = chooseRoyaleMatch(this.candidates(), variant);
+    const matchId = chooseRoyaleMatch(this.candidates(), variant, crew);
     const entry = matchId === null ? undefined : this.matches.get(matchId);
     if (entry) {
       const p = entry.match.takeBotSeat(person);
@@ -273,11 +279,15 @@ export class RoyaleService {
       send(client.id, { t: 'error', message: 'The server is at capacity, try again in a bit.' });
       return;
     }
-    this.start(variant, [client]);
+    this.start(variant, [client], crew);
   }
 
   // A new match with these people and bots on every other seat.
-  private start(variant: RoyaleVariant, clients: readonly RoyaleClient[]): RoyaleEntry | null {
+  private start(
+    variant: RoyaleVariant,
+    clients: readonly RoyaleClient[],
+    crew: RoyaleCrew = 1,
+  ): RoyaleEntry | null {
     const factory = this.deps.factory;
     if (!factory) return null;
     const id = this.deps.newMatchId();
@@ -285,7 +295,7 @@ export class RoyaleService {
     const people = clients.map((c) => this.person(c, this.pickOf(c)));
     let match: RoyaleMatch;
     try {
-      match = new RoyaleMatch(id, seed, variant, people, factory);
+      match = new RoyaleMatch(id, seed, variant, people, factory, undefined, crew);
     } catch (err) {
       this.deps.log(`royale ${id} failed to start: ${String(err)}`);
       for (const c of clients) {
@@ -307,7 +317,8 @@ export class RoyaleService {
       const p = match.players.get(c.id);
       if (p) this.seat(c, entry, p, false);
     }
-    this.deps.log(`royale ${id} (${variant}) started with ${clients.length} person(s)`);
+    const size = crew === 1 ? '' : `, crews of ${crew}`;
+    this.deps.log(`royale ${id} (${variant}${size}) started with ${clients.length} person(s)`);
     return entry;
   }
 
@@ -321,9 +332,13 @@ export class RoyaleService {
       selfUnitId: p.unitId,
       team: p.team,
       ...(dropIn ? { dropIn: true as const } : {}),
-      // Each champion its own team (ADR 0030).
+      // One team per crew (ADR 0030, ADR 0034): every champion's own in Solo.
       teams: entry.match.sim.teamCount,
-      royale: { v: entry.match.variant, seats: entry.match.seatCount },
+      royale: {
+        v: entry.match.variant,
+        seats: entry.match.seatCount,
+        ...(entry.match.crew !== 1 ? { c: entry.match.crew } : {}),
+      },
     });
   }
 
@@ -364,6 +379,7 @@ export class RoyaleService {
           how,
           queue: 'royale',
           variant: entry.match.variant,
+          ...(entry.match.crew !== 1 ? { crew: entry.match.crew } : {}),
           guest: client.guest,
           dropIn: p.dropIn,
           mobile: client.mobile,
@@ -390,18 +406,26 @@ export class RoyaleService {
     entry.abandonedAt = this.deps.now();
   }
 
-  // Whether this match is the one Respawn match that takes people.
+  // The Respawn matches in Solo that take people: Play now's.
+  private standingOpen(): RoyaleCandidate[] {
+    return this.candidates().filter(
+      (c) => c.variant === 'respawn' && (c.crew ?? 1) === 1 && takesPeople(c),
+    );
+  }
+
+  // Whether this match is the one Respawn match in Solo that takes people.
   private onlyOpen(matchId: number): boolean {
-    const open = this.candidates().filter((c) => c.variant === 'respawn' && takesPeople(c));
+    const open = this.standingOpen();
     return open.length === 1 && open[0]!.matchId === matchId;
   }
 
-  // Respawn always has a match to drop into: when none takes people, one
-  // starts with nobody in it and house bots in every seat. The one before
-  // runs out its clock (Respawn takes nobody in its last minutes).
+  // Respawn in Solo always has a match to drop into: when none takes
+  // people, one starts with nobody in it and house bots in every seat. The
+  // one before runs out its clock (Respawn takes nobody in its last
+  // minutes). Crews start with the person who asks (ADR 0034).
   private keepOneOpen(): void {
     if (!this.deps.factory) return;
-    const open = this.candidates().some((c) => c.variant === 'respawn' && takesPeople(c));
+    const open = this.standingOpen().length > 0;
     if (open || this.deps.capacityLeft() < ROYALE_MATCH_WEIGHT) return;
     this.start('respawn', []);
   }
@@ -489,11 +513,13 @@ export class RoyaleService {
     const { send } = this.deps;
     const m = entry.match;
     m.tick();
+    // In Crews the seat's crew, so a crewmate is no opponent (ADR 0034).
     const seats = [...m.players.values()].map((p) => ({
       clientId: p.clientId,
       owner: p.owner,
       unitId: p.unitId,
       lastCommandAt: p.lastCommandAt,
+      ...(m.crew > 1 ? { team: p.team } : {}),
     }));
     bankAwards(m.points.observe(m.sim, m.lastEvents, seats), this.deps.bank, (cid, msg) => {
       m.notePoints(cid, msg.delta);

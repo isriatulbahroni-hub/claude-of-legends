@@ -239,7 +239,9 @@ export function markOdds(sense: Sense, m: Pick<ObsMark, 'level'>): number {
 function freshMarks(sense: Sense, within: number): ObsMark[] {
   const out: ObsMark[] = [];
   for (const m of sense.r.marks ?? []) {
-    if (m.id === sense.s.id || sense.obs.time - m.shownAt > MARK_FRESH_S + 1e-9) continue;
+    // Its own mark and a crewmate's are nobody's hunt (ADR 0034).
+    if (m.id === sense.s.id || sense.crew.has(m.id)) continue;
+    if (sense.obs.time - m.shownAt > MARK_FRESH_S + 1e-9) continue;
     if (dist(sense.me, p3(m.at)) <= within) out.push(m);
   }
   return out;

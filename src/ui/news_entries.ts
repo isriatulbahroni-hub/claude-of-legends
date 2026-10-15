@@ -35,7 +35,7 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
-    day: '2026-10-13',
+    day: '2026-10-15',
     title: 'Crews on the Wanderseed',
     body: [
       'The battle royale plays in crews now, as well as alone. On the card where you pick your ' +
@@ -50,6 +50,19 @@ export const NEWS: readonly NewsEntry[] = [
     ],
     image: 'crews.webp',
     link: { label: 'Play a match', to: 'play' },
+  },
+  {
+    day: '2026-10-15',
+    title: 'The Range: try a champion on the Strikeposts',
+    body: [
+      'Practice has a third choice under Enemy bots: None (Range). Your champion starts alone ' +
+        'in its base, with no minions, no camps and no bots, and two Strikeposts standing just ' +
+        'past the Sanctum.',
+      'The Bare Strikepost has no armor and no magic resist, the Plated one has plenty of both, ' +
+        'so you can see how a spell lands on a carry and on a tank. Neither ever falls: leave ' +
+        'one alone for four seconds and it fills up again.',
+    ],
+    link: { label: 'Open Practice', to: 'play' },
   },
   {
     day: '2026-10-11',

@@ -433,19 +433,21 @@ export function installCursorLock(root: HTMLElement, doc: Document = document): 
   // with. Each synthetic event then said that one frozen point, and every
   // click on the ground ordered the same walk, a click on the champion
   // included. The virtual point is written on the event itself, which
-  // stands before the browser's getters.
+  // stands before the browser's getters. offsetX and layerX are not
+  // written and stay frozen on Firefox: the match reads clientX.
   const pinPoint = (ev: Event): void => {
-    const pageX = vx + (win.scrollX || 0);
-    const pageY = vy + (win.scrollY || 0);
+    const x = vx;
+    const y = vy;
     Object.defineProperties(ev, {
-      clientX: { value: vx },
-      clientY: { value: vy },
-      x: { value: vx },
-      y: { value: vy },
-      screenX: { value: vx },
-      screenY: { value: vy },
-      pageX: { value: pageX },
-      pageY: { value: pageY },
+      clientX: { value: x },
+      clientY: { value: y },
+      x: { value: x },
+      y: { value: y },
+      screenX: { value: x },
+      screenY: { value: y },
+      // Read when asked only: the scroll costs Chromium a layout.
+      pageX: { get: () => x + (win.scrollX || 0) },
+      pageY: { get: () => y + (win.scrollY || 0) },
     });
   };
 

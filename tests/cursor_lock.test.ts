@@ -261,14 +261,24 @@ class WheelEv extends FakeEvent {}
 
 // Firefox's mouse events while the pointer is locked: every one, a page's
 // own included, reads the point where the lock took, whatever its maker
-// said (Gecko's Event::GetClientCoords hands back the EventStateManager's
-// last client point while PointerLockManager::IsLocked()).
-const FROZEN: Record<'clientX' | 'clientY', number> = { clientX: 120, clientY: 80 };
+// said (Gecko's Event::GetClientCoords and GetScreenCoords hand back the
+// EventStateManager's last points while PointerLockManager::IsLocked(),
+// and the page point is read off the client one).
+const FROZEN = {
+  clientX: 120,
+  clientY: 80,
+  x: 120,
+  y: 80,
+  screenX: 120,
+  screenY: 80,
+  pageX: 120,
+  pageY: 80,
+} as const;
 class GeckoPointerEv extends PointerEv {}
 class GeckoMouseEv extends MouseEv {}
 class GeckoWheelEv extends WheelEv {}
 for (const Ev of [GeckoPointerEv, GeckoMouseEv, GeckoWheelEv]) {
-  for (const axis of ['clientX', 'clientY'] as const) {
+  for (const axis of Object.keys(FROZEN) as (keyof typeof FROZEN)[]) {
     const made = Symbol(axis);
     Object.defineProperty(Ev.prototype, axis, {
       configurable: true,
@@ -480,8 +490,17 @@ describe('the lock over a page', () => {
         e.preventDefault();
       });
     }
+    let press: FakeEvent | null = null;
+    page.canvas.addEventListener('pointerdown', (e) => {
+      press = e;
+    });
     native('pointermove', { movementX: 50, movementY: -20 });
     native('pointerdown', { button: 2, buttons: 2 });
+    // The point's other names say it too.
+    const p = press as FakeEvent | null;
+    expect([p?.x, p?.y, p?.screenX, p?.screenY, p?.pageX, p?.pageY]).toEqual([
+      450, 280, 450, 280, 450, 280,
+    ]);
     native('pointerup', { button: 2 });
     native('auxclick', { button: 2 });
     native('wheel', { deltaY: 120, deltaMode: 0 });

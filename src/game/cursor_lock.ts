@@ -14,7 +14,8 @@
 // the enter and leave pairs along the ancestors, :hover (the elements
 // under the virtual cursor get a `vhover` class, and every :hover rule of
 // the page's stylesheets is copied onto it), a click at the press and the
-// release's common ancestor, the wheel scrolling the list under it. What
+// release's common ancestor, the right press's contextmenu (Firefox sends
+// none while locked), the wheel scrolling the list under it. What
 // it cannot do (drag a slider, open a select's list, capture the pointer,
 // which a browser refuses while it is locked) is why the cursor is let go
 // while the pause menu or the end screen stands (setFree), and never
@@ -578,13 +579,18 @@ export function installCursorLock(root: HTMLElement, doc: Document = document): 
     e.preventDefault();
     const type = e.type;
     // The mouse's own press and release: made from the pointer's below.
-    if (type === 'mousedown' || type === 'mouseup') return;
+    // The menu as well: Gecko refuses a contextmenu while the pointer is
+    // locked (EventStateManager::PreHandleEvent), so on Firefox none came
+    // and a right-click on an inventory slot sold nothing. It is made from
+    // the right press, where the cursor is, and a browser's own dropped.
+    if (type === 'mousedown' || type === 'mouseup' || type === 'contextmenu') return;
     const under = targetAt();
     if (type === 'pointerdown') {
       if (!under) return;
       pressedOn = under;
       mouseQuiet = !forward('pointerdown', e, under);
       if (!mouseQuiet) forward('mousedown', e, under);
+      if (e.button === 2) forward('contextmenu', e, under);
       return;
     }
     if (type === 'pointerup') {
@@ -596,10 +602,9 @@ export function installCursorLock(root: HTMLElement, doc: Document = document): 
       return;
     }
     // click, dblclick, auxclick: at the common ancestor of where the press
-    // and the release stood; contextmenu where the cursor is.
+    // and the release stood.
     if (!under) return;
-    const target =
-      type === 'contextmenu' || !pressedOn ? under : (commonAncestor(pressedOn, under) ?? under);
+    const target = pressedOn ? (commonAncestor(pressedOn, under) ?? under) : under;
     forward(type, e, target);
     if (type === 'click' && target === under) {
       const tag = target.tagName;

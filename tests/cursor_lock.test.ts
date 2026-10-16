@@ -515,6 +515,31 @@ describe('the lock over a page', () => {
     lock.dispose();
   });
 
+  it("makes the right press's contextmenu itself, Firefox sending none while locked", () => {
+    // Gecko refuses a contextmenu while the pointer is locked
+    // (EventStateManager::PreHandleEvent), so a right-click on an
+    // inventory slot never sold its item; Chromium sends its own, after
+    // the release on Windows. The lock makes one from the right press,
+    // where the cursor is, and drops the browser's.
+    buildPage({ gecko: true });
+    const lock = install();
+    const menus = record(page.slot, ['contextmenu']);
+    // From the middle (400) onto the slot's face (130).
+    native('pointermove', { movementX: -270 });
+    native('pointerdown', { button: 2, buttons: 2 });
+    native('pointerup', { button: 2 });
+    expect(menus).toEqual(['contextmenu@130']);
+    // A browser that sends its own: still one, and its menu held back.
+    const own = native('contextmenu', { button: 2 });
+    expect(own.defaultPrevented).toBe(true);
+    expect(menus).toEqual(['contextmenu@130']);
+    // A left press makes none.
+    native('pointerdown', { buttons: 1 });
+    native('pointerup');
+    expect(menus).toEqual(['contextmenu@130']);
+    lock.dispose();
+  });
+
   it("turns physical pixels into the page's, measured on the page's free moves", () => {
     // A screen at 200% whose browser reports physical pixels: the menus'
     // moves, before any match, go 10 client pixels for 20 of movement.

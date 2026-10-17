@@ -24,6 +24,13 @@ import type { MatchPick } from './match';
 
 export { TEAM_SIZE };
 
+// Event mode (MOBA_NO_BOTS=1): a match starts with only the people seated.
+// No ranked-pool bots and no house bots backfill the empty seats, so the
+// opponent is always a person. Used by the nikora wedding/event worlds.
+export function noBotsMode(env: Record<string, string | undefined> = process.env): boolean {
+  return env.MOBA_NO_BOTS === '1';
+}
+
 // A ranked bot the fill may seat, with its owner's name (the seat's public
 // identity, "owner (Bot)").
 export interface PoolSeat {
@@ -51,6 +58,7 @@ export function fillWithBots(
   gentle: readonly TeamId[] = [],
 ): MatchPick[] {
   const out: MatchPick[] = [...picks];
+  if (noBotsMode()) return out;
   const rng = new Rng(seed);
   let botClientId = -1;
   // The pool first, on both teams, in one seeded order: a bot takes a seat
